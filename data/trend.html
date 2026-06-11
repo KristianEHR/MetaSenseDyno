@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MetaSense Dyno - Trends & History</title>
+  <link rel="icon" href="/favicon.png" type="image/x-icon">
+
+  <style>
+    * { box-sizing: border-box; }
+    body { 
+      font-family: 'Courier New', monospace; 
+      background: #404040; 
+      color: #cccccc; 
+      margin: 0; 
+      padding: 0; 
+      min-height: 100vh;
+    }
+    
+    .top-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      background: #353535;
+      border-bottom: 2px solid #666;
+      padding: 15px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 15px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    }
+    
+    .title {
+      color: #e0e0e0; 
+      font-size: 28px; 
+      letter-spacing: 3px; 
+      text-shadow: 0 0 8px #444;
+      font-weight: bold;
+    }
+    
+    .button-stack button, .button-stack a button { 
+      padding: 10px 24px; 
+      font-size: 16px; 
+      background: #404040; 
+      color: #ffffff; 
+      border: 2px solid #888; 
+      border-radius: 10px; 
+      cursor: pointer; 
+      font-weight: bold;
+      transition: all 0.2s ease;
+      font-family: 'Courier New', monospace;
+    }
+    
+    .button-stack button:hover { background: #505050; transform: scale(1.02); }
+    
+    #status { 
+      font-size: 14px; 
+      color: #88ff88;
+      background: rgba(0,0,0,0.5);
+      padding: 6px 15px;
+      border-radius: 20px;
+      font-weight: bold;
+    }
+    
+    .live-badge {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      background: #ff4444;
+      border-radius: 50%;
+      margin-right: 8px;
+      animation: pulse 1.5s infinite;
+    }
+    
+    @keyframes pulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.2); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
+    .main-container {
+      margin-top: 90px;
+      padding: 30px;
+      max-width: 1600px;
+      margin-left: auto;
+      margin-right: auto;
+      display: flex;
+      gap: 30px;
+      flex-wrap: wrap;
+    }
+    
+    .live-section { flex: 2; min-width: 500px; }
+    .history-section { flex: 1; min-width: 320px; }
+    
+    .chart-box {
+      background: #353535;
+      padding: 25px;
+      border-radius: 20px;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.8);
+      border: 1px solid #666;
+      margin-bottom: 30px;
+    }
+    
+    .chart-box h2 {
+      margin: 0 0 20px 0;
+      color: #e0e0e0;
+      font-size: 24px;
+      text-align: center;
+    }
+    
+    canvas {
+      width: 100% !important;
+      height: 180px !important;
+      background: #2a2a2a;
+      border-radius: 12px;
+      padding: 10px;
+    }
+    
+    .history-box {
+      background: #353535;
+      padding: 25px;
+      border-radius: 20px;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.8);
+      border: 1px solid #666;
+    }
+    
+    .history-box h2 {
+      margin: 0 0 20px 0;
+      color: #e0e0e0;
+      font-size: 24px;
+      text-align: center;
+    }
+    
+    .run-list {
+      max-height: 450px;
+      overflow-y: auto;
+      margin-bottom: 20px;
+    }
+    
+    .run-item {
+      background: #2a2a2a;
+      margin-bottom: 12px;
+      border-radius: 12px;
+      border-left: 3px solid #88ff88;
+      padding: 12px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    
+    .run-item:hover { background: #3a3a3a; }
+    
+    .run-checkbox {
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+      accent-color: #88ff88;
+      margin-top: 2px;
+    }
+    
+    .run-date { font-size: 11px; color: #888; margin-bottom: 5px; }
+    .run-peaks { font-size: 13px; font-weight: bold; }
+    .run-peaks span { color: #88ff88; }
+    .run-customer { font-size: 11px; color: #aaa; margin-top: 5px; }
+    
+    .compare-btn {
+      width: 100%;
+      padding: 12px;
+      background: #006000;
+      border: 2px solid #00ff00;
+      border-radius: 10px;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 10px;
+      font-family: 'Courier New', monospace;
+    }
+    
+    .compare-btn:hover { background: #008000; transform: scale(1.02); }
+    .compare-btn.clear-btn { background: #604000; border-color: #ffaa44; }
+    .compare-btn.delete-btn { background: #800000; border-color: #ff4444; }
+    
+    .no-runs { text-align: center; color: #888; padding: 40px; }
+    
+    .info-bar {
+      background: #2a2a2a;
+      padding: 15px 25px;
+      border-radius: 12px;
+      margin-bottom: 30px;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 15px;
+      border-left: 4px solid #88ff88;
+    }
+    
+    .info-item { font-size: 14px; color: #aaa; }
+    .info-item strong { color: #88ff88; }
+    
+    .back-btn {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 100;
+      padding: 12px 24px;
+      font-size: 16px;
+      background: #505050;
+      color: #ffffff;
+      border: 1px solid #777;
+      border-radius: 10px;
+      cursor: pointer;
+      text-decoration: none;
+      font-family: 'Courier New', monospace;
+    }
+    
+    .back-btn:hover { background: #606060; transform: scale(1.02); }
+    .refresh-btn { background: #404040; border: 1px solid #888; padding: 8px 16px; border-radius: 8px; cursor: pointer; }
+    .selection-info { font-size: 12px; color: #88ff88; text-align: center; margin-top: 10px; padding: 5px; background: rgba(0,0,0,0.3); border-radius: 8px; }
+    
+    /* Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.95);
+      overflow-y: auto;
+    }
+    
+    .modal-content {
+      background: #353535;
+      margin: 3% auto;
+      padding: 30px;
+      border-radius: 20px;
+      border: 2px solid #88ff88;
+      max-width: 1200px;
+      width: 90%;
+    }
+    
+    .compare-charts { display: flex; flex-direction: column; gap: 30px; }
+    .compare-chart-box { background: #2a2a2a; padding: 20px; border-radius: 15px; border: 1px solid #666; }
+    .compare-chart-box h3 { margin: 0 0 15px 0; color: #e0e0e0; text-align: center; }
+    .compare-chart-box canvas { height: 300px !important; width: 100% !important; }
+    
+    .close {
+      float: right;
+      font-size: 32px;
+      font-weight: bold;
+      cursor: pointer;
+      color: #aaa;
+    }
+    .close:hover { color: white; }
+    
+    .modal-buttons { margin-bottom: 20px; display: flex; gap: 15px; justify-content: center; }
+    .modal-buttons button { padding: 10px 24px; background: #404040; border: 2px solid #888; border-radius: 10px; color: white; cursor: pointer; }
+    .compare-legend { margin-top: 20px; padding: 15px; background: #2a2a2a; border-radius: 12px; display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
+    .loading { text-align: center; padding: 20px; color: #88ff88; }
+    
+    @media (max-width: 900px) {
+      .main-container { flex-direction: column; }
+      .live-section, .history-section { min-width: auto; }
+      .top-bar { padding: 12px 20px; flex-direction: column; text-align: center; }
+      .main-container { margin-top: 130px; padding: 15px; }
+      canvas { height: 150px !important; }
+      .compare-chart-box canvas { height: 250px !important; }
+    }
+  </style>
+  <script src="/chart.umd.min.js"></script>
+</head>
+<body>
+
+  <div class="top-bar">
+  <h1 id="versionInfo" style="text-align: center; color: #e0e0e0; text-shadow: 0 0 8px #444;">
+  MetaSense --:-- | --
+</h1>
+<div class="button-stack">
+      <a href="/"><button>← BACK TO DASHBOARD</button></a>
+      <button class="refresh-btn" onclick="loadRuns()">⟳ REFRESH RUNS</button>
+    </div>
+    <div id="status"><span class="live-badge"></span>Connecting...</div>
+  </div>
+
+  <div class="main-container">
+    <div class="live-section">
+      <div class="info-bar">
+        <div class="info-item"><strong>📈 Live Trend Data</strong> - Last 400 samples</div>
+        <div class="info-item"><strong>🔄 Auto-scroll</strong> - Real-time readings</div>
+      </div>
+      <div class="chart-box"><h2>RPM TREND</h2><canvas id="rpmChart"></canvas></div>
+      <div class="chart-box"><h2>DRUM RPM TREND</h2><canvas id="drumRpmChart"></canvas></div>
+      <div class="chart-box"><h2>POWER TREND</h2><canvas id="hpChart"></canvas></div>
+      <div class="chart-box"><h2>TORQUE TREND</h2><canvas id="torqueChart"></canvas></div>
+    </div>
+    
+    <div class="history-section">
+      <div class="history-box">
+        <h2>RUN HISTORY</h2>
+        <div id="runList" class="run-list"><div class="no-runs">Loading runs...</div></div>
+        <button class="compare-btn" id="compareBtn" onclick="compareSelected()">🔍 COMPARE SELECTED (0)</button>
+        <button class="compare-btn delete-btn" onclick="deleteSelectedRuns()">🗑️ DELETE SELECTED</button>
+        <button class="compare-btn clear-btn" onclick="clearSelection()">🗑️ CLEAR SELECTION</button>
+        <div id="selectionInfo" class="selection-info"></div>
+      </div>
+    </div>
+  </div>
+  
+  <div id="compareModal" class="modal">
+    <div class="modal-content">
+      <span class="close" onclick="closeCompareModal()">&times;</span>
+      <h2 style="color: #88ff88; text-align: center;">📊 RUN COMPARISON</h2>
+      <div class="modal-buttons"><button onclick="closeCompareModal()">✖ CLOSE</button></div>
+      <div id="compareLoading" class="loading" style="display: none;">📥 Loading run data...</div>
+      <div class="compare-charts" id="compareCharts" style="display: none;">
+        <div class="compare-chart-box"><h3>🏆 POWER COMPARISON</h3><canvas id="compareHPChart"></canvas></div>
+        <div class="compare-chart-box"><h3>🔧 TORQUE COMPARISON</h3><canvas id="compareTorqueChart"></canvas></div>
+      </div>
+      <div id="compareLegend" class="compare-legend"></div>
+    </div>
+  </div>
+  
+  <a href="/" class="back-btn">← BACK TO DASHBOARD</a>
+
+  <script>
+    // ============== GLOBAL VARIABLES ==============
+    let ws = null;
+    let rpmChart, hpChart, torqueChart, drumRpmChart;
+    let maxVals = { rpm: 16000, hp: 15, torque: 15, drumRpm: 3000 };
+    let updateTimeout = null;
+    let runsData = [];
+    let selectedRuns = [];
+    let loadedRunData = {};
+    let compareHPChart = null;
+    let compareTorqueChart = null;
+
+    // ============== CHART FUNCTIONS ==============
+    function createChart(id, color, label, maxY) {
+      const canvas = document.getElementById(id);
+      const ctx = canvas.getContext('2d');
+      return new Chart(ctx, {
+        type: 'line',
+        data: { labels: [], datasets: [{ label: 'Live ' + label, data: [], borderColor: color, backgroundColor: color + '20', borderWidth: 3, tension: 0.2, fill: true, pointRadius: 0 }] },
+        options: { animation: false, responsive: true, maintainAspectRatio: true, scales: { x: { display: true, ticks: { color: '#888' }, title: { display: true, text: 'Time →', color: '#aaa' } }, y: { min: 0, max: maxY, ticks: { color: '#aaa' }, title: { display: true, text: label, color: '#aaa' } } }, plugins: { legend: { display: false } } }
+      });
+    }
+
+    function updateCharts(rpm, hp, torque, drumRpm) {
+      if (updateTimeout) return;
+      updateTimeout = setTimeout(() => {
+        rpmChart.data.labels.push(''); rpmChart.data.datasets[0].data.push(rpm);
+        hpChart.data.labels.push(''); hpChart.data.datasets[0].data.push(hp);
+        torqueChart.data.labels.push(''); torqueChart.data.datasets[0].data.push(torque);
+        drumRpmChart.data.labels.push(''); drumRpmChart.data.datasets[0].data.push(drumRpm);
+        
+        if (rpmChart.data.labels.length > 150) {
+          rpmChart.data.labels.shift(); rpmChart.data.datasets[0].data.shift();
+          hpChart.data.labels.shift(); hpChart.data.datasets[0].data.shift();
+          torqueChart.data.labels.shift(); torqueChart.data.datasets[0].data.shift();
+          drumRpmChart.data.labels.shift(); drumRpmChart.data.datasets[0].data.shift();
+        }
+        rpmChart.update('none'); hpChart.update('none'); torqueChart.update('none'); drumRpmChart.update('none');
+        updateTimeout = null;
+      }, 50);
+    }
+
+    // ============== RUN HISTORY FUNCTIONS ==============
+    function loadRuns() { if (ws && ws.readyState === WebSocket.OPEN) ws.send("GET_RUNS"); }
+    
+    function displayRuns(runs) {
+      const runListDiv = document.getElementById('runList');
+      if (!runs || runs.length === 0) { runListDiv.innerHTML = '<div class="no-runs">📭 No saved runs yet<br>Do a dyno run first!</div>'; updateSelectionInfo(); return; }
+      
+      let html = '';
+      runs.forEach((run, index) => {
+        let dateStr = 'Unknown date';
+        if (run.timestamp && run.timestamp > 100000) {
+          dateStr = new Date(run.timestamp * 1000).toLocaleString();
+        }
+        const isChecked = selectedRuns.includes(index);
+        html += `<div class="run-item"><input type="checkbox" id="run_${index}" class="run-checkbox" ${isChecked ? 'checked' : ''} onchange="toggleRunSelection(${index})"><div><div class="run-date">📅 ${dateStr}</div><div class="run-peaks">🏆 kW: <span>${run.hp.toFixed(1)}</span> &nbsp;|&nbsp; 🔧 Torque: <span>${run.torque.toFixed(1)}</span> Nm</div><div class="run-peaks">🔥 EGT: <span>${run.egt || 0}</span> °C</div><div class="run-customer">👤 ${run.customer || 'No customer'} | ${run.vehicle || 'No vehicle'}</div></div></div>`;
+      });
+      runListDiv.innerHTML = html;
+      updateSelectionInfo();
+    }
+    
+    function updateSelectionInfo() {
+      document.getElementById('selectionInfo').innerHTML = selectedRuns.length > 0 ? `✅ ${selectedRuns.length} run(s) selected` : '💡 Select runs using checkboxes';
+      document.getElementById('compareBtn').innerHTML = `🔍 COMPARE SELECTED (${selectedRuns.length})`;
+    }
+    
+    function toggleRunSelection(index) {
+      const cb = document.getElementById(`run_${index}`);
+      if (cb.checked) { if (!selectedRuns.includes(index)) selectedRuns.push(index); }
+      else { selectedRuns = selectedRuns.filter(i => i !== index); }
+      updateSelectionInfo();
+    }
+    
+    function clearSelection() {
+      selectedRuns = [];
+      runsData.forEach((_, idx) => { const cb = document.getElementById(`run_${idx}`); if (cb) cb.checked = false; });
+      displayRuns(runsData);
+      showToast("Selection cleared");
+    }
+    
+    function deleteSelectedRuns() {
+      if (selectedRuns.length === 0) { showToast("Select runs to delete first!"); return; }
+      if (confirm(`Delete ${selectedRuns.length} selected run(s)?`)) {
+        selectedRuns.forEach(idx => { const run = runsData[idx]; if (ws && ws.readyState === WebSocket.OPEN && run.filename) ws.send("DELETE_RUN:" + idx); });
+        selectedRuns = [];
+        setTimeout(() => loadRuns(), 500);
+        showToast("Deleting runs...");
+      }
+    }
+    
+    // ============== COMPARISON FUNCTIONS ==============
+    function drawComparison() {
+  const runs = Object.values(loadedRunData);
+  if (runs.length === 0) { 
+    console.log("No runs loaded"); 
+    return; 
+  }
+  
+  const colors = ['#ff8888', '#88ff88', '#8888ff', '#ffaa44', '#ff44aa', '#44ffaa'];
+  const hpDatasets = [];
+  const torqueDatasets = [];
+  let legendHtml = '';
+  let allRpmLabels = [];
+  
+  runs.forEach((run, i) => {
+    const color = colors[i % colors.length];
+    const runInfo = runsData.find(r => r.filename === run.filename);
+    
+    if (run.points && run.points.length > 0) {
+      // Sort points by RPM
+      const sortedPoints = [...run.points].sort((a, b) => a.r - b.r);
+      
+      // Extract data
+      const rpmData = sortedPoints.map(p => p.r);
+      const hpData = sortedPoints.map(p => p.h);
+      const torqueData = sortedPoints.map(p => p.t);
+      
+      // Use first run's RPM as labels for x-axis
+      if (i === 0) {
+        allRpmLabels = rpmData;
+      }
+      
+      // Add HP dataset
+      hpDatasets.push({
+        label: `${runInfo?.customer || 'Run'} - ${runInfo?.hp?.toFixed(1) || '?'} kW`,
+        data: hpData,
+        borderColor: color,
+        backgroundColor: 'transparent',
+        borderWidth: 3,
+        tension: 0.2,
+        fill: false,
+        pointRadius: 0,
+        spanGaps: true
+      });
+      
+      // Add Torque dataset (separate!)
+      torqueDatasets.push({
+        label: `${runInfo?.customer || 'Run'} - ${runInfo?.torque?.toFixed(1) || '?'} Nm`,
+        data: torqueData,
+        borderColor: color,
+        borderWidth: 3,
+        tension: 0.2,
+        fill: false,
+        pointRadius: 0,
+        spanGaps: true
+      });
+      
+      legendHtml += `<span style="color: ${color};"><strong>●</strong> ${runInfo?.customer || 'Run'}: ${runInfo?.hp?.toFixed(1) || '?'} kW / ${runInfo?.torque?.toFixed(1) || '?'} Nm</span>`;
+    }
+  });
+  
+  document.getElementById('compareLegend').innerHTML = legendHtml;
+  document.getElementById('compareLoading').style.display = 'none';
+  document.getElementById('compareCharts').style.display = 'block';
+  
+  // Destroy existing charts
+  if (compareHPChart) {
+    compareHPChart.destroy();
+    compareTorqueChart.destroy();
+  }
+  
+  const hpCtx = document.getElementById('compareHPChart').getContext('2d');
+  const torqueCtx = document.getElementById('compareTorqueChart').getContext('2d');
+  
+  // Create HP chart with HP datasets
+  compareHPChart = new Chart(hpCtx, {
+    type: 'line',
+    data: { 
+      labels: allRpmLabels,
+      datasets: hpDatasets 
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      scales: {
+        x: { 
+          title: { display: true, text: 'Engine RPM', color: '#aaa' }, 
+          ticks: { color: '#aaa', maxRotation: 45, autoSkip: true, maxTicksLimit: 10 }
+        },
+        y: { 
+          title: { display: true, text: 'Power [kW]', color: '#aaa' }, 
+          ticks: { color: '#aaa' } 
+        }
+      },
+      plugins: { 
+        legend: { labels: { color: '#ccc' }, position: 'top' } 
+      }
+    }
+  });
+  
+  // Create Torque chart with Torque datasets (separate!)
+  compareTorqueChart = new Chart(torqueCtx, {
+    type: 'line',
+    data: { 
+      labels: allRpmLabels,
+      datasets: torqueDatasets 
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      scales: {
+        x: { 
+          title: { display: true, text: 'Engine RPM', color: '#aaa' }, 
+          ticks: { color: '#aaa', maxRotation: 45, autoSkip: true, maxTicksLimit: 10 }
+        },
+        y: { 
+          title: { display: true, text: 'Torque [Nm]', color: '#aaa' }, 
+          ticks: { color: '#aaa' } 
+        }
+      },
+      plugins: { 
+        legend: { labels: { color: '#ccc' }, position: 'top' } 
+      }
+    }
+  });
+}
+    
+    function openCompareModal() {
+      if (selectedRuns.length === 0) { showToast("Select at least one run to compare!"); return; }
+      document.getElementById('compareModal').style.display = 'block';
+      document.getElementById('compareLoading').style.display = 'block';
+      document.getElementById('compareCharts').style.display = 'none';
+      document.getElementById('compareLegend').innerHTML = '';
+      loadedRunData = {};
+      
+      // Timeout to show error if no data
+      setTimeout(() => {
+        if (Object.keys(loadedRunData).length === 0 && document.getElementById('compareModal').style.display === 'block') {
+          document.getElementById('compareLoading').style.display = 'none';
+          document.getElementById('compareCharts').style.display = 'block';
+          document.getElementById('compareLegend').innerHTML = '<span style="color:red;">❌ No data received for selected runs</span>';
+        }
+      }, 5000);
+      
+      selectedRuns.forEach(idx => {
+        const run = runsData[idx];
+        if (run && run.filename && ws && ws.readyState === WebSocket.OPEN) {
+          ws.send("GET_RUN_DATA:" + run.filename);
+        }
+      });
+    }
+    
+    function closeCompareModal() {
+      document.getElementById('compareModal').style.display = 'none';
+      if (compareHPChart) { 
+        compareHPChart.destroy(); 
+        compareTorqueChart.destroy(); 
+        compareHPChart = null; 
+        compareTorqueChart = null; 
+      }
+    }
+    
+    function compareSelected() {
+      if (selectedRuns.length === 0) { showToast("Select at least one run to compare!"); return; }
+      openCompareModal();
+    }
+    
+    function showToast(msg) {
+      const existing = document.getElementById("toast");
+      if (existing) existing.remove();
+      const toast = document.createElement("div");
+      toast.id = "toast";
+      toast.textContent = msg;
+      toast.style.position = "fixed";
+      toast.style.bottom = "100px";
+      toast.style.left = "50%";
+      toast.style.transform = "translateX(-50%)";
+      toast.style.background = "rgba(0,150,0,0.95)";
+      toast.style.color = "#fff";
+      toast.style.padding = "12px 24px";
+      toast.style.borderRadius = "12px";
+      toast.style.zIndex = "2000";
+      document.body.appendChild(toast);
+      setTimeout(() => { toast.style.opacity = "0"; setTimeout(() => toast.remove(), 600); }, 2500);
+    }
+
+    // ============== WEBSOCKET CONNECTION ==============
+    const connectWS = function() {
+      ws = new WebSocket("ws://" + location.hostname + "/ws");
+      ws.onopen = function() {
+        document.getElementById("status").innerHTML = '<span class="live-badge"></span>📡 Live Trends Active';
+        ws.send("GET_SETTINGS");
+        ws.send("SET_TIME:" + Math.floor(Date.now() / 1000));
+        loadRuns();
+      };
+      ws.onmessage = function(evt) {
+        try {
+          const msg = JSON.parse(evt.data);
+          if (msg.type === "settings") {
+            maxVals.rpm = msg.maxRPM || 16000;
+            maxVals.hp = msg.maxHP || 15;
+            maxVals.torque = msg.maxTorque || 15;
+            if (rpmChart) rpmChart.options.scales.y.max = maxVals.rpm;
+            if (hpChart) hpChart.options.scales.y.max = maxVals.hp;
+            if (torqueChart) torqueChart.options.scales.y.max = maxVals.torque;
+			
+			// Update version display
+const versionEl = document.getElementById("versionInfo");
+if (versionEl && msg.version && msg.buildDate) {
+  versionEl.innerHTML = `MetaSense V${msg.version} | ${msg.buildDate}`;
+}
+}
+          if (msg.type === "data") {
+            let displayRPM = msg.engine_rpm || msg.rpm || 0;
+            let drumRPM = msg.drum_rpm || 0;
+            const currentKW = Number.isFinite(Number(msg.kw)) ? Number(msg.kw) : 0;
+            updateCharts(displayRPM, currentKW, msg.torque || 0, drumRPM);
+          }
+          if (msg.type === "runs") {
+            runsData = msg.data || [];
+            displayRuns(runsData);
+          }
+          if (msg.type === "run_data") {
+            if (msg.points && msg.points.length > 0) {
+              loadedRunData[msg.filename] = { filename: msg.filename, points: msg.points };
+              if (Object.keys(loadedRunData).length === selectedRuns.length) {
+                drawComparison();
+              }
+            }
+          }
+			
+          if (msg.type === "run_complete") { loadRuns(); showToast("🏁 Run complete! New run saved."); }
+          if (msg.type === "info" && msg.msg.includes("deleted")) loadRuns();
+        } catch(e) { console.error("WebSocket error:", e); }
+      };
+      ws.onclose = function() { 
+        document.getElementById("status").innerHTML = '<span class="live-badge" style="background:#ff8844;"></span>⚠️ Reconnecting...';
+        setTimeout(connectWS, 1000); 
+      };
+    };
+
+    // ============== INITIALIZATION ==============
+    rpmChart = createChart('rpmChart', '#ff8888', 'RPM', maxVals.rpm);
+    drumRpmChart = createChart('drumRpmChart', '#ffaa44', 'Drum RPM', 3000);
+    hpChart = createChart('hpChart', '#88ff88', 'Power', maxVals.hp);
+    torqueChart = createChart('torqueChart', '#8888ff', 'Torque (Nm)', maxVals.torque);
+    connectWS();
+  </script>
+</body>
+</html>

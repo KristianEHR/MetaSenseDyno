@@ -1,0 +1,1803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MetaSense Dyno</title>
+  <link rel="icon" href="/favicon.png" type="image/x-icon">
+
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    :root {
+      --side-gauge-size: clamp(260px, 19vw, 365px);
+      --center-gauge-size: clamp(460px, calc(var(--side-gauge-size) * 1.7), 620px);
+      --top-info-offset: clamp(180px, 16vw, 280px);
+    }
+
+    body { 
+      font-family: 'Courier New', monospace; 
+      background: #404040; 
+      color: #cccccc; 
+      margin: 0; 
+      padding: 0;
+      min-height: 100vh;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Header Row - Fixed at Top */
+    .header-row {
+      position: fixed;
+      top: 15px;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 40px;
+      padding: 10px 20px;
+    }
+
+    .button-stack {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 18px;
+      justify-content: center;
+    }
+
+    .button-stack button, 
+    .button-stack a button { 
+      padding: 12px 24px; 
+      font-size: 16px; 
+      background: #404040; 
+      color: #ffffff; 
+      border: 3px solid #00ff00; 
+      border-radius: 12px; 
+      cursor: pointer; 
+      box-shadow: 0 6px 15px rgba(0,0,0,0.5); 
+      min-width: 140px; 
+      font-weight: bold;
+      transition: all 0.2s ease;
+    }
+    
+    .button-stack button:hover { 
+      background: #505050; 
+      transform: scale(1.02);
+    }
+    
+    #autoRunButton.active { 
+      background: #c00000; 
+      border-color: #ff0000; 
+      animation: pulse 1.2s infinite; 
+    }
+    
+    @keyframes pulse { 
+      0% { box-shadow: 0 0 10px #ff0000; } 
+      50% { box-shadow: 0 0 30px #ff0000; } 
+      100% { box-shadow: 0 0 10px #ff0000; } 
+    }
+
+    /* Status Display */
+    #status { 
+      position: fixed;
+      bottom: 24px;
+      right: 20px;
+      left: auto;
+      transform: none;
+      font-size: 18px; 
+      color: #88ff88;
+      background: rgba(0,0,0,0.6);
+      padding: 8px 16px;
+      border-radius: 8px;
+      z-index: 100;
+      font-weight: bold;
+    }
+
+    #versionInfo {
+      position: fixed;
+      bottom: 24px;
+      left: 20px;
+      right: auto;
+      transform: none;
+      font-size: 20px;
+      color: #666;
+      z-index: 99;
+      background: rgba(0,0,0,0.5);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-family: 'Courier New', monospace;
+      backdrop-filter: blur(2px);
+    }
+
+    /* EGT Display - Top Left */
+    .egt-column {
+      position: fixed;
+      top: 100px;
+      left: 20px;
+      width: 140px;
+      text-align: left;
+      z-index: 90;
+      background: rgba(0,0,0,0.5);
+      padding: 12px 20px;
+      border-radius: 12px;
+    }
+    
+    .egt-item {
+      font-size: 24px;
+      font-weight: bold;
+      color: #ff8844;
+      text-shadow: 0 0 8px rgba(255,136,68,0.5);
+    }
+    
+    .egt-item span.value {
+      color: #ffffff;
+      font-weight: bold;
+      margin-left: 8px;
+    }
+
+    /* BMP280 Data Box - Center Left Below HP Gauge */
+    .bmp-box {
+      position: fixed;
+      left: 22%;
+      transform: translateX(-50%);
+      bottom: 35px;
+      background: rgba(0,0,0,0.7);
+      border-radius: 16px;
+      padding: 12px 24px;
+      text-align: center;
+      border: 1px solid #88ff88;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+      backdrop-filter: blur(4px);
+      z-index: 95;
+      min-width: 260px;
+    }
+    
+    .bmp-box .title {
+      font-size: 14px;
+      color: #88ff88;
+      letter-spacing: 2px;
+      margin-bottom: 8px;
+      font-weight: bold;
+    }
+    
+    .bmp-box .reading {
+      font-size: 16px;
+      font-weight: bold;
+      color: #ffffff;
+      margin: 5px 0;
+    }
+    
+    .bmp-box .reading span {
+      color: #ffaa44;
+      font-size: 18px;
+    }
+
+    /* Gear Ratio Box - Center Right */
+    .gear-box {
+      position: fixed;
+      right: 22%;
+      transform: translateX(50%);
+      bottom: 35px;
+      background: rgba(0,0,0,0.7);
+      border-radius: 16px;
+      padding: 12px 24px;
+      text-align: center;
+      border: 1px solid #88ff88;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+      backdrop-filter: blur(4px);
+      z-index: 95;
+      min-width: 240px;
+    }
+    
+    .gear-box .title {
+      font-size: 14px;
+      color: #88ff88;
+      letter-spacing: 2px;
+      margin-bottom: 8px;
+      font-weight: bold;
+    }
+    
+    .gear-box .reading {
+      font-size: 16px;
+      font-weight: bold;
+      color: #ffffff;
+      margin: 5px 0;
+    }
+    
+    .gear-box .reading span {
+      color: #ffaa44;
+      font-size: 18px;
+    }
+    
+    #resetEnergyButton {
+      background: #444;
+      border: 2px solid #00ff00;
+      padding: 5px 12px;
+      margin-top: 8px;
+      font-size: 14px;
+      color: #fff;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    #resetEnergyButton:hover {
+      background: #ff8844;
+      color: #000;
+    }
+
+    /* Main Gauges Container - 3 Column Layout */
+    .gauges-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      width: 100vw;
+      gap: 20px;
+      padding: 0px 20px 20px 20px;
+	  margin-top: 0px; 
+    }
+
+    /* Side Gauges (HP & Torque) */
+    .side-gauge {
+      width: var(--side-gauge-size);
+      height: var(--side-gauge-size);
+      background: #353535;
+      padding: 15px;
+      border-radius: 20px;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.9);
+	  border: 1px solid #88ff88;
+      text-align: center;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .side-gauge svg {
+      width: calc(100% - 10px);
+      height: calc(100% - 10px);
+      margin-bottom: 0px;
+    }
+
+    .gauge-value {
+      font-size: 52px;
+      font-weight: bold;
+      color: #ffffff;
+      text-shadow: 0 0 12px #888888;
+      margin: 0px 0 5px;
+    }
+
+    .gauge-name {
+      font-size: 24px;
+      font-weight: bold;
+      color: #aaaaaa;
+      letter-spacing: 2px;
+      margin-bottom: 0px;
+    }
+
+    .peak-label {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 8px;
+      font-size: 16px;
+      color: #88ff88;
+      margin-top: 0;
+      min-height: 0;
+      font-weight: bold;
+    }
+
+    .scale-labels {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+    }
+
+    .scale-labels span {
+      position: absolute;
+      font-size: 16px;
+      font-weight: bold;
+      color: #ffcc00;
+      text-shadow: 0 0 4px #000;
+    }
+
+    .scale-labels span:first-child {
+      left: 33px;
+      bottom: 170px;
+    }
+
+    .scale-labels span:nth-child(2) {
+      left: 50%;
+      top: 5px;
+      transform: translateX(-50%);
+    }
+
+    .scale-labels span:last-child {
+      right: 20px;
+      bottom: 170px;
+    }
+
+    /* Center RPM Gauge - Large */
+    .center-gauge {
+      width: var(--center-gauge-size);
+      background: #353535;
+      padding: 30px;
+      border-radius: 25px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.9);
+	  border: 1px solid #88ff88;
+      text-align: center;
+      position: relative;
+      margin-top: -35px;
+    }
+
+    .center-gauge svg {
+      width: calc(var(--center-gauge-size) - 60px);
+      height: calc(var(--center-gauge-size) - 60px);
+    }
+
+    .loadcell-display {
+      margin-top: 20px;
+      font-size: 20px;
+      color: #88ff88;
+      font-weight: bold;
+      text-align: center;
+	   border: 1px solid #88ff88;
+      padding: 10px;
+      background: rgba(0,0,0,0.5);
+      border-radius: 12px;
+    }
+
+    /* Modal Styles */
+    .modal { 
+      display: none; 
+      position: fixed; 
+      z-index: 1000; 
+      left: 0; 
+      top: 0; 
+      width: 100vw; 
+      height: 100vh; 
+      background-color: rgba(0,0,0,0.9); 
+      overflow-y: auto; 
+    }
+    
+    .modal-content {
+      width: 90%;
+      max-width: 700px;
+      padding: 40px;
+      margin: 5vh auto;
+      background: #2a2a2a;
+      border-radius: 20px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+      border: 1px solid #00ff00;
+    }
+    
+    #dynoModal .modal-content {
+      max-width: 1200px;
+      width: 95%;
+      background: #2a2a2a;
+    }
+    
+    .close { 
+      float: right; 
+      font-size: 40px; 
+      font-weight: bold; 
+      cursor: pointer; 
+      color: #aaa;
+      transition: color 0.2s;
+    }
+    
+    .close:hover { color: #fff; }
+    
+    .modal h2 { 
+      color: #e0e0e0; 
+      font-size: 36px; 
+      margin: 0 0 30px 0; 
+      text-align: center; 
+    }
+    
+    .modal label { 
+      font-size: 18px; 
+      color: #aaa; 
+      margin-bottom: 8px; 
+      display: block; 
+      text-align: left; 
+    }
+    
+    .modal input, .modal textarea { 
+      font-size: 18px; 
+      padding: 12px; 
+      width: 100%; 
+      background: #404040; 
+      color: #fff; 
+      border: 2px solid #00ff00; 
+      border-radius: 8px; 
+      margin-bottom: 20px; 
+      box-sizing: border-box;
+    }
+    
+    .modal button { 
+      margin-top: 20px; 
+      padding: 14px 32px; 
+      font-size: 20px; 
+      background: #006000; 
+      border: 3px solid #00ff00; 
+      border-radius: 12px; 
+      cursor: pointer; 
+      color: white;
+      font-weight: bold;
+      transition: all 0.2s;
+    }
+    
+    .modal button:hover {
+      transform: scale(1.02);
+      background: #008000;
+    }
+    
+    /* Modal Graph Styles */
+    .graph-container { 
+      width: 100%; 
+      height: 50vh; 
+      margin-bottom: 30px; 
+    }
+    
+    .peaks-container { 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center; 
+      gap: 20px;
+      margin-bottom: 20px; 
+      flex-wrap: wrap;
+    }
+    
+    .peak-left, .peak-right { 
+      font-size: 24px; 
+      font-weight: bold; 
+      color: #88ff88; 
+      flex: 1;
+    }
+    
+    .peak-right {
+      color: #88aaff;
+      text-align: right;
+    }
+    
+    .run-date { 
+      color: #aaa; 
+      font-size: 18px; 
+      margin: 20px 0; 
+      text-align: center;
+    }
+    
+    #savePdfModalButton { 
+      padding: 12px 40px; 
+      font-size: 24px; 
+      background: #006000; 
+      border: 3px solid #00ff00; 
+      border-radius: 12px; 
+      cursor: pointer; 
+    }
+    
+    #finishManualRun {
+      padding: 12px 40px;
+      font-size: 24px;
+      background: #800000;
+      border: 3px solid #ff4444;
+      border-radius: 12px;
+      cursor: pointer;
+      color: white;
+    }
+
+    #stopAutoRunModal {
+      padding: 12px 40px;
+      font-size: 24px;
+      background: #800000;
+      border: 3px solid #ff4444;
+      border-radius: 12px;
+      cursor: pointer;
+      color: white;
+    }
+    
+    /* Radio Group */
+    .radio-group {
+      display: flex;
+      gap: 30px;
+      margin: 15px 0;
+    }
+    
+    .radio-group label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+    }
+   /* RPM Source Indicator */
+.rpm-source {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 14px;
+  color: #88ff88;
+  background: rgba(0,0,0,0.6);
+  padding: 6px 12px;
+  border-radius: 8px;
+  z-index: 99;
+  white-space: nowrap;
+}
+
+.fallback-badge {
+  display: none;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #111;
+  background: #ffaa44;
+  animation: fallbackPulse 1s infinite;
+}
+
+@keyframes fallbackPulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.45; }
+  100% { opacity: 1; }
+}
+    
+    /* Ratio Indicator in Torque Section */
+    .ratio-indicator {
+      font-size: 12px;
+      color: #88ff88;
+      margin-left: 10px;
+    }
+  </style>
+  <script src="/chart.umd.min.js"></script>
+  <script src="/jspdf.umd.min.js"></script>
+</head>
+<body>
+
+  <img id="logoImg" src="/logo1.png" style="display:none;" crossorigin="anonymous">
+
+  <!-- Header -->
+  <div class="header-row">
+    <div class="button-stack">
+      <button id="tareButton">TARE (ZERO)</button>
+      <button id="autoRunButton">Auto Run (F8)</button>
+      <button id="manualRunButton">Manual Run (F12)</button>
+      <a href="/settings"><button>⚙ SETTINGS</button></a>
+      <a href="/trend.html" target="_blank"><button>📊 Trends</button></a>
+    </div>
+  </div>
+
+  <div id="status">Connecting...</div>
+  
+  <!-- RPM Source Indicator -->
+  <div class="rpm-source">
+    📊 RPM Source: <span id="rpmSourceValue">LEAF CAN RPM</span>
+    <span id="canFallbackBadge" class="fallback-badge">CAN FALLBACK</span>
+  </div>
+
+  <!-- BMP280 Data Box - Center Left -->
+
+
+  <!-- Gear Ratio Box - Center Right -->
+
+  <!-- Main Gauges Layout -->
+  <div class="gauges-container">
+    <!-- Left: HP Gauge -->
+    <div style="display: flex; flex-direction: column; align-items: center; margin-top: -35px;">
+      <div class="side-gauge" style="padding: 15px;">
+        <svg viewBox="0 0 380 380">
+          <defs>
+            <linearGradient id="hpBezelGradient" x1="232" y1="307" x2="307" y2="148" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#aaffff"/>
+              <stop offset="100%" stop-color="#00aaaa"/>
+            </linearGradient>
+          </defs>
+          <!-- Background arc -->
+          <path d="M 238 322 A 140 140 0 1 1 322 142" fill="none" stroke="#333" stroke-width="32" stroke-linecap="round"/>
+          <!-- Bezel arc -->
+          <path d="M 232 307 A 124 124 0 1 1 307 148" fill="none" stroke="url(#hpBezelGradient)" stroke-width="19" stroke-linecap="butt"/>
+          <circle cx="190" cy="190" r="109" fill="#1a1a1a"/>
+          <g id="hpTicks"></g>
+          <circle cx="190" cy="190" r="2" fill="#ffffff"/>
+          <line id="hpNeedle" x1="190" y1="190" x2="190" y2="66" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+          <path id="hpTraceArc" d="" fill="none" stroke="#000000" stroke-width="8" stroke-linecap="round"/>
+          <!-- Power Text -->
+          <text id="hpText" x="190" y="255" text-anchor="middle" fill="#00ffff" font-size="52" font-weight="bold">0.00</text>
+          <text x="190" y="285" text-anchor="middle" fill="#fff" font-size="16">POWER [kW]</text>
+        </svg>
+        <div class="peak-label" id="hpPeak"></div>
+        <span id="hpMid" style="display:none">7.5</span>
+        <span id="hpHigh" style="display:none">15.0</span>
+      </div>
+      
+      <!-- Drum RPM Display -->
+      <div class="loadcell-display" style="margin-top: 15px; text-align: center; width: var(--side-gauge-size);">
+        ⚙️ Throttle: <span id="drumRpmDisplay">0</span> %
+      </div>
+
+      <!-- Ambient Box -->
+      <div class="bmp-box" style="position: static; transform: none; margin-top: 12px; width: var(--side-gauge-size);">
+        <div class="title"> 🌡️ AMBIENT 🌡️</div>
+        <div class="reading">Temperature: <span id="ambientTempValue">---</span> °C</div>
+        <div class="reading">Pressure: <span id="pressureValue">---</span> hPa</div>
+        <div class="reading">Relative humidity: <span id="ratioConfidence">---</span> %</div>
+        <div class="reading">Air density: <span id="airDensityValue">---</span> kg/m³</div>
+      </div>
+    </div>
+
+    <!-- Center: Large RPM Gauge with EGT -->
+    <div class="center-gauge">
+      <svg viewBox="0 0 540 540">
+        <defs>
+          <linearGradient id="bezelGradient" x1="335" y1="440" x2="440" y2="215" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#00c853"/>
+            <stop offset="32%" stop-color="#ffb300"/>
+            <stop offset="84%" stop-color="#ff9800"/>
+            <stop offset="100%" stop-color="#e53900"/>
+          </linearGradient>
+        </defs>
+        <!-- Background arc -->
+        <path d="M 270 70 A 200 200 0 1 1 70 270" fill="none" stroke="#333" stroke-width="45" stroke-linecap="round"/>
+        <!-- Colored zones (same center as ticks/needle: 270,270) -->
+        <path d="M 331.6 439.1 A 180 180 0 1 1 439.1 208.4" fill="none" stroke="url(#bezelGradient)" stroke-width="27" stroke-linecap="butt"/>
+        <circle cx="270" cy="270" r="170" fill="#1a1a1a"/>
+        <g id="ticks"></g>
+        <circle cx="270" cy="270" r="2" fill="#ffffff"/>
+        <g id="ticks"></g>
+         <line id="needle" x1="270" y1="270" x2="270" y2="90" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
+         <path id="rpmTraceArc" d="" fill="none" stroke="#000000" stroke-width="10" stroke-linecap="round"/>
+        
+        <!-- RPM Text -->
+        <text id="rpmText" x="270" y="370" text-anchor="middle" fill="#00ffff" font-size="72" font-weight="bold">0</text>
+        <text x="270" y="410" text-anchor="middle" fill="#fff" font-size="20">RPM</text>
+        
+        <!-- EGT Display Box - Centered -->
+        <rect x="210" y="143" width="120" height="90" rx="10" ry="10" fill="#1a1a1a" stroke="#00ff00" stroke-width="1"/>
+        <text x="230" y="163" fill="#fff" font-size="18" font-weight="bold">EGT</text>
+        <text id="egtValue" x="280" y="198" fill="#ff8844" font-size="38" font-weight="bold" text-anchor="middle">---</text>
+        <text x="310" y="223" fill="#fff" font-size="18" text-anchor="middle">°C</text>
+      </svg>
+    </div>
+
+          <!-- Right: Torque Gauge with Loadcell Below -->
+    <div style="display: flex; flex-direction: column; align-items: center; margin-top: -35px;">
+      <div class="side-gauge" style="padding: 15px;">
+        <svg viewBox="0 0 380 380">
+          <defs>
+            <linearGradient id="torqueBezelGradient" x1="232" y1="307" x2="307" y2="148" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#aaffaa"/>
+              <stop offset="100%" stop-color="#00aa00"/>
+            </linearGradient>
+          </defs>
+          <!-- Background arc -->
+          <path d="M 238 322 A 140 140 0 1 1 322 142" fill="none" stroke="#333" stroke-width="32" stroke-linecap="round"/>
+          <!-- Bezel arc -->
+          <path d="M 232 307 A 124 124 0 1 1 307 148" fill="none" stroke="url(#torqueBezelGradient)" stroke-width="19" stroke-linecap="butt"/>
+          <circle cx="190" cy="190" r="109" fill="#1a1a1a"/>
+          <g id="torqueTicks"></g>
+          <circle cx="190" cy="190" r="2" fill="#ffffff"/>
+          <line id="torqueNeedle" x1="190" y1="190" x2="190" y2="66" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+          <path id="torqueTraceArc" d="" fill="none" stroke="#000000" stroke-width="8" stroke-linecap="round"/>
+          <!-- Torque Text -->
+          <text id="torqueText" x="190" y="255" text-anchor="middle" fill="#00ffff" font-size="52" font-weight="bold">0.00</text>
+          <text x="190" y="285" text-anchor="middle" fill="#fff" font-size="16">TORQUE [Nm]</text>
+        </svg>
+        <div class="peak-label" id="torquePeak"></div>
+        <span id="torqueMid" style="display:none">7.5</span>
+        <span id="torqueHigh" style="display:none">15.0</span>
+      </div>
+      
+     <!-- Toggle Switch: Engine Torque vs Brake Torque (Aligned to right) -->
+      <div style="margin-top: 12px; display: flex; align-items: center; justify-content: flex-end; gap: 10px; font-size: 14px; width: var(--side-gauge-size);">
+        <input type="checkbox" id="torqueMode" checked>
+        <label for="torqueMode" style="cursor: pointer; user-select: none;">
+          Show <strong id="torqueModeLabel">Engine Torque</strong> 
+          <span style="color:#888;">(uncheck for Brake)</span>
+        </label>
+        <span id="ratioIndicator" class="ratio-indicator"></span>
+      </div>
+      
+      <!-- Loadcell Display - Below the torque gauge -->
+      <div class="loadcell-display" style="margin-top: 8px; text-align: center; width: var(--side-gauge-size);">
+        🔧 Setpoint: <span id="loadKgDisplay">0</span> RPM
+      </div>
+
+      <!-- Acc. Energy Box -->
+      <div class="gear-box" style="position: static; transform: none; margin-top: 12px; width: var(--side-gauge-size);">
+        <div class="title">⚡ Acc. Energy</div>
+        <div class="reading">E_torque: <span id="gearRatioValue">---</span> Nm</div>
+        <div class="reading">Energy:  <span id="EnergyValue">---</span> MJ</div>
+        <button id="resetEnergyButton">⟳ Reset Energy</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Dyno Run Display -->
+  <div id="dynoModal" class="modal">
+    <div class="modal-content">
+      <span class="close">×</span>
+      <h2 id="modalTitle">LIVE DYNO RUN</h2>
+      <div class="graph-container">
+        <canvas id="modalDynoChart" style="width:100% !important; height:100% !important;"></canvas>
+      </div>
+      <div class="peaks-container">
+        <div class="peak-left" id="finalPeakHP"></div>
+        <div style="display: flex; gap: 20px;">
+          <button id="finishManualRun" style="display:none;">🏁 FINISH RUN (F12)</button>
+          <button id="stopAutoRunModal" style="display:none;">⏹ STOP AUTO RUN</button>
+          <button id="savePdfModalButton" style="display:none;">💾 SAVE PDF</button>
+        </div>
+        <div class="peak-right" id="finalPeakTorque"></div>
+      </div>
+      <div class="run-date" id="runDate"></div>
+    </div>
+  </div>
+
+  <!-- Modal: Auto Run Setup -->
+  <div id="autoModal" class="modal">
+    <div class="modal-content">
+      <span class="close">×</span>
+      <h2 style="color: #00ff00;">⚡ AUTO RUN SETUP</h2>
+      
+      <label>Start Recording at RPM:</label>
+      <input type="number" id="startRPM" value="4000" min="100" max="20000" step="100">
+      
+      <label>End Recording at RPM:</label>
+      <input type="number" id="endRPM" value="14000" min="100" max="30000" step="100">
+      
+      <label>Customer Name:</label>
+      <input type="text" id="customerName" placeholder="MetaSense">
+      
+      <label>Test Unit:</label>
+      <input type="text" id="testUnit" placeholder="TM mini">
+      
+      <label>Comments:</label>
+      <textarea id="runComments" placeholder="Full exhaust, tuned ECU, race fuel" rows="3"></textarea>
+
+      <div>
+        <label>X-axis for graph:</label>
+        <div class="radio-group">
+          <label><input type="radio" name="xAxisType" value="rpm" checked> RPM</label>
+          <label><input type="radio" name="xAxisType" value="time"> Time (seconds)</label>
+        </div>
+      </div>
+      
+      <button id="confirmAuto">▶ START AUTO RUN</button>
+    </div>
+  </div>
+
+  <!-- Modal: Manual Run Setup -->
+  <div id="manualModal" class="modal">
+    <div class="modal-content">
+      <span class="close">×</span>
+      <h2 style="color: #ff8844;">✋ MANUAL RUN SETUP</h2>
+      
+      <label>Customer Name:</label>
+      <input type="text" id="manualCustomerName" value="MetaSense" placeholder="MetaSense">
+      
+      <label>Test Unit:</label>
+      <input type="text" id="manualTestUnit" value="TM mini" placeholder="TM mini">
+      
+      <label>Comments:</label>
+      <textarea id="manualRunComments" placeholder="Full exhaust, tuned ECU, race fuel" rows="3"></textarea>
+
+      <div>
+        <label>X-axis for graph:</label>
+        <div class="radio-group">
+          <label><input type="radio" name="xAxisTypeManual" value="rpm" checked> RPM</label>
+          <label><input type="radio" name="xAxisTypeManual" value="time"> Time (seconds)</label>
+        </div>
+      </div>
+      
+      <button id="confirmManual">🎬 START MANUAL RECORDING</button>
+    </div>
+  </div>
+  
+  <!-- global version distro -->
+  <div id="versionInfo">
+    MetaSense<br> --:-- | --
+  </div>
+
+  <script>
+    // ============== GLOBAL VARIABLES ==============
+    const fullDash = 376.99;
+    let maxVals = { rpm: 16000, hp: 15, torque: 15, armCm: 20 };
+    let currentRunData = [];
+    let currentCustomer = "";
+    let currentUnit = "";
+    let currentComments = "";
+    let autoModeActive = false;
+    let isManualRecording = false;
+    let runStartTime = null;
+    let xAxisChoice = "rpm";
+    let ws = null;
+    let currentRpmSource = "leafrpm";
+    let lastActiveRpmSource = "leafrpm";
+    let lastCanFallback = false;
+    let suppressDynoModalReopen = false;
+    let stopRequestPending = false;
+    let stopRequestSentAt = 0;
+    const autoButtonIdleLabel = "Auto Run (F8)";
+    const autoButtonActiveLabel = "🔴 Auto Run ACTIVE (F8 to cancel)";
+	
+	// smoothed dynorun variables for run history log
+	let currentPeakHP = 0;
+	let currentPeakHP_RPM = 0;
+	let currentPeakTorque = 0;
+	let currentPeakTorque_RPM = 0;
+	let currentPeakEGT = 0;
+    
+    // EGT Tracking for PDF
+    let peakEGT = 0;
+    let peakEGTRPM = 0;
+    let finalEGT = 0;
+    let finalAmbient = 0;
+    let energy = 0;
+    // BMP280 Data
+    let currentAirDensity = 1.204;
+    let currentAmbientTemp = 20.0;
+    let currentPressure = 1013.25;
+    
+    // Needle Gauge Variables
+    const needleMinAngle = -200;
+    const needleMaxAngle = 70;
+    
+    // Chart Objects
+    let modalDynoChart = null;
+
+    // ============== TORQUE TOGGLE ==============
+    let showEngineTorque = true;   // Default: Show Engine Torque
+
+    // ============== UTILITY FUNCTIONS ==============
+    function showToast(message) {
+      const existing = document.getElementById("toast");
+      if (existing) existing.remove();
+
+      const toast = document.createElement("div");
+      toast.id = "toast";
+      toast.textContent = message;
+      toast.style.position = "fixed";
+      toast.style.bottom = "100px";
+      toast.style.left = "50%";
+      toast.style.transform = "translateX(-50%)";
+      toast.style.background = "rgba(0, 150, 0, 0.95)";
+      toast.style.color = "#ffffff";
+      toast.style.padding = "16px 40px";
+      toast.style.borderRadius = "12px";
+      toast.style.fontSize = "22px";
+      toast.style.fontWeight = "bold";
+      toast.style.zIndex = "2000";
+      toast.style.boxShadow = "0 6px 20px rgba(0,0,0,0.8)";
+      toast.style.transition = "opacity 0.6s ease";
+      toast.style.opacity = "1";
+      document.body.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.opacity = "0";
+        setTimeout(() => toast.remove(), 600);
+      }, 4000);
+    }
+    
+    function rpmToAngle(rpm) {
+      const angle = needleMinAngle + (rpm / maxVals.rpm) * (needleMaxAngle - needleMinAngle);
+      return Math.min(needleMaxAngle, Math.max(needleMinAngle, angle));
+    }
+
+    function polarToCartesian(cx, cy, radius, angleDeg) {
+      const rad = (angleDeg - 90) * Math.PI / 180;
+      return {
+        x: cx + Math.cos(rad) * radius,
+        y: cy + Math.sin(rad) * radius
+      };
+    }
+
+    function describeArc(cx, cy, radius, startAngle, endAngle) {
+      const start = polarToCartesian(cx, cy, radius, startAngle);
+      const end = polarToCartesian(cx, cy, radius, endAngle);
+      const sweepAngle = endAngle - startAngle;
+      const largeArcFlag = Math.abs(sweepAngle) > 180 ? 1 : 0;
+      const sweepFlag = sweepAngle >= 0 ? 1 : 0;
+      return `M ${start.x.toFixed(1)} ${start.y.toFixed(1)} A ${radius} ${radius} 0 ${largeArcFlag} ${sweepFlag} ${end.x.toFixed(1)} ${end.y.toFixed(1)}`;
+    }
+
+    function clamp01(v) {
+      return Math.max(0, Math.min(1, v));
+    }
+
+    function hexToRgb(hex) {
+      const h = hex.replace("#", "");
+      return {
+        r: parseInt(h.slice(0, 2), 16),
+        g: parseInt(h.slice(2, 4), 16),
+        b: parseInt(h.slice(4, 6), 16)
+      };
+    }
+
+    function rgbToHex(r, g, b) {
+      const toHex = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
+      return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+    }
+
+    function interpolateColor(c1, c2, t) {
+      return {
+        r: c1.r + (c2.r - c1.r) * t,
+        g: c1.g + (c2.g - c1.g) * t,
+        b: c1.b + (c2.b - c1.b) * t
+      };
+    }
+
+    function sampleGradient(progress, stops) {
+      const p = clamp01(progress);
+      for (let i = 0; i < stops.length - 1; i++) {
+        const [o1, h1] = stops[i];
+        const [o2, h2] = stops[i + 1];
+        if (p >= o1 && p <= o2) {
+          const t = (p - o1) / Math.max(0.0001, (o2 - o1));
+          const c = interpolateColor(hexToRgb(h1), hexToRgb(h2), t);
+          return rgbToHex(c.r, c.g, c.b);
+        }
+      }
+      return stops[stops.length - 1][1];
+    }
+
+    function complementaryColor(hex) {
+      const c = hexToRgb(hex);
+      return rgbToHex(255 - c.r, 255 - c.g, 255 - c.b);
+    }
+
+    function dynamicComplementaryTrace(progress, stops) {
+      const bezelColor = sampleGradient(progress, stops);
+      return complementaryColor(bezelColor);
+    }
+    
+    function updateNeedleGauge(rpm) {
+      const angle = rpmToAngle(rpm);
+      const needle = document.getElementById("needle");
+      const rpmTraceArc = document.getElementById("rpmTraceArc");
+      if (needle) {
+        needle.setAttribute("transform", `rotate(${angle} 270 270)`);
+      }
+      if (rpmTraceArc) {
+        rpmTraceArc.setAttribute("d", describeArc(270, 270, 180, needleMinAngle, angle));
+        rpmTraceArc.setAttribute("stroke", "#000000");
+      }
+      document.getElementById("rpmText").textContent = Math.floor(rpm);
+    }
+    
+    function createTicks() {
+      const ticksGroup = document.getElementById("ticks");
+      if (!ticksGroup) return;
+      ticksGroup.innerHTML = '';
+      
+      for (let i = 0; i <= 16; i++) {
+        const rpmValue = (i / 16) * maxVals.rpm;
+        const angle = rpmToAngle(rpmValue);
+        const angleRad = (angle - 90) * Math.PI / 180;
+        
+        const x1 = 270 + Math.cos(angleRad) * 173;
+        const y1 = 270 + Math.sin(angleRad) * 173;
+        const x2 = 270 + Math.cos(angleRad) * 191;
+        const y2 = 270 + Math.sin(angleRad) * 191;
+        
+        const tick = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        tick.setAttribute("x1", x1);
+        tick.setAttribute("y1", y1);
+        tick.setAttribute("x2", x2);
+        tick.setAttribute("y2", y2);
+        tick.setAttribute("stroke", "#ffffff");
+        tick.setAttribute("stroke-width", "4");
+        tick.setAttribute("stroke-linecap", "round");
+        ticksGroup.appendChild(tick);
+        
+        const lx = 270 + Math.cos(angleRad) * 215;
+        const ly = 270 + Math.sin(angleRad) * 215 + 6;
+        const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        label.setAttribute("x", lx);
+        label.setAttribute("y", ly);
+        label.setAttribute("text-anchor", "middle");
+        label.setAttribute("fill", "#ffffff");
+        label.setAttribute("font-size", "14");
+        label.setAttribute("font-weight", "bold");
+        label.textContent = Math.round(rpmValue / 1000) + "k";
+        ticksGroup.appendChild(label);
+      }
+    }
+    
+    function updateGauge(id, val, max, textId, dec) {
+      const fill = document.getElementById(id + "Fill");
+      const text = document.getElementById(textId);
+      if (!text) return;
+      if (fill) {
+        const percent = Math.min(Math.max(val / max, 0), 1);
+        fill.style.strokeDashoffset = fullDash * (1 - percent);
+      }
+      text.textContent = val.toFixed(dec);
+      if (id === "hp") {
+        const hpNeedle = document.getElementById("hpNeedle");
+        const hpTraceArc = document.getElementById("hpTraceArc");
+        if (hpNeedle) {
+          const angle = Math.min(needleMaxAngle, Math.max(needleMinAngle,
+            needleMinAngle + (val / max) * (needleMaxAngle - needleMinAngle)));
+          hpNeedle.setAttribute("transform", `rotate(${angle} 190 190)`);
+          if (hpTraceArc) {
+            hpTraceArc.setAttribute("d", describeArc(190, 190, 124, needleMinAngle, angle));
+            hpTraceArc.setAttribute("stroke", "#000000");
+          }
+        }
+      }
+      if (id === "torque") {
+        const torqueNeedle = document.getElementById("torqueNeedle");
+        const torqueTraceArc = document.getElementById("torqueTraceArc");
+        if (torqueNeedle) {
+          const angle = Math.min(needleMaxAngle, Math.max(needleMinAngle,
+            needleMinAngle + (val / max) * (needleMaxAngle - needleMinAngle)));
+          torqueNeedle.setAttribute("transform", `rotate(${angle} 190 190)`);
+          if (torqueTraceArc) {
+            torqueTraceArc.setAttribute("d", describeArc(190, 190, 124, needleMinAngle, angle));
+            torqueTraceArc.setAttribute("stroke", "#000000");
+          }
+        }
+      }
+    }
+    
+    function updateScaleLabels() {
+      document.getElementById("hpMid").textContent = (maxVals.hp / 2).toFixed(1);
+      document.getElementById("hpHigh").textContent = maxVals.hp.toFixed(1);
+      document.getElementById("torqueMid").textContent = (maxVals.torque / 2).toFixed(1);
+      document.getElementById("torqueHigh").textContent = maxVals.torque.toFixed(1);
+      createTicks();
+      createHPTicks();
+      createTorqueTicks();
+    }
+
+    function createTorqueTicks() {
+      const ticksGroup = document.getElementById("torqueTicks");
+      if (!ticksGroup) return;
+      ticksGroup.innerHTML = '';
+      for (let i = 0; i <= 12; i++) {
+        const tqValue = (i / 12) * maxVals.torque;
+        const angle = needleMinAngle + (i / 12) * (needleMaxAngle - needleMinAngle);
+        const angleRad = (angle - 90) * Math.PI / 180;
+        const x1 = 190 + Math.cos(angleRad) * 118;
+        const y1 = 190 + Math.sin(angleRad) * 118;
+        const x2 = 190 + Math.cos(angleRad) * 131;
+        const y2 = 190 + Math.sin(angleRad) * 131;
+        const tick = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        tick.setAttribute("x1", x1); tick.setAttribute("y1", y1);
+        tick.setAttribute("x2", x2); tick.setAttribute("y2", y2);
+        tick.setAttribute("stroke", "#ffffff");
+        tick.setAttribute("stroke-width", "4");
+        tick.setAttribute("stroke-linecap", "round");
+        ticksGroup.appendChild(tick);
+        const lx = 190 + Math.cos(angleRad) * 160;
+        const ly = 190 + Math.sin(angleRad) * 160 + 5;
+        const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        label.setAttribute("x", lx); label.setAttribute("y", ly);
+        label.setAttribute("text-anchor", "middle");
+        label.setAttribute("fill", "#ffffff");
+        label.setAttribute("font-size", "14");
+        label.setAttribute("font-weight", "bold");
+        label.textContent = Math.round(tqValue);
+        ticksGroup.appendChild(label);
+      }
+    }
+
+    function createHPTicks() {
+      const ticksGroup = document.getElementById("hpTicks");
+      if (!ticksGroup) return;
+      ticksGroup.innerHTML = '';
+      for (let i = 0; i <= 12; i++) {
+        const hpValue = (i / 12) * maxVals.hp;
+        const angle = needleMinAngle + (i / 12) * (needleMaxAngle - needleMinAngle);
+        const angleRad = (angle - 90) * Math.PI / 180;
+        const x1 = 190 + Math.cos(angleRad) * 118;
+        const y1 = 190 + Math.sin(angleRad) * 118;
+        const x2 = 190 + Math.cos(angleRad) * 131;
+        const y2 = 190 + Math.sin(angleRad) * 131;
+        const tick = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        tick.setAttribute("x1", x1); tick.setAttribute("y1", y1);
+        tick.setAttribute("x2", x2); tick.setAttribute("y2", y2);
+        tick.setAttribute("stroke", "#ffffff");
+        tick.setAttribute("stroke-width", "4");
+        tick.setAttribute("stroke-linecap", "round");
+        ticksGroup.appendChild(tick);
+        const lx = 190 + Math.cos(angleRad) * 160;
+        const ly = 190 + Math.sin(angleRad) * 160 + 5;
+        const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        label.setAttribute("x", lx); label.setAttribute("y", ly);
+        label.setAttribute("text-anchor", "middle");
+        label.setAttribute("fill", "#ffffff");
+        label.setAttribute("font-size", "14");
+        label.setAttribute("font-weight", "bold");
+        label.textContent = Math.round(hpValue);
+        ticksGroup.appendChild(label);
+      }
+    }
+    
+    function updateBMP280Display() {
+      document.getElementById("airDensityValue").textContent = currentAirDensity.toFixed(3);
+      document.getElementById("ambientTempValue").textContent = currentAmbientTemp.toFixed(1);
+      document.getElementById("pressureValue").textContent = currentPressure.toFixed(1);
+    }
+    
+    function updateModalXAxis() {
+      if (!modalDynoChart) return;
+      const isTime = xAxisChoice === "time";
+      modalDynoChart.options.scales.x.title.text = isTime ? 'Time (s)' : 'RPM';
+      
+      if (currentRunData.length === 0) {
+        modalDynoChart.data.datasets[0].data = [];
+        modalDynoChart.data.datasets[1].data = [];
+      } else if (isTime) {
+        modalDynoChart.data.datasets[0].data = currentRunData.map(p => ({x: p.time, y: p.hp}));
+        modalDynoChart.data.datasets[1].data = currentRunData.map(p => ({x: p.time, y: p.torque}));
+        modalDynoChart.options.scales.x.min = 0;
+        modalDynoChart.options.scales.x.max = undefined;
+      } else {
+        modalDynoChart.data.datasets[0].data = currentRunData.map(p => ({x: p.rpm, y: p.hp}));
+        modalDynoChart.data.datasets[1].data = currentRunData.map(p => ({x: p.rpm, y: p.torque}));
+        modalDynoChart.options.scales.x.min = undefined;
+        modalDynoChart.options.scales.x.max = undefined;
+      }
+      modalDynoChart.update('none');
+    }
+    
+    function clearPeaks() {
+      document.getElementById("hpPeak").innerText = "";
+      document.getElementById("torquePeak").innerText = "";
+    }
+    
+    function finishManualRun() {
+      const stopBtnVisible = document.getElementById("finishManualRun").style.display !== "none";
+      if (!stopBtnVisible && !isManualRecording && !autoModeActive) return;
+      if (autoModeActive) {
+        cancelAutoRunFromUi();
+        return;
+      }
+      if (stopRequestPending && (Date.now() - stopRequestSentAt) < 1000) return;
+      stopRequestPending = true;
+      stopRequestSentAt = Date.now();
+      if (ws) ws.send("MANUAL_STOP");
+      showToast("Run stopped");
+    }
+
+    // ============== TORQUE TOGGLE LOGIC ==============
+    document.getElementById('torqueMode').addEventListener('change', function() {
+      showEngineTorque = this.checked;
+      const label = document.getElementById('torqueModeLabel');
+      if (label) {
+        label.textContent = showEngineTorque ? "Engine Torque" : "Brake Torque";
+      }
+    });
+
+    // ============== PDF GENERATION ==============
+    function generatePDF() {
+      if (currentRunData.length === 0) {
+        showToast("No data to save!");
+        return;
+      }
+
+      try {
+        if (!window.jspdf || !window.jspdf.jsPDF) {
+          throw new Error("jsPDF not loaded");
+        }
+
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('l', 'mm', 'a4');
+        const pageWidth = pdf.internal.pageSize.getWidth();
+
+        const logoElement = document.getElementById("logoImg");
+        if (logoElement && logoElement.complete && logoElement.naturalWidth > 0) {
+          pdf.addImage(logoElement, 'PNG', 6, 6, 20, 0);
+        }
+
+        pdf.setFont("ariel", "bold");
+        pdf.setFontSize(25);
+        pdf.setTextColor(0, 0, 0);
+        pdf.text("RUN REPORT", pageWidth / 2, 15, { align: "center" });
+
+        const date = new Date().toLocaleString();
+        pdf.setFontSize(14);
+        pdf.setFont("ariel", "normal");
+        pdf.text("Date: " + date, pageWidth / 2, 20, { align: "center" });
+
+        let y = 30;
+        pdf.setLineWidth(0.3);
+        pdf.line(20, 25, pageWidth - 20, 25);
+        y += 5;
+
+        pdf.setFontSize(18);
+        pdf.setFont("ariel", "bold");
+
+        if (currentCustomer) {
+          pdf.text("Customer: " + currentCustomer, 20, y);
+		  pdf.setTextColor(0, 0, 255);
+          const peakHPText = document.getElementById("finalPeakHP").textContent || "";
+          const cleanPeakHP = peakHPText.replace(/[^\w\s\.\-\@\:]/g, '');
+          if (cleanPeakHP.trim()) pdf.text(cleanPeakHP, pageWidth - 30, y, { align: "right" });
+          y += 7;
+        }
+
+        if (currentUnit) {
+		  pdf.setTextColor(0, 0, 0);
+          pdf.text("Engine: " + currentUnit, 20, y);
+		  pdf.setTextColor(0, 128, 0);
+          const peakTorqueText = document.getElementById("finalPeakTorque").textContent || "";
+          const cleanPeakTorque = peakTorqueText.replace(/[^\w\s\.\-\@\:]/g, '');
+          if (cleanPeakTorque.trim()) pdf.text(cleanPeakTorque, pageWidth - 30, y, { align: "right" });
+          y += 7;
+        }
+
+        if (currentComments) {
+          pdf.setFontSize(10);
+          pdf.setFont("ariel", "normal");
+          pdf.text("Notes: " + currentComments, 20, y);
+          y += 7;
+        }
+        pdf.setFontSize(10);
+        pdf.setFont("ariel", "bold");
+        pdf.setTextColor(255, 0, 0);
+        pdf.text(
+          "Peak EGT: " + peakEGT.toFixed(0) + " °C @ " + peakEGTRPM + " RPM   Final EGT: " + finalEGT.toFixed(0) + " °C" + "  Energy: " + energy.toFixed(2) + " GJoule",
+          20, y,
+        );
+        y += 7;
+        
+        pdf.text(
+          "Air Density: " + currentAirDensity.toFixed(3) + " kg/m³   Ambient: " + currentAmbientTemp.toFixed(1) + " °C   Pressure: " + currentPressure.toFixed(1) + " hPa",
+          20, y,
+        );
+        y += 12;
+        pdf.setTextColor(0, 0, 0);
+
+        // Graph section
+        const isTime = xAxisChoice === "time";
+        const xValues = isTime ? currentRunData.map(p => p.time) : currentRunData.map(p => p.rpm);
+        const minX = Math.min(...xValues);
+        const maxX = Math.max(...xValues);
+        const rangeX = maxX - minX || 1;
+        const maxPower = Math.max(...currentRunData.map(p => Math.max(p.hp, p.torque))) * 1.1 || 1;
+
+        const graphWidth = pageWidth - 40;
+        const graphHeight = 125;
+        const graphX = 20;
+        const graphY = y;
+
+        pdf.setDrawColor(0);
+        pdf.setLineWidth(0.5);
+        pdf.rect(graphX, graphY, graphWidth, graphHeight);
+
+        pdf.setFontSize(10);
+        pdf.setDrawColor(100);
+        pdf.setLineWidth(0.2);
+
+        let xStep = rangeX / 10;
+        if (!isTime) {
+          const niceSteps = [500, 1000, 2000, 2500, 5000];
+          let niceStep = niceSteps.find(step => step >= xStep) || xStep;
+          xStep = niceStep;
+          let startX = Math.floor(minX / niceStep) * niceStep;
+          for (let x = startX; x <= maxX; x += xStep) {
+            const xPos = graphX + ((x - minX) / rangeX) * graphWidth;
+            if (xPos >= graphX && xPos <= graphX + graphWidth) {
+              pdf.line(xPos, graphY, xPos, graphY + graphHeight);
+              pdf.text(Math.round(x).toString(), xPos, graphY + graphHeight + 3, { align: "center", fontSize: 10 });
+            }
+          }
+        } else {
+          for (let x = minX; x <= maxX; x += xStep) {
+            const xPos = graphX + ((x - minX) / rangeX) * graphWidth;
+            pdf.line(xPos, graphY, xPos, graphY + graphHeight);
+            pdf.text(x.toFixed(1), xPos, graphY + graphHeight + 3, { align: "center", fontSize: 10 });
+          }
+        }
+        let yStep = maxPower / 10;
+        for (let yVal = 0; yVal <= maxPower; yVal += yStep) {
+          const yPos = graphY + graphHeight - (yVal / maxPower) * graphHeight;
+          pdf.line(graphX - 2, yPos, graphX + graphWidth, yPos);
+          pdf.text(yVal.toFixed(1), graphX - 5, yPos + 2, { align: "right", fontSize: 10 });
+        }
+
+        pdf.setFontSize(12);
+        pdf.text(isTime ? "Time (s)" : "RPM", pageWidth / 2, graphY + graphHeight + 15, { align: "center" });
+        pdf.text("Power / Torque", graphX - 12, graphY + graphHeight / 2, { align: "center", angle: 90 });
+
+        pdf.setDrawColor(0, 0, 255);
+        pdf.setLineWidth(0.5);
+        for (let i = 0; i < currentRunData.length - 1; i++) {
+          const x1 = graphX + ((isTime ? currentRunData[i].time : currentRunData[i].rpm) - minX) / rangeX * graphWidth;
+          const y1 = graphY + graphHeight - (currentRunData[i].hp / maxPower) * graphHeight;
+          const x2 = graphX + ((isTime ? currentRunData[i+1].time : currentRunData[i+1].rpm) - minX) / rangeX * graphWidth;
+          const y2 = graphY + graphHeight - (currentRunData[i+1].hp / maxPower) * graphHeight;
+          pdf.line(x1, y1, x2, y2);
+        }
+
+        pdf.setDrawColor(0, 128, 0);
+        pdf.setLineWidth(0.5);
+        for (let i = 0; i < currentRunData.length - 1; i++) {
+          const x1 = graphX + ((isTime ? currentRunData[i].time : currentRunData[i].rpm) - minX) / rangeX * graphWidth;
+          const y1 = graphY + graphHeight - (currentRunData[i].torque / maxPower) * graphHeight;
+          const x2 = graphX + ((isTime ? currentRunData[i+1].time : currentRunData[i+1].rpm) - minX) / rangeX * graphWidth;
+          const y2 = graphY + graphHeight - (currentRunData[i+1].torque / maxPower) * graphHeight;
+          pdf.line(x1, y1, x2, y2);
+        }
+
+        pdf.setFontSize(12);
+        pdf.setTextColor(0, 0, 255);
+        pdf.text("Power[kW]", pageWidth - 50, graphY + 15);
+        pdf.setTextColor(0, 128, 0);
+        pdf.text("Torque[Nm]", pageWidth - 50, graphY + 30);
+
+        const filename = `MetaSense_${(currentCustomer || "run").replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.pdf`;
+        pdf.save(filename);
+        showToast("PDF saved successfully!");
+        document.getElementById("dynoModal").style.display = "none";
+      } catch (err) {
+        console.error("PDF generation failed:", err);
+        showToast("PDF save failed: " + (err.message || "unknown error"));
+      }
+    }
+
+    // ============== WEBSOCKET CONNECTION ==============
+    function connectWS() {
+      ws = new WebSocket("ws://" + location.hostname + "/ws");
+      
+      ws.onopen = function() {
+        document.getElementById("status").innerText = "✅ Live Data Active";
+        ws.send("PAGE_MAIN");
+        ws.send("GET_SETTINGS");
+      };
+      
+      ws.onmessage = function(evt) {
+        try {
+          const msg = JSON.parse(evt.data);
+          
+          if (msg.type === "settings") {
+            maxVals = { rpm: msg.maxRPM, hp: msg.maxHP, torque: msg.maxTorque, armCm: msg.armCm };
+            updateScaleLabels();
+            currentRpmSource = msg.rpmSource || "leafrpm";
+            lastActiveRpmSource = currentRpmSource;
+            document.getElementById("rpmSourceValue").textContent = currentRpmSource === "leafrpm" ? "LEAF CAN RPM" : "Tachogen RPM";
+            const canFallbackBadge = document.getElementById("canFallbackBadge");
+            if (canFallbackBadge) {
+              canFallbackBadge.style.display = "none";
+            }
+            lastCanFallback = false;
+            
+            const versionEl = document.getElementById("versionInfo");
+            if (versionEl && msg.version && msg.buildDate) {
+              versionEl.innerHTML = `⚙️ MetaSense V${msg.version}<br>${msg.buildDate}`;
+            }
+          }
+          
+          if (msg.type === "data") {
+            let displayRPM = msg.rpm || 0;
+            const canFallback = Number(msg.can_fallback) === 1;
+            const activeRpmSource = (typeof msg.rpm_source_active === "string" && msg.rpm_source_active.length > 0)
+              ? msg.rpm_source_active
+              : ((currentRpmSource === "leafrpm" && !canFallback) ? "leafrpm" : "tachogen");
+            const rpmSourceValue = document.getElementById("rpmSourceValue");
+            const canFallbackBadge = document.getElementById("canFallbackBadge");
+            if (rpmSourceValue) {
+              if (activeRpmSource === "leafrpm") {
+                rpmSourceValue.textContent = "LEAF CAN RPM";
+                if (canFallbackBadge) canFallbackBadge.style.display = "none";
+              } else {
+                rpmSourceValue.textContent = (currentRpmSource === "leafrpm") ? "Tachogen RPM (fallback)" : "Tachogen RPM";
+                if (canFallbackBadge) {
+                  canFallbackBadge.style.display = (currentRpmSource === "leafrpm") ? "inline-block" : "none";
+                }
+              }
+              if (lastActiveRpmSource !== activeRpmSource) {
+                if (activeRpmSource === "tachogen" && currentRpmSource === "leafrpm") {
+                  showToast("⚠️ CAN RPM unavailable: switched to tachogen");
+                } else if (activeRpmSource === "leafrpm") {
+                  showToast("✅ CAN RPM restored");
+                }
+              }
+            }
+            lastActiveRpmSource = activeRpmSource;
+            lastCanFallback = canFallback;
+            const currentKW = Number.isFinite(Number(msg.kw)) ? Number(msg.kw) : 0;
+            const peakKW = Number.isFinite(Number(msg.peakKW)) ? Number(msg.peakKW) : currentKW;
+            const peakKWRPM = Number.isFinite(Number(msg.peakKW_RPM)) ? Number(msg.peakKW_RPM) : Math.round(displayRPM);
+            const peakTorque = Number.isFinite(Number(msg.peakTorque)) ? Number(msg.peakTorque) : 0;
+            const peakTorqueRPM = Number.isFinite(Number(msg.peakTorque_RPM)) ? Number(msg.peakTorque_RPM) : Math.round(displayRPM);
+            const peakEGTValue = Number.isFinite(Number(msg.peakEGT)) ? Number(msg.peakEGT) : 0;
+            
+            // Update gear ratio display
+            const eTorque = Number.isFinite(Number(msg.e_torque)) ? Number(msg.e_torque) :
+              (Number.isFinite(Number(msg.gear_ratio)) ? Number(msg.gear_ratio) : null);
+            if (eTorque !== null) {
+              document.getElementById("gearRatioValue").textContent = eTorque.toFixed(2);
+            }
+            // Update Energy display
+            if (msg.energy !== undefined) {
+              document.getElementById("EnergyValue").textContent = msg.energy.toFixed(2);
+            }
+            if (msg.rel_humidity !== undefined || msg.ratio_confidence !== undefined) {
+              let confidencePercent = 0;
+              if (msg.rel_humidity !== undefined) {
+                confidencePercent = Number(msg.rel_humidity);
+              } else {
+                const rawConfidence = Number(msg.ratio_confidence);
+                // Backward compatibility: some firmware sends 0..1, older sends 0..100.
+                confidencePercent = rawConfidence <= 1.0 ? (rawConfidence * 100.0) : rawConfidence;
+              }
+              if (!Number.isFinite(confidencePercent)) confidencePercent = 0;
+              if (confidencePercent < 0) confidencePercent = 0;
+              if (confidencePercent > 100) confidencePercent = 100;
+              document.getElementById("ratioConfidence").textContent = confidencePercent.toFixed(2);
+              // Color code confidence
+              let confidenceElem = document.getElementById("ratioConfidence");
+              if (confidencePercent > 80) confidenceElem.style.color = "#88ff88";
+              else if (confidencePercent > 50) confidenceElem.style.color = "#ffaa44";
+              else confidenceElem.style.color = "#ff8888";
+            }
+            
+            // Update ratio indicator next to torque toggle
+            if (eTorque !== null && showEngineTorque) {
+              document.getElementById("ratioIndicator").textContent = `(E_torque: ${eTorque.toFixed(2)}Nm)`;
+            } else if (!showEngineTorque) {
+              document.getElementById("ratioIndicator").textContent = "";
+            }
+            
+            updateNeedleGauge(displayRPM);
+            updateGauge("hp", currentKW, maxVals.hp, "hpText", 2);
+            
+            // === TORQUE WITH TOGGLE ===drumRpmDisplay
+            const engineTorque = Number.isFinite(Number(msg.torque)) ? Number(msg.torque) :
+              (Number.isFinite(Number(msg.brakeTorque)) ? Number(msg.brakeTorque) : 0);
+            const brakeTorque = Number.isFinite(Number(msg.brakeTorque)) ? Number(msg.brakeTorque) :
+              (Number.isFinite(Number(msg.torque)) ? Number(msg.torque) : 0);
+            const torqueValue = showEngineTorque ? engineTorque : brakeTorque;
+            updateGauge("torque", torqueValue, maxVals.torque, "torqueText", 2);
+            
+            // Update custom SVG torque gauge fill
+            const maxTorque = 25.0;
+            const percentage = Math.min(100, (torqueValue / maxTorque) * 100);
+            const offset = fullDash * (1 - percentage / 100);
+              const torqueFill = document.getElementById('torqueFill');
+              if (torqueFill) {
+                torqueFill.setAttribute('stroke-dashoffset', offset);
+              }
+
+            if (msg.load_kg !== undefined) {
+				document.getElementById("loadKgDisplay").textContent = msg.load_kg.toFixed(0);
+			}
+            
+            if (msg.drum_rpm !== undefined) {
+              document.getElementById("drumRpmDisplay").textContent = Math.round(msg.drum_rpm);
+            }
+            
+            // Update BMP280 data
+            if (msg.air_density !== undefined) {
+              currentAirDensity = msg.air_density;
+              currentAmbientTemp = msg.ambient_temp;
+              currentPressure = msg.pressure;
+              updateBMP280Display();
+            }
+            
+            document.getElementById("hpPeak").innerHTML = msg.recording || peakKW > 0 ? 
+              `🏆 Peak: ${peakKW.toFixed(2)} kW @ ${Math.round(peakKWRPM)} RPM` : "";
+            document.getElementById("torquePeak").innerHTML = msg.recording || peakTorque > 0 ? 
+              `🏆 Peak: ${peakTorque.toFixed(2)} Nm @ ${Math.round(peakTorqueRPM)} RPM` : "";
+            
+            // EGT Handling
+            const egtHot = Number.isFinite(Number(msg.egt_hot)) ? Number(msg.egt_hot) :
+              (msg.mcps && msg.mcps["7"] && Number.isFinite(Number(msg.mcps["7"].hot)) ? Number(msg.mcps["7"].hot) : null);
+            if (egtHot !== null) {
+                document.getElementById("egtValue").textContent = Math.round(egtHot);
+                if (egtHot > peakEGT) {
+                  peakEGT = egtHot;
+                  peakEGTRPM = Math.round(displayRPM);
+                }
+                finalEGT = egtHot;
+				energy = msg.energy;
+            }
+            
+              if (msg.recording) {
+    // Store current peaks
+    currentPeakHP = peakKW;
+    currentPeakHP_RPM = peakKWRPM;
+    currentPeakTorque = peakTorque;
+    currentPeakTorque_RPM = peakTorqueRPM;
+    currentPeakEGT = peakEGTValue;
+
+            if (!suppressDynoModalReopen) {
+          document.getElementById("dynoModal").style.display = "block";
+            }
+    if (autoModeActive) {
+      document.getElementById("stopAutoRunModal").style.display = "inline-block";
+      document.getElementById("finishManualRun").style.display = "none";
+    } else {
+      document.getElementById("finishManualRun").style.display = "inline-block";
+      document.getElementById("stopAutoRunModal").style.display = "none";
+    }
+    document.getElementById("savePdfModalButton").style.display = "none";
+    
+    const relativeTime = runStartTime ? ((performance.now() - runStartTime) / 1000).toFixed(2) : "0.00";
+    currentRunData.push({
+        rpm: displayRPM,
+        time: parseFloat(relativeTime),
+      hp: currentKW,
+        torque: msg.torque || 0
+    });
+    
+    document.getElementById("finalPeakHP").textContent = `🏆 Power max: ${peakKW.toFixed(2)} kW @ ${Math.round(peakKWRPM)} RPM`;
+    document.getElementById("finalPeakTorque").textContent = `🏆 Torque max: ${peakTorque.toFixed(2)} Nm @ ${Math.round(peakTorqueRPM)} RPM`;
+    updateModalXAxis();
+}
+            if (!msg.recording) {
+              suppressDynoModalReopen = false;
+            }
+          } 
+else if (msg.type === "run_complete") {
+  stopRequestPending = false;
+    document.getElementById("modalTitle").textContent = "✅ RUN COMPLETE!";
+    document.getElementById("runDate").textContent = "📅 Date: " + new Date().toLocaleString();
+    document.getElementById("savePdfModalButton").style.display = "block";
+    document.getElementById("finishManualRun").style.display = "none";
+    document.getElementById("finishManualRun").textContent = "🏁 FINISH RUN (F12)";
+    document.getElementById("stopAutoRunModal").style.display = "none";
+    
+    if (autoModeActive) {
+        document.getElementById("autoRunButton").classList.remove("active");
+        document.getElementById("autoRunButton").innerHTML = autoButtonIdleLabel;
+        autoModeActive = false;
+    }
+    isManualRecording = false;
+    updateModalXAxis();
+    
+    // Send the smoothed run data to ESP32 for storage - use stored peaks
+    if (currentRunData.length > 0 && ws) {
+        const runData = {
+            customer: currentCustomer,
+            unit: currentUnit,
+            comments: currentComments,
+            points: currentRunData.map(p => ({r: p.rpm, h: p.hp, t: p.torque})),
+            peaks: {
+                hp: currentPeakHP,
+                hp_rpm: currentPeakHP_RPM,
+                torque: currentPeakTorque,
+                torque_rpm: currentPeakTorque_RPM,
+                egt: msg.peakEGT || 0
+            }
+        };
+        ws.send("SAVE_RUN_DATA:" + JSON.stringify(runData));
+    }
+}
+else if (msg.type === "info" || msg.type === "status") {
+  const lowMsg = (msg.msg || "").toLowerCase();
+  const isRunStoppedMsg = lowMsg.includes("cancelled") || lowMsg.includes("stopped") || lowMsg.includes("timeout");
+  showToast(isRunStoppedMsg ? "Run stopped" : msg.msg);
+  if (lowMsg.includes("auto run armed") || lowMsg.includes("activated")) {
+        autoModeActive = true;
+        document.getElementById("autoRunButton").classList.add("active");
+        document.getElementById("autoRunButton").innerHTML = autoButtonActiveLabel;
+      document.getElementById("stopAutoRunModal").style.display = "inline-block";
+      document.getElementById("finishManualRun").style.display = "none";
+  } else if (isRunStoppedMsg) {
+        stopRequestPending = false;
+        autoModeActive = false;
+        document.getElementById("autoRunButton").classList.remove("active");
+        document.getElementById("autoRunButton").innerHTML = autoButtonIdleLabel;
+      document.getElementById("stopAutoRunModal").style.display = "none";
+    }
+}
+        } catch (e) {
+          console.error("WebSocket message error:", e);
+        }
+      };
+      
+      ws.onclose = function() { 
+        document.getElementById("status").innerText = "⚠️ Reconnecting...";
+        setTimeout(connectWS, 1000); 
+      };
+    }
+    
+    // ============== INITIALIZATION ==============
+    function init() {
+      createTicks();
+      createHPTicks();
+      createTorqueTicks();
+      updateNeedleGauge(0);
+      updateGauge("hp", 0, maxVals.hp, "hpText", 2);
+      updateGauge("torque", 0, maxVals.torque, "torqueText", 2);
+      updateBMP280Display();
+      
+      const ctx = document.getElementById('modalDynoChart').getContext('2d');
+      modalDynoChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          datasets: [
+            { label: 'Power [kW]', data: [], borderColor: '#00ff00', borderWidth: 3, tension: 0.0, pointRadius: 0 },
+            { label: 'Torque [Nm]', data: [], borderColor: '#0088ff', borderWidth: 3, tension: 0.0, pointRadius: 0 }
+          ]
+        },
+        options: {
+          animation: false,
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { type: 'linear', title: { display: true, text: 'RPM', color: '#cccccc', font: { size: 16 } }, ticks: { color: '#aaaaaa' }, grid: { color: '#444' } },
+            y: { title: { display: true, text: 'kW / Nm', color: '#cccccc', font: { size: 16 } }, ticks: { color: '#aaaaaa' }, grid: { color: '#444' } }
+          },
+          plugins: { legend: { labels: { color: '#cccccc', font: { size: 14 } } } }
+        }
+      });
+      
+      connectWS();
+    }
+    
+    // ============== EVENT LISTENERS ==============
+    document.getElementById("tareButton").onclick = function() {
+      clearPeaks();
+      if (ws) ws.send("TARE");
+      showToast("Tare sent & peaks cleared");
+    };
+    
+    document.getElementById("autoRunButton").onclick = function() {
+      clearPeaks();
+      if (autoModeActive) {
+        cancelAutoRunFromUi();
+      } else {
+        document.getElementById("autoModal").style.display = "block";
+      }
+    };
+    
+    document.getElementById("confirmAuto").onclick = function() {
+      const start = parseFloat(document.getElementById("startRPM").value);
+      const end = parseFloat(document.getElementById("endRPM").value);
+      currentCustomer = document.getElementById("customerName").value.trim();
+      currentUnit = document.getElementById("testUnit").value.trim();
+      currentComments = document.getElementById("runComments").value.trim();
+      
+      if (start > 0 && end > start && end <= 30000) {
+        if (ws) ws.send("SET_CUSTOMER:" + currentCustomer + "|" + currentUnit + "|" + currentComments);
+        setTimeout(() => {
+          if (ws) ws.send(`AUTO_RUN:${start}:${end}`);
+        }, 50);
+        autoModeActive = true;
+          isManualRecording = false;
+        document.getElementById("autoRunButton").classList.add("active");
+        document.getElementById("autoRunButton").innerHTML = autoButtonActiveLabel;
+        runStartTime = performance.now();
+        currentRunData = [];
+        peakEGT = 0;
+        finalEGT = 0;
+        xAxisChoice = document.querySelector('input[name="xAxisType"]:checked')?.value || "rpm";
+        document.getElementById("autoModal").style.display = "none";
+        showToast("Auto Run activated!");
+      } else {
+        showToast("Invalid RPM range! Start < End ≤ 30000");
+      }
+    };
+    
+    document.getElementById("manualRunButton").onclick = function() {
+      clearPeaks();
+      const customerEl = document.getElementById("manualCustomerName");
+      const unitEl = document.getElementById("manualTestUnit");
+      if (customerEl && customerEl.value.trim().length === 0) customerEl.value = "MetaSense";
+      if (unitEl && unitEl.value.trim().length === 0) unitEl.value = "TM mini";
+      document.getElementById("manualModal").style.display = "block";
+    };
+    
+    document.getElementById("confirmManual").onclick = function() {
+      currentCustomer = document.getElementById("manualCustomerName").value.trim();
+      currentUnit = document.getElementById("manualTestUnit").value.trim();
+      currentComments = document.getElementById("manualRunComments").value.trim();
+      
+      if (!currentCustomer && !currentUnit) {
+        showToast("Please enter at least Customer or Test Unit");
+        return;
+      }
+      
+      if (ws) ws.send("SET_CUSTOMER:" + currentCustomer + "|" + currentUnit + "|" + currentComments);
+      setTimeout(() => {
+        if (ws) ws.send("MANUAL_START");
+      }, 50);
+      
+      runStartTime = performance.now();
+      currentRunData = [];
+      peakEGT = 0;
+      finalEGT = 0;
+      xAxisChoice = document.querySelector('input[name="xAxisTypeManual"]:checked')?.value || "rpm";
+      document.getElementById("manualModal").style.display = "none";
+      isManualRecording = true;
+      document.getElementById("finishManualRun").style.display = "inline-block";
+      showToast("Manual recording started - press F12 to finish");
+    };
+    
+    document.getElementById("resetEnergyButton").onclick = function() {
+      energy = 0;
+      const energyEl = document.getElementById("EnergyValue");
+      if (energyEl) energyEl.textContent = "0.00";
+      showToast("Accumulated energy reset");
+    };
+    
+    document.getElementById("finishManualRun").onclick = finishManualRun;
+    document.getElementById("stopAutoRunModal").onclick = cancelAutoRunFromUi;
+    document.getElementById("savePdfModalButton").onclick = generatePDF;
+
+    function cancelAutoRunFromUi() {
+      if (stopRequestPending && (Date.now() - stopRequestSentAt) < 1000) return;
+      stopRequestPending = true;
+      stopRequestSentAt = Date.now();
+      suppressDynoModalReopen = true;
+      if (ws) ws.send("CANCEL_AUTO_RUN");
+      autoModeActive = false;
+      document.getElementById("autoRunButton").classList.remove("active");
+      document.getElementById("autoRunButton").innerHTML = autoButtonIdleLabel;
+      document.getElementById("stopAutoRunModal").style.display = "none";
+      document.getElementById("finishManualRun").style.display = "none";
+      document.getElementById("finishManualRun").textContent = "🏁 FINISH RUN (F12)";
+      showToast("Run stopped");
+    }
+    
+    document.querySelectorAll('input[name="xAxisType"], input[name="xAxisTypeManual"]').forEach(radio => {
+      radio.addEventListener('change', () => {
+        if (radio.name === "xAxisType") {
+          xAxisChoice = radio.value;
+        } else {
+          xAxisChoice = radio.value;
+        }
+        if (document.getElementById('dynoModal').style.display === 'block') {
+          updateModalXAxis();
+        }
+      });
+    });
+    
+    document.querySelectorAll(".close").forEach(function(span) {
+      span.onclick = function() { 
+        const modal = span.closest(".modal");
+        modal.style.display = "none"; 
+      };
+    });
+    
+    window.onclick = function(event) {
+      if (event.target.classList.contains("modal")) {
+        event.target.style.display = "none";
+      }
+    };
+    
+    document.addEventListener("keydown", function(e) {
+      if (e.key === "F8") {
+        e.preventDefault();
+        if (isManualRecording) {
+          showToast("Manual run active - use F12 to stop");
+          return;
+        }
+        if (autoModeActive) {
+          cancelAutoRunFromUi();
+        } else {
+          document.getElementById("autoModal").style.display = "block";
+        }
+      } else if (e.key === "F12") {
+        e.preventDefault();
+        const stopBtnVisible = document.getElementById("finishManualRun").style.display !== "none";
+        if (autoModeActive) {
+          cancelAutoRunFromUi();
+        } else if (isManualRecording || stopBtnVisible) {
+          finishManualRun();
+        } else {
+          document.getElementById("manualModal").style.display = "block";
+        }
+      }
+    });
+    
+    init();
+  </script>
+</body>
+</html>

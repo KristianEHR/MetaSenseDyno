@@ -1,0 +1,71 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build (esp32s3-USB)",
+      "type": "shell",
+      "command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+      "args": ["run", "-e", "esp32s3-USB"],
+      "isBackground": false,
+      "problemMatcher": ["$platformio"],
+      "group": "build"
+    },
+    {
+      "label": "Upload (esp32s3-USB)",
+      "type": "shell",
+      "command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+      "args": ["run", "-e", "esp32s3-USB", "-t", "upload"],
+      "isBackground": false,
+      "problemMatcher": ["$platformio"]
+    },
+    {
+      "label": "Build (esp32s3-ota)",
+      "type": "shell",
+      "command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+      "args": ["run", "-e", "esp32s3-ota"],
+      "isBackground": false,
+      "problemMatcher": ["$platformio"]
+    },
+    {
+      "label": "Upload (esp32s3-ota)",
+      "type": "shell",
+      "command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+      "args": ["run", "-e", "esp32s3-ota", "-t", "upload"],
+      "isBackground": false,
+      "problemMatcher": ["$platformio"]
+    },
+    {
+      "label": "Upload Filesystem (esp32s3-USB)",
+      "type": "shell",
+      "command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+      "args": ["run", "-e", "esp32s3-USB", "-t", "uploadfs"],
+      "isBackground": false,
+      "problemMatcher": ["$platformio"]
+    },
+    {
+      "label": "Upload Filesystem (esp32s3-OTA)",
+      "type": "shell",
+      "command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+      "args": ["run", "-e", "esp32s3-ota", "-t", "uploadfs"],
+      "isBackground": false,
+      "problemMatcher": ["$platformio"]
+    },
+    {
+      "label": "Clean (esp32s3-USB)",
+      "type": "shell",
+      "command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+      "args": ["run", "-e", "esp32s3-USB", "-t", "clean"],
+      "isBackground": false,
+      "problemMatcher": ["$platformio"]
+    },
+    {
+      "label": "Test",
+      "type": "shell",
+      "command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+      "args": ["test"],
+      "isBackground": false,
+      "problemMatcher": ["$platformio"],
+      "group": "test"
+    }
+  ]
+}

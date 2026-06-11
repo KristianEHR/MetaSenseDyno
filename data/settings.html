@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MetaSense Settings v3.0</title>
+  <link rel="icon" href="/favicon.png" type="image/x-icon">
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body { 
+      font-family: 'Courier New', monospace; 
+      background: #404040; 
+      color: #cccccc; 
+      padding: 40px; 
+      margin: 0; 
+    }
+    h1 { 
+      color: #e0e0e0; 
+      text-align: center; 
+      text-shadow: 0 0 8px #444; 
+      margin-top: 20px;
+    }
+    .container { 
+      max-width: 600px; 
+      margin: 0 auto; 
+      background: #353535; 
+      padding: 40px; 
+      border-radius: 15px; 
+      border: 1px solid #666; 
+      box-shadow: 0 10px 30px rgba(0,0,0,0.8); 
+    }
+    label { 
+      display: block; 
+      margin: 20px 0 10px; 
+      font-size: 20px; 
+      color: #aaaaaa; 
+    }
+    input, select { 
+      width: 100%; 
+      padding: 15px; 
+      font-size: 20px; 
+      background: #404040; 
+      color: #ffffff; 
+      border: 2px solid #888888; 
+      border-radius: 8px; 
+      box-sizing: border-box;
+      transition: all 0.2s ease;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: #88ff88;
+    }
+    button { 
+      margin-top: 20px; 
+      padding: 18px; 
+      font-size: 22px; 
+      background: #404040; 
+      color: #ffffff; 
+      border: none; 
+      border-radius: 10px; 
+      cursor: pointer; 
+      width: 100%; 
+      box-shadow: 0 6px 15px rgba(0,0,0,0.6); 
+      transition: all 0.2s ease;
+    }
+    button:hover { 
+      background: #505050; 
+      transform: scale(1.02);
+    }
+    .section { 
+      margin-top: 40px; 
+      padding-top: 30px; 
+      border-top: 1px solid #666; 
+    }
+    .hidden { 
+      display: none !important; 
+    }
+    .info { 
+      font-size: 14px; 
+      color: #888; 
+      margin: 10px 0 20px; 
+      line-height: 1.5; 
+      background: #2a2a2a;
+      padding: 12px;
+      border-radius: 8px;
+      border-left: 3px solid #88ff88;
+    }
+    .param-row { 
+      display: flex; 
+      align-items: center; 
+      gap: 10px; 
+      margin-bottom: 10px; 
+    }
+    .param-row input, .param-row select { 
+      flex: 1; 
+    }
+    .param-row button { 
+      width: auto; 
+      padding: 15px 30px; 
+      font-size: 20px; 
+      margin-top: 0;
+    }
+
+    .back-btn {
+      position: fixed;
+      top: 15px;
+      left: 15px;
+      z-index: 1000;
+      padding: 12px 20px;
+      font-size: 18px;
+      background: #505050;
+      color: #ffffff;
+      border: 1px solid #777;
+      border-radius: 8px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.7);
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+
+    .back-btn:hover {
+      background: #606060;
+      transform: scale(1.02);
+    }
+
+    
+    #settingsStatus {
+      text-align: center;
+      margin-bottom: 20px;
+      padding: 12px;
+      background: rgba(0,0,0,0.5);
+      border-radius: 8px;
+      color: #88ff88;
+      font-weight: bold;
+    }
+    
+    .current-value {
+      font-size: 12px;
+      color: #88ff88;
+      margin-top: 5px;
+    }
+    
+    .reset-btn {
+      background: #804040;
+      margin-top: 10px;
+    }
+    
+    .reset-btn:hover {
+      background: #a05050;
+    }
+
+    @media (max-width: 600px) {
+      .update-section-removed {
+        display: none;
+      }
+      .param-row {
+        flex-wrap: wrap;
+      }
+      .param-row button {
+        width: 100%;
+      }
+    }
+
+    @media (max-width: 500px) {
+      .back-btn {
+        padding: 10px 16px;
+        font-size: 16px;
+        top: 10px;
+        left: 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <a href="/" class="back-btn">← BACK TO DASHBOARD</a>
+
+  <h1 id="versionInfo" style="text-align: center; color: #e0e0e0; text-shadow: 0 0 8px #444;">
+  MetaSense --:-- | --
+</h1>
+  <div class="container">
+    
+    <div id="settingsStatus">Loading settings...</div>
+
+    <div class="section calib-section">
+      <label>Load Cell Calibration (Known Weight)</label>
+      <div class="info">
+        1. Remove all weight → click TARE on main page<br>
+        2. Place known weight → enter it below → click CALIBRATE<br>
+        <strong>Important:</strong> New calibration factor will be very small (usually 0.0001–0.01 range) — this is normal!
+      </div>
+      <button onclick="tare()">⚖️ TARE (ZERO)</button>
+      <label>Known Weight (kg)</label>
+      <input type="number" id="knownWeight" placeholder="e.g. 5.000" step="0.001">
+      <button onclick="calibrate()">🔧 CALIBRATE</button>
+    </div>
+
+    <label>Current Calibration Factor</label>
+    <input type="text" id="calFactor" readonly style="background:#303030; font-family: monospace;">
+    <div class="current-value" id="calFactorCurrent"></div>
+
+    <div class="section">
+      <label>Max RPM Gauge Range</label>
+      <div class="param-row">
+        <input type="number" id="maxRPM" value="16000" min="5000" max="50000" step="1000">
+        <button onclick="saveSingle('maxRPM', event)">💾 SAVE</button>
+      </div>
+
+      <label>Max power Gauge Range</label>
+      <div class="param-row">
+        <input type="number" id="maxHP" value="15" min="5" max="100" step="0.5">
+        <button onclick="saveSingle('maxHP', event)">💾 SAVE</button>
+      </div>
+
+      <label>Max Torque Gauge Range (Nm)</label>
+      <div class="param-row">
+        <input type="number" id="maxTorque" value="15" min="5" max="100" step="0.5">
+        <button onclick="saveSingle('maxTorque', event)">💾 SAVE</button>
+      </div>
+
+      <label>Lever Arm Length (cm)</label>
+      <div class="param-row">
+        <input type="number" id="armCm" value="20.0" min="5" max="100" step="0.1">
+        <button onclick="saveSingle('armCm', event)">💾 SAVE</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <label>Dyno Mode</label>
+      <div class="param-row">
+        <select id="dynoMode" onchange="updateUIVisibility()">
+          <option value="brake">Brake Dyno</option>
+          <option value="inertia">Inertia Dyno</option>
+        </select>
+        <button onclick="saveSingle('dynoMode', event)">💾 SAVE</button>
+      </div>
+
+      <label>RPM Source</label>
+      <div class="param-row">
+        <select id="rpmSource" onchange="updateUIVisibility()"></select>
+        <button onclick="saveSingle('rpmSource', event)">💾 SAVE</button>
+      </div>
+
+      <div id="rpmSourceInfo" class="info"></div>
+
+      <!-- Brake-specific settings -->
+      <div id="brakeRatioSection">
+        <label>Brake Roller Ratio (Engine ↔ Roller RPM)</label>
+        <div class="param-row">
+          <input type="number" id="brakeToEngineRatio" value="1.0" min="0.1" max="50" step="0.1">
+          <button onclick="saveSingle('brakeToEngineRatio', event)">💾 SAVE</button>
+        </div>
+        <div class="info" id="brakeRatioInfo">
+          <strong>How this ratio works:</strong><br>
+          • <strong>Brake Roller Hall mode:</strong> Display RPM = Roller RPM × Ratio<br>
+          • <strong>Engine Hall mode (no roller signal):</strong> Virtual Roller RPM = Engine RPM ÷ Ratio<br><br>
+          Example: If engine spins 4× faster than roller → enter <strong>4.0</strong>
+        </div>
+      </div>
+
+      <!-- Engine Hall pulses setting -->
+      <div id="enginePulsesSection">
+        <label>Triggers Per Revolution (Engine Hall)</label>
+        <div class="info">
+          How many times the hall sensor triggers per full crankshaft revolution.<br>
+          • 1 = single magnet/tooth (most common)<br>
+          • 0.5 = ignition coil signal (fires once every 2 crank revs)<br>
+          • Other: 2, 4, 6, 8, 10
+        </div>
+        <div class="param-row">
+          <input type="number" id="pulsesPerRev" value="1.0" min="0.5" max="10" step="0.5">
+          <button onclick="saveSingle('pulsesPerRev', event)">💾 SAVE</button>
+        </div>
+      </div>
+
+      <!-- Roller/Drum pulses setting -->
+      <label>Triggers Per Revolution (Roller/Drum Hall)</label>
+      <div class="info">
+        Number of triggers per full revolution of the brake roller/drum (pin 26).<br>
+        • Usually 1 (single magnet) – most common<br>
+        • Higher if using multi-tooth wheel or encoder
+      </div>
+      <div class="param-row">
+        <input type="number" id="pulsesPerRevDrum" value="1.0" min="0.5" max="30" step="0.5">
+        <button onclick="saveSingle('pulsesPerRevDrum', event)">💾 SAVE</button>
+      </div>
+
+      <label>RPM Noise Filter (0.1–0.9, higher = faster response)</label>
+      <div class="info">Higher for quick 2-stroke spool-up (0.5–0.8), lower for smooth 4-stroke (0.2–0.3)</div>
+      <div class="param-row">
+        <input type="number" id="rpmFilter" value="0.50" min="0.1" max="0.9" step="0.05">
+        <button onclick="saveSingle('rpmFilter', event)">💾 SAVE</button>
+      </div>
+	  
+	       <!-- Drivetrain Efficiency -->
+      <label>Drivetrain Efficiency (%) — Crank Power Correction</label>
+      <div class="info">
+        Accounts for power losses in chain, sprockets and gearbox.<br>
+        Typical values:<br>
+        • Simple chain drive: 93–96%<br>
+        • Chain + gearbox/CVT: 88–93%<br>
+        • Worn chain/sprockets: 85–90%<br><br>
+        Set to 100% to disable correction (show wheel power).
+      </div>
+      <div class="param-row">
+        <input type="number" id="drivetrainEff" value="95" min="70" max="99" step="0.5">
+        <button onclick="saveSingle('drivetrainEff', event)">💾 SAVE</button>
+      </div>
+
+      <!-- Inertia-only gear ratio -->
+      <div id="gearRatioSection" class="hidden">
+        <label>Virtual Gear Ratio (Drum RPM → Engine RPM)</label>
+        <div class="param-row">
+          <input type="number" id="virtGearRatio" value="1.0" min="0.1" max="50" step="0.1">
+          <button onclick="saveSingle('virtGearRatio', event)">💾 SAVE</button>
+        </div>
+        <div class="info">Used to convert drum RPM to engine RPM in fixed-ratio inertia setups.</div>
+      </div>
+      
+      <button onclick="resetSectionDefaults()" class="reset-btn">⟳ Reset All to Defaults</button>
+    </div>
+
+    <div id="inertiaSection" class="section hidden">
+      <label>Drum Mass (kg) — Inertia Mode</label>
+      <div class="param-row">
+        <input type="number" id="drumMass" value="10.0" min="1" max="100" step="0.1">
+        <button onclick="saveSingle('drumMass', event)">💾 SAVE</button>
+      </div>
+
+      <label>Drum Diameter (cm) — Inertia Mode</label>
+      <div class="param-row">
+        <input type="number" id="drumCm" value="30.0" min="10" max="100" step="0.1">
+        <button onclick="saveSingle('drumCm', event)">💾 SAVE</button>
+      </div>
+
+      <label>Drum Inertia Type</label>
+      <div class="param-row">
+        <select id="drumInertiaType">
+          <option value="solid">Solid Cylinder</option>
+          <option value="hollow">Hollow Cylinder</option>
+          <option value="custom">Custom Inertia (kg·m²)</option>
+        </select>
+        <button onclick="saveSingle('drumInertiaType', event)">💾 SAVE</button>
+      </div>
+
+      <label>Wall Thickness (cm) — Hollow only</label>
+      <div class="param-row">
+        <input type="number" id="drumWallCm" value="2.0" min="0.5" max="20" step="0.1">
+        <button onclick="saveSingle('drumWallCm', event)">💾 SAVE</button>
+      </div>
+
+      <label>Custom Drum Inertia (kg·m²)</label>
+      <div class="param-row">
+        <input type="number" id="drumInertiaCustom" value="0.5" min="0.01" max="10" step="0.01">
+        <button onclick="saveSingle('drumInertiaCustom', event)">💾 SAVE</button>
+      </div>
+    </div>
+
+    <div class="section wifi-section">
+      <label>Connect to Existing WiFi Network (Client Mode)</label>
+      <div class="info">Enter credentials → click CONNECT → ESP32 will reboot as client</div>
+      <label>WiFi SSID</label>
+      <input type="text" id="wifiSSID" placeholder="Your network name">
+      <label>WiFi Password</label>
+      <input type="password" id="wifiPass" placeholder="Your network password">
+      <button onclick="connectWiFi()">📡 CONNECT TO WIFI</button>
+    </div>
+
+
+  </div>
+
+  <script>
+    function showToast(message) {
+      const existing = document.getElementById("toast");
+      if (existing) existing.remove();
+
+      const toast = document.createElement("div");
+      toast.id = "toast";
+      toast.textContent = message;
+      toast.style.position = "fixed";
+      toast.style.bottom = "100px";
+      toast.style.left = "50%";
+      toast.style.transform = "translateX(-50%)";
+      toast.style.background = "rgba(0, 150, 0, 0.95)";
+      toast.style.color = "#ffffff";
+      toast.style.padding = "16px 40px";
+      toast.style.borderRadius = "12px";
+      toast.style.fontSize = "18px";
+      toast.style.fontWeight = "bold";
+      toast.style.zIndex = "2000";
+      toast.style.boxShadow = "0 6px 20px rgba(0,0,0,0.8)";
+      document.body.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.opacity = "0";
+        setTimeout(() => toast.remove(), 600);
+      }, 3000);
+    }
+
+    function updateUIVisibility() {
+      const mode = document.getElementById("dynoMode").value;
+      const source = document.getElementById("rpmSource").value;
+
+      document.getElementById("inertiaSection").classList.toggle("hidden", mode !== "inertia");
+      document.getElementById("gearRatioSection").classList.toggle("hidden", mode !== "inertia");
+      document.getElementById("enginePulsesSection").classList.toggle("hidden", source !== "leafrpm");
+      
+      // Brake ratio section is always visible in brake mode
+      document.getElementById("brakeRatioSection").classList.toggle("hidden", mode !== "brake");
+
+      const infoDiv = document.getElementById("rpmSourceInfo");
+      let info = "";
+
+      if (source === "leafrpm") {
+        info = "🔧 <strong>LEAF CAN RPM:</strong><br>• Uses RPM from LEAF CAN message<br>• Best when CAN stream is stable and available";
+      } else if (source === "tachogen") {
+        info = "📈 <strong>Tachogen Analog RPM:</strong><br>• Uses tachogen analog input (ADC channel mapped in firmware)<br>• Useful when CAN RPM is unavailable";
+      }
+      infoDiv.innerHTML = info;
+    }
+
+    function rebuildRpmSourceOptions() {
+      const mode = document.getElementById("dynoMode").value;
+      const rpmSelect = document.getElementById("rpmSource");
+      const currentValue = rpmSelect.value;
+      
+      rpmSelect.innerHTML = "";
+      
+      rpmSelect.add(new Option("LEAF CAN RPM", "leafrpm"));
+      rpmSelect.add(new Option("Tachogen Analog", "tachogen"));
+      
+      if ([...rpmSelect.options].some(opt => opt.value === currentValue)) {
+        rpmSelect.value = currentValue;
+      } else {
+        rpmSelect.value = rpmSelect.options[0].value;
+      }
+    }
+
+    let ws = null;
+
+    const connectWS = function() {
+      ws = new WebSocket("ws://" + location.hostname + "/ws");
+      ws.onopen = function() {
+        document.getElementById("settingsStatus").style.display = "none";
+        ws.send("PAGE_SETTINGS");
+        ws.send("GET_SETTINGS");
+      };
+      ws.onmessage = function(evt) {
+        try {
+          const msg = JSON.parse(evt.data);
+          if (msg.type === "settings") {
+            document.getElementById("calFactor").value = msg.calFactor !== undefined ? Number(msg.calFactor).toFixed(6) : "0.000000";
+            document.getElementById("maxRPM").value = msg.maxRPM;
+            document.getElementById("maxHP").value = msg.maxHP;
+            document.getElementById("maxTorque").value = msg.maxTorque;
+            document.getElementById("armCm").value = msg.armCm;
+            document.getElementById("pulsesPerRev").value = msg.pulsesPerRev || 1.0;
+            document.getElementById("rpmFilter").value = msg.rpmFilter;
+            document.getElementById("dynoMode").value = msg.mode;
+            document.getElementById("virtGearRatio").value = msg.virtGearRatio || 1.0;
+            document.getElementById("drumMass").value = msg.drumMass;
+            document.getElementById("drumCm").value = msg.drumCm;
+            document.getElementById("pulsesPerRevDrum").value = msg.pulsesPerRevDrum || 1.0;
+            document.getElementById("drumInertiaType").value = msg.drumInertiaType;
+            document.getElementById("drumWallCm").value = msg.drumWallCm;
+            document.getElementById("drumInertiaCustom").value = msg.drumInertiaCustom;
+            document.getElementById("brakeToEngineRatio").value = msg.brakeToEngineRatio || 1.0;
+			document.getElementById("drivetrainEff").value = msg.drivetrainEff || 93.0;
+            
+            rebuildRpmSourceOptions();
+            document.getElementById("rpmSource").value = msg.rpmSource || "spark";
+            
+            updateUIVisibility();
+			 // Update version display
+  const versionEl = document.getElementById("versionInfo");
+  if (versionEl && msg.version && msg.buildDate) {
+    versionEl.innerHTML = `MetaSense V${msg.version} | ${msg.buildDate}`;
+  }
+            
+          } else if (msg.type === "info") {
+            showToast(msg.msg);
+          }
+        } catch (e) {
+          console.error("WebSocket message error:", e);
+        }
+      };
+      ws.onclose = function() {
+        document.getElementById("settingsStatus").style.display = "block";
+        document.getElementById("settingsStatus").textContent = "⚠️ Reconnecting...";
+        setTimeout(connectWS, 1000);
+      };
+    };
+
+    connectWS();
+
+    const tare = function() { 
+      if (ws) ws.send("TARE"); 
+      showToast("Tare command sent");
+    };
+    
+    const calibrate = function() {
+      const weight = document.getElementById("knownWeight").value.trim();
+      if (weight && parseFloat(weight) > 0) {
+        if (ws) ws.send("CALIBRATE:" + weight);
+        document.getElementById("knownWeight").value = "";
+        showToast("Calibration sent with " + weight + "kg");
+      } else {
+        showToast("Enter valid weight!");
+      }
+    };
+
+    const saveSingle = function(key, event) {
+      const elem = document.getElementById(key);
+      if (!elem) return;
+      const val = elem.tagName === "SELECT" ? elem.value : elem.value.trim();
+      if (ws) ws.send("SET_SINGLE:" + key + "=" + val);
+      
+      const btn = event.target;
+      const originalText = btn.textContent;
+      btn.textContent = "✓ SAVED!";
+      btn.style.background = "#008000";
+      setTimeout(() => { 
+        btn.textContent = originalText;
+        btn.style.background = "#404040";
+      }, 1500);
+      
+      showToast(key + " saved!");
+    };
+
+    const connectWiFi = function() {
+      const ssid = document.getElementById("wifiSSID").value.trim();
+      const pass = document.getElementById("wifiPass").value;
+      if (ssid) {
+        if (confirm("Connect to WiFi '" + ssid + "'? ESP32 will reboot.")) {
+          if (ws) ws.send("WIFI_CLIENT:" + ssid + ":" + pass);
+          showToast("Connecting to WiFi... ESP32 will reboot");
+        }
+      } else {
+        showToast("Enter SSID!");
+      }
+    };
+
+    const resetSectionDefaults = function() {
+      if (confirm("Reset ALL settings to factory defaults?")) {
+        if (ws) ws.send("RESET_ALL_SETTINGS");
+        showToast("All settings reset to defaults");
+      }
+    };
+
+    rebuildRpmSourceOptions();
+    updateUIVisibility();
+  </script>
+</body>
+</html>
