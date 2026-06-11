@@ -13,6 +13,10 @@ namespace MetaSense::WebSocketServer {
 void sendStatus(const String& msg);
 }
 
+namespace MetaSense::HardwareOutputStateMachine {
+void stop();
+}
+
 namespace {
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -25,6 +29,7 @@ enum class State {
     AUTO_UP_LINEAR,
     AUTO_UP_EXP,
     AUTO_DOWN_EXP,
+    AUTO_TIMEOUT_DOWN,
     AUTO_DONE,
     AUTO_ABORT
 };
@@ -35,6 +40,8 @@ State state = State::MANUAL;
 bool autoMode   = false;   // GUI Auto Run button
 bool panelAuto  = false;   // Panel switch (AUTO position)
 uint32_t autoRunStartMs = 0;
+bool safetyShutdownActive = false;
+bool restartRequired = false;
 
 // Recording latch (kept from your original design)
 bool recording  = false;
@@ -76,6 +83,7 @@ constexpr float tauDown     = 5.0f / 4.0f; // 4× faster down-slope
 
 constexpr float linearRate  = 200.0f;  // RPM/s for initial linear phase
 constexpr uint32_t autoRunTimeoutMs = 25000;
+constexpr float safetyShutdownTargetRpm = 1500.0f;
 
 // Measurement window (old behavior: 7000 → 14000 RPM)
 constexpr float measureRpmMin = 7000.0f;
@@ -130,6 +138,36 @@ inline void updateEnergy(float rpm, float torqueNm)
     energyMJ += (powerKW * dtSeconds) / 1000.0f;
 }
 
+inline void beginSafetyShutdown(float rpm)
+{
+    safetyShutdownActive = true;
+    autoRunStartMs = 0;
+    rpmRampDown.init(rpm, safetyShutdownTargetRpm, tauDown, dtSeconds);
+    MetaSense::DynoStateMachine::setTorqueFeedForward(0.0f);
+    MetaSense::Settings::setRpmTarget(rpm);
+    MetaSense::WebSocketServer::sendStatus("Auto run timeout: ramping down to 1500 RPM");
+}
+
+inline void completeSafetyShutdown()
+{
+    if (recording) {
+        MetaSense::DynoStateMachine::stopRecording();
+    }
+
+    lastRunEnergy = energyMJ;
+    runFinished   = true;
+    autoMode      = false;
+    panelAuto     = false;
+    safetyShutdownActive = false;
+    restartRequired = true;
+    state = State::MANUAL;
+
+    MetaSense::DynoStateMachine::setTorqueFeedForward(0.0f);
+    MetaSense::Settings::setRpmTarget(0.0f);
+    MetaSense::HardwareOutputStateMachine::stop();
+    MetaSense::WebSocketServer::sendStatus("System restart required");
+}
+
 } // anonymous namespace
 
 
@@ -148,7 +186,7 @@ void startRecording()
 void stopRecording()
 {
     recording = false;
-    setTorqueFeedForward(0.0f);
+    MetaSense::DynoStateMachine::setTorqueFeedForward(0.0f);
     MetaSense::Input::stopRecording();
 }
 
@@ -161,6 +199,16 @@ bool isAutoRunActive()
 {
     const bool sw = (panelAuto || recording);
     return autoMode && sw;
+}
+
+bool isSafetyShutdownActive()
+{
+    return safetyShutdownActive;
+}
+
+bool isRestartRequired()
+{
+    return restartRequired;
 }
 
 void setTorqueFeedForward(float torque)
@@ -189,6 +237,11 @@ void setPanelAuto(bool enabled)
 
 void setAutoMode(bool enabled)
 {
+    if (enabled && restartRequired) {
+        MetaSense::WebSocketServer::sendStatus("System restart required before a new run");
+        return;
+    }
+
     autoMode = enabled;
     if (autoMode) {
         autoRunStartMs = millis();
@@ -213,6 +266,10 @@ void setManualRpmTarget(float rpm)
 
 void abortAutoRun()
 {
+    if (safetyShutdownActive || restartRequired) {
+        return;
+    }
+
     // Abort: stop recording, reset energy, go back to manual
     if (recording) {
         stopRecording();
@@ -259,6 +316,23 @@ void update()
     // Old behavior: sw = panelAuto || recording
     bool sw = (panelAuto || recording);
 
+    if (restartRequired) {
+        MetaSense::Settings::setRpmTarget(0.0f);
+        return;
+    }
+
+    if (safetyShutdownActive) {
+        float commanded = rpmRampDown.update();
+        MetaSense::Settings::setRpmTarget(commanded);
+        setTorqueFeedForward(0.0f);
+
+        if (commanded <= safetyShutdownTargetRpm * 1.001f) {
+            completeSafetyShutdown();
+        }
+
+        return;
+    }
+
     // If not in auto mode or switch not active, we are effectively manual
     if (!autoMode || !sw) {
         // Manual behavior: obey manualRpmTarget
@@ -275,14 +349,8 @@ void update()
 
     // From here: autoMode == true and sw == true → AUTO behavior
     if (autoRunStartMs != 0 && (millis() - autoRunStartMs) >= autoRunTimeoutMs) {
-        if (recording) {
-            stopRecording();
-        }
-        autoMode = false;
-        panelAuto = false;
-        resetEnergy();
-        state = State::MANUAL;
-        MetaSense::WebSocketServer::sendStatus("Auto run timeout");
+        beginSafetyShutdown(rpm);
+        state = State::AUTO_TIMEOUT_DOWN;
         return;
     }
 
@@ -350,6 +418,18 @@ void update()
                 autoMode = false;
                 panelAuto = false;
                 state = State::MANUAL;
+            }
+            break;
+        }
+
+        case State::AUTO_TIMEOUT_DOWN:
+        {
+            float commanded = rpmRampDown.update();
+            MetaSense::Settings::setRpmTarget(commanded);
+            setTorqueFeedForward(0.0f);
+
+            if (commanded <= safetyShutdownTargetRpm * 1.001f) {
+                completeSafetyShutdown();
             }
             break;
         }

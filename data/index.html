@@ -1580,6 +1580,7 @@ else if (msg.type === "run_complete") {
 }
 else if (msg.type === "info" || msg.type === "status") {
   const lowMsg = (msg.msg || "").toLowerCase();
+  const isRestartRequiredMsg = lowMsg.includes("restart required");
   const isRunStoppedMsg = lowMsg.includes("cancelled") || lowMsg.includes("stopped") || lowMsg.includes("timeout");
   showToast(isRunStoppedMsg ? "Run stopped" : msg.msg);
   if (lowMsg.includes("auto run armed") || lowMsg.includes("activated")) {
@@ -1588,6 +1589,14 @@ else if (msg.type === "info" || msg.type === "status") {
         document.getElementById("autoRunButton").innerHTML = autoButtonActiveLabel;
       document.getElementById("stopAutoRunModal").style.display = "inline-block";
       document.getElementById("finishManualRun").style.display = "none";
+  } else if (isRestartRequiredMsg) {
+        autoModeActive = false;
+        isManualRecording = false;
+        document.getElementById("autoRunButton").classList.remove("active");
+        document.getElementById("autoRunButton").innerHTML = autoButtonIdleLabel;
+        document.getElementById("stopAutoRunModal").style.display = "none";
+        document.getElementById("finishManualRun").style.display = "none";
+        showToast("System restart required");
   } else if (isRunStoppedMsg) {
         stopRequestPending = false;
         autoModeActive = false;

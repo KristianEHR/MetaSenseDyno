@@ -184,6 +184,11 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
         MetaSense::WebSocketServer::sendStatus("Tare applied");
     }
     else if (isAutoRunCommand) {
+        if (MetaSense::DynoStateMachine::isRestartRequired()) {
+            MetaSense::WebSocketServer::sendInfo("System restart required before autorun can start");
+            return;
+        }
+
         const int firstColon = cmd.indexOf(':');
         const int secondColon = cmd.indexOf(':', firstColon + 1);
         if (firstColon < 0 || secondColon < 0) {
@@ -206,6 +211,11 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
         MetaSense::WebSocketServer::sendStatus("Auto run armed");
     }
     else if (cmdUpper == "MANUAL_START") {
+        if (MetaSense::DynoStateMachine::isRestartRequired()) {
+            MetaSense::WebSocketServer::sendInfo("System restart required before manual run can start");
+            return;
+        }
+
         MetaSense::DynoStateMachine::setAutoMode(false);
         MetaSense::DynoStateMachine::setPanelAuto(false);
         MetaSense::DynoStateMachine::startRecording();

@@ -12,6 +12,8 @@ void setAutoMode(bool enabled);
 void setManualRpmTarget(float rpm);
 void update();
 void abortAutoRun();
+bool isSafetyShutdownActive();
+bool isRestartRequired();
 
 void setTorqueFeedForward(float torque);
 float torqueFeedForward();

@@ -426,7 +426,10 @@ void loop()
     MetaSense::DynoStateMachine::setManualRpmTarget(manualRpmTarget);
     MetaSense::DynoStateMachine::update();
 
-    if (MetaSense::DynoStateMachine::isAutoRunActive()) {
+    if (MetaSense::DynoStateMachine::isRestartRequired()) {
+        tele.rpmTarget = 0.0f;
+        MetaSense::Settings::setRpmTarget(0.0f);
+    } else if (MetaSense::DynoStateMachine::isAutoRunActive() || MetaSense::DynoStateMachine::isSafetyShutdownActive()) {
         // In autorun, preserve target provided by state machine path.
         tele.rpmTarget = MetaSense::Settings::getRpmTarget();
     } else {
@@ -454,8 +457,11 @@ void loop()
     if (!safe) torqueCmd = 0.0f;
 
     const float primaryBrakeSignedPercent = (torqueCmd / TORQUE_MAX) * 100.0f;
+    const float engineThrottlePercent = (MetaSense::DynoStateMachine::isRestartRequired() ||
+                                         MetaSense::DynoStateMachine::isSafetyShutdownActive()) ? 0.0f : readThrottlePotPercent();
+
     MetaSense::HardwareOutputStateMachine::update(
-        readThrottlePotPercent(),
+        engineThrottlePercent,
         tele.rpmTarget,
         tele.rpm,
         primaryBrakeSignedPercent);
