@@ -903,6 +903,7 @@
     let autoModeActive = false;
     let isManualRecording = false;
     let runStartTime = null;
+    let runStartHeartbeatMs = null;
     let xAxisChoice = "rpm";
     let ws = null;
     let currentKpSource = "firmware";
@@ -1311,11 +1312,66 @@
         if (cfEl) cfEl.textContent = currentClimateCF.toFixed(4);
       }
     }
+
+    function niceCeil(value) {
+      if (!Number.isFinite(value) || value <= 0) return 1;
+      const exponent = Math.floor(Math.log10(value));
+      const fraction = value / Math.pow(10, exponent);
+      let niceFraction;
+      if (fraction <= 1) niceFraction = 1;
+      else if (fraction <= 2) niceFraction = 2;
+      else if (fraction <= 5) niceFraction = 5;
+      else niceFraction = 10;
+      return niceFraction * Math.pow(10, exponent);
+    }
+
+    function computeRunYAxisScale() {
+      const dataPeak = currentRunData.reduce((maxV, p) => {
+        const hp = Number.isFinite(Number(p.hp)) ? Number(p.hp) : 0;
+        const tq = Number.isFinite(Number(p.torque)) ? Number(p.torque) : 0;
+        return Math.max(maxV, hp, tq);
+      }, 0);
+
+      const peakReference = Math.max(
+        dataPeak,
+        Number.isFinite(Number(currentPeakTorque)) ? Number(currentPeakTorque) : 0,
+        Number.isFinite(Number(currentPeakHP)) ? Number(currentPeakHP) : 0
+      );
+
+      const paddedPeak = peakReference * 1.08;
+      const max = Math.max(20, Math.ceil(paddedPeak / 10) * 10);
+      const stepSize = 1;
+
+      return { min: 0, max, stepSize };
+    }
+
+    function computeRunXAxisScale(isTime) {
+      if (isTime) {
+        const latestTime = currentRunData.length > 0
+          ? Number(currentRunData[currentRunData.length - 1].time) || 0
+          : 0;
+        const timeWindowSec = 20;
+        const max = Math.max(timeWindowSec, Math.ceil(latestTime));
+        const min = Math.max(0, max - timeWindowSec);
+        return { min, max, stepSize: 2 };
+      }
+      return { min: 0, max: 16000, stepSize: 500 };
+    }
     
     function updateModalXAxis() {
       if (!modalDynoChart) return;
       const isTime = xAxisChoice === "time";
       modalDynoChart.options.scales.x.title.text = isTime ? 'Time (s)' : 'RPM';
+
+      const xScale = computeRunXAxisScale(isTime);
+      modalDynoChart.options.scales.x.min = xScale.min;
+      modalDynoChart.options.scales.x.max = xScale.max;
+      modalDynoChart.options.scales.x.ticks.stepSize = xScale.stepSize;
+
+      const yScale = computeRunYAxisScale();
+      modalDynoChart.options.scales.y.min = yScale.min;
+      modalDynoChart.options.scales.y.max = yScale.max;
+      modalDynoChart.options.scales.y.ticks.stepSize = yScale.stepSize;
       
       if (currentRunData.length === 0) {
         modalDynoChart.data.datasets[0].data = [];
@@ -1323,15 +1379,24 @@
       } else if (isTime) {
         modalDynoChart.data.datasets[0].data = currentRunData.map(p => ({x: p.time, y: p.hp}));
         modalDynoChart.data.datasets[1].data = currentRunData.map(p => ({x: p.time, y: p.torque}));
-        modalDynoChart.options.scales.x.min = 0;
-        modalDynoChart.options.scales.x.max = undefined;
       } else {
         modalDynoChart.data.datasets[0].data = currentRunData.map(p => ({x: p.rpm, y: p.hp}));
         modalDynoChart.data.datasets[1].data = currentRunData.map(p => ({x: p.rpm, y: p.torque}));
-        modalDynoChart.options.scales.x.min = undefined;
-        modalDynoChart.options.scales.x.max = undefined;
       }
       modalDynoChart.update('none');
+    }
+
+    function computeRelativeRunTimeSec(msg) {
+      const heartbeatMs = Number(msg && msg.heartbeat_ms);
+      if (Number.isFinite(heartbeatMs)) {
+        if (runStartHeartbeatMs === null) {
+          runStartHeartbeatMs = heartbeatMs;
+        }
+        const deltaMs = heartbeatMs - runStartHeartbeatMs;
+        return Math.max(0, deltaMs / 1000.0);
+      }
+
+      return runStartTime ? ((performance.now() - runStartTime) / 1000.0) : 0.0;
     }
     
     function clearPeaks() {
@@ -1500,11 +1565,21 @@
 
         // Graph section
         const isTime = xAxisChoice === "time";
-        const xValues = isTime ? currentRunData.map(p => p.time) : currentRunData.map(p => p.rpm);
-        const minX = Math.min(...xValues);
-        const maxX = Math.max(...xValues);
+        const xScale = computeRunXAxisScale(isTime);
+        const yScale = computeRunYAxisScale();
+        const minX = xScale.min;
+        const maxX = xScale.max;
         const rangeX = maxX - minX || 1;
-        const maxPower = Math.max(...currentRunData.map(p => Math.max(p.hp, p.torque))) * 1.1 || 1;
+        const minY = yScale.min;
+        const maxY = yScale.max;
+        const rangeY = maxY - minY || 1;
+        const xStep = xScale.stepSize;
+        const yStep = yScale.stepSize;
+
+        const pointsForGraph = currentRunData.filter(p => {
+          const x = isTime ? Number(p.time) : Number(p.rpm);
+          return Number.isFinite(x) && x >= minX && x <= maxX;
+        });
 
         const graphWidth = pageWidth - 40;
         const graphHeight = 125;
@@ -1515,35 +1590,21 @@
         pdf.setLineWidth(0.5);
         pdf.rect(graphX, graphY, graphWidth, graphHeight);
 
-        pdf.setFontSize(10);
+        pdf.setFontSize(8);
         pdf.setDrawColor(100);
         pdf.setLineWidth(0.2);
 
-        let xStep = rangeX / 10;
-        if (!isTime) {
-          const niceSteps = [500, 1000, 2000, 2500, 5000];
-          let niceStep = niceSteps.find(step => step >= xStep) || xStep;
-          xStep = niceStep;
-          let startX = Math.floor(minX / niceStep) * niceStep;
-          for (let x = startX; x <= maxX; x += xStep) {
-            const xPos = graphX + ((x - minX) / rangeX) * graphWidth;
-            if (xPos >= graphX && xPos <= graphX + graphWidth) {
-              pdf.line(xPos, graphY, xPos, graphY + graphHeight);
-              pdf.text(Math.round(x).toString(), xPos, graphY + graphHeight + 3, { align: "center", fontSize: 10 });
-            }
-          }
-        } else {
-          for (let x = minX; x <= maxX; x += xStep) {
-            const xPos = graphX + ((x - minX) / rangeX) * graphWidth;
-            pdf.line(xPos, graphY, xPos, graphY + graphHeight);
-            pdf.text(x.toFixed(1), xPos, graphY + graphHeight + 3, { align: "center", fontSize: 10 });
-          }
+        for (let x = minX; x <= maxX; x += xStep) {
+          const xPos = graphX + ((x - minX) / rangeX) * graphWidth;
+          pdf.line(xPos, graphY, xPos, graphY + graphHeight);
+          const xLabel = isTime ? x.toFixed(0) : Math.round(x).toString();
+          pdf.text(xLabel, xPos, graphY + graphHeight + 3, { align: "center", fontSize: 8 });
         }
-        let yStep = maxPower / 10;
-        for (let yVal = 0; yVal <= maxPower; yVal += yStep) {
-          const yPos = graphY + graphHeight - (yVal / maxPower) * graphHeight;
+        pdf.setFontSize(10);
+        for (let yVal = minY; yVal <= maxY; yVal += yStep) {
+          const yPos = graphY + graphHeight - ((yVal - minY) / rangeY) * graphHeight;
           pdf.line(graphX - 2, yPos, graphX + graphWidth, yPos);
-          pdf.text(yVal.toFixed(1), graphX - 5, yPos + 2, { align: "right", fontSize: 10 });
+          pdf.text(yVal.toFixed(0), graphX - 5, yPos + 2, { align: "right", fontSize: 10 });
         }
 
         pdf.setFontSize(12);
@@ -1552,21 +1613,21 @@
 
         pdf.setDrawColor(0, 0, 255);
         pdf.setLineWidth(0.5);
-        for (let i = 0; i < currentRunData.length - 1; i++) {
-          const x1 = graphX + ((isTime ? currentRunData[i].time : currentRunData[i].rpm) - minX) / rangeX * graphWidth;
-          const y1 = graphY + graphHeight - (currentRunData[i].hp / maxPower) * graphHeight;
-          const x2 = graphX + ((isTime ? currentRunData[i+1].time : currentRunData[i+1].rpm) - minX) / rangeX * graphWidth;
-          const y2 = graphY + graphHeight - (currentRunData[i+1].hp / maxPower) * graphHeight;
+        for (let i = 0; i < pointsForGraph.length - 1; i++) {
+          const x1 = graphX + ((isTime ? pointsForGraph[i].time : pointsForGraph[i].rpm) - minX) / rangeX * graphWidth;
+          const y1 = graphY + graphHeight - ((pointsForGraph[i].hp - minY) / rangeY) * graphHeight;
+          const x2 = graphX + ((isTime ? pointsForGraph[i+1].time : pointsForGraph[i+1].rpm) - minX) / rangeX * graphWidth;
+          const y2 = graphY + graphHeight - ((pointsForGraph[i+1].hp - minY) / rangeY) * graphHeight;
           pdf.line(x1, y1, x2, y2);
         }
 
         pdf.setDrawColor(0, 128, 0);
         pdf.setLineWidth(0.5);
-        for (let i = 0; i < currentRunData.length - 1; i++) {
-          const x1 = graphX + ((isTime ? currentRunData[i].time : currentRunData[i].rpm) - minX) / rangeX * graphWidth;
-          const y1 = graphY + graphHeight - (currentRunData[i].torque / maxPower) * graphHeight;
-          const x2 = graphX + ((isTime ? currentRunData[i+1].time : currentRunData[i+1].rpm) - minX) / rangeX * graphWidth;
-          const y2 = graphY + graphHeight - (currentRunData[i+1].torque / maxPower) * graphHeight;
+        for (let i = 0; i < pointsForGraph.length - 1; i++) {
+          const x1 = graphX + ((isTime ? pointsForGraph[i].time : pointsForGraph[i].rpm) - minX) / rangeX * graphWidth;
+          const y1 = graphY + graphHeight - ((pointsForGraph[i].torque - minY) / rangeY) * graphHeight;
+          const x2 = graphX + ((isTime ? pointsForGraph[i+1].time : pointsForGraph[i+1].rpm) - minX) / rangeX * graphWidth;
+          const y2 = graphY + graphHeight - ((pointsForGraph[i+1].torque - minY) / rangeY) * graphHeight;
           pdf.line(x1, y1, x2, y2);
         }
 
@@ -1800,10 +1861,10 @@
       document.getElementById("savePdfModalButton").style.display = "none";
     }
     
-    const relativeTime = runStartTime ? ((performance.now() - runStartTime) / 1000).toFixed(2) : "0.00";
+    const relativeTime = computeRelativeRunTimeSec(msg);
     currentRunData.push({
         rpm: displayRPM,
-        time: parseFloat(relativeTime),
+      time: Number(relativeTime.toFixed(2)),
       hp: currentKW,
         torque: msg.torque || 0
     });
@@ -1813,6 +1874,7 @@
     updateModalXAxis();
 }
             if (!msg.recording) {
+              runStartHeartbeatMs = null;
               suppressDynoModalReopen = false;
             }
           } 
@@ -1888,7 +1950,7 @@ else if (msg.type === "info" || msg.type === "status") {
           responsive: true,
           maintainAspectRatio: false,
           scales: {
-            x: { type: 'linear', title: { display: true, text: 'RPM', color: '#cccccc', font: { size: 16 } }, ticks: { color: '#aaaaaa' }, grid: { color: '#444' } },
+            x: { type: 'linear', title: { display: true, text: 'RPM', color: '#cccccc', font: { size: 16 } }, ticks: { color: '#aaaaaa', font: { size: 10 } }, grid: { color: '#444' } },
             y: { title: { display: true, text: 'kW / Nm', color: '#cccccc', font: { size: 16 } }, ticks: { color: '#aaaaaa' }, grid: { color: '#444' } }
           },
           plugins: { legend: { labels: { color: '#cccccc', font: { size: 14 } } } }
@@ -1934,6 +1996,7 @@ else if (msg.type === "info" || msg.type === "status") {
         document.getElementById("autoRunButton").classList.add("active");
         document.getElementById("autoRunButton").innerHTML = autoButtonActiveLabel;
         runStartTime = performance.now();
+        runStartHeartbeatMs = null;
         currentRunData = [];
         peakEGT = 0;
         finalEGT = 0;
@@ -1974,6 +2037,7 @@ else if (msg.type === "info" || msg.type === "status") {
       }, 50);
       
       runStartTime = performance.now();
+      runStartHeartbeatMs = null;
       currentRunData = [];
       peakEGT = 0;
       finalEGT = 0;
