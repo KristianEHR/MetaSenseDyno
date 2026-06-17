@@ -33,6 +33,60 @@ platformio run -e esp32s3-ota -t uploadfs
 - Use `esp32s3-ota` for network uploads to `dyno-controller.local`.
 - The web UI is served from LittleFS.
 
+## Re-entry Point (2026-06-17)
+
+Use this section to resume quickly after a break.
+
+### Current validated behavior
+
+- Run time-axis jitter/glitches were fixed by using firmware heartbeat timestamps in the run chart timeline.
+- Run chart and report chart coordinate logic are aligned.
+- Run chart colors are aligned with report colors:
+	- Power = blue
+	- Torque = green
+- Load/tach moving-average window was reduced from 8 to 5 samples.
+
+### Current PI defaults
+
+- New RPM-domain defaults:
+	- `kp = 0.073`
+	- `ki = 0.524`
+- Legacy migration is in place: devices still at old defaults (`0.02`, `0.05`) are upgraded automatically, while user-tuned values are preserved.
+
+### Pending local changes (not yet committed)
+
+- `data/index.html`
+- `src/Input.cpp`
+- `src/Settings.cpp`
+
+### Resume checklist
+
+1. Check working tree:
+
+```powershell
+git status --short
+```
+
+2. Build OTA target:
+
+```powershell
+platformio run -e esp32s3-ota
+```
+
+3. Upload firmware (for C++ changes):
+
+```powershell
+platformio run -e esp32s3-ota -t upload
+```
+
+4. Upload filesystem (for web UI changes):
+
+```powershell
+platformio run -e esp32s3-ota -t uploadfs
+```
+
+5. If USB flashing is required, close serial monitor first to avoid COM port lock.
+
 ## Current Firmware Runtime
 
 - ESP32-S3 FreeRTOS split:
