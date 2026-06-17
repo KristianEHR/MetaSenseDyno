@@ -28,6 +28,7 @@ struct Telemetry {
     float rpm = 0.0f;
     float drumRpm = 0.0f;
     float loadKg = 0.0f;
+    float throttlePercent = 0.0f;
 
     float torqueNm = 0.0f;
     float brakeTorqueNm = 0.0f;
@@ -40,6 +41,10 @@ struct Telemetry {
 
     float egtHotC = 0.0f;
     float egtAmbientC = 0.0f;
+    uint8_t egtStatus = 0;
+    int16_t egtAddress = -1;
+    bool egtReady = false;
+    int16_t egtAckAddress = -1;
 
     bool recording = false;
 
@@ -54,7 +59,11 @@ struct Telemetry {
     float kw = 0.0f;
     float humidity = 0.0f;
     float eTorque = 0.0f;
+    float climateCF = 1.0f;   // climate correction factor (normalised to 1013.25 hPa / 20°C / 0% RH)
     DynoMode mode = DynoMode::Standard;
+
+    bool vcuReady = false;  // GPIO 36: VCU / RB+ hardware interlock
+    bool swActive = false;  // GPIO 35: panel SW switch (recording toggle)
 };
 
 } // namespace MetaSense

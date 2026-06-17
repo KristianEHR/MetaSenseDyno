@@ -50,6 +50,42 @@
       justify-content: center;
     }
 
+    .pi-live-panel {
+      position: fixed;
+      bottom: 72px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      display: none;
+      background: rgba(0, 0, 0, 0.72);
+      border: 1px solid #00ffaa;
+      border-radius: 10px;
+      padding: 6px 18px;
+      backdrop-filter: blur(3px);
+      box-shadow: 0 4px 14px rgba(0,0,0,0.6);
+      white-space: nowrap;
+    }
+
+    .pi-live-title {
+      display: inline;
+      font-size: 13px;
+      color: #00ffaa;
+      font-weight: 700;
+      margin-right: 10px;
+    }
+
+    .pi-live-row {
+      display: inline;
+      font-size: 14px;
+      color: #cccccc;
+      margin-right: 14px;
+    }
+
+    .pi-live-value {
+      color: #ffffff;
+      font-weight: 700;
+    }
+
     .button-stack button, 
     .button-stack a button { 
       padding: 12px 24px; 
@@ -424,6 +460,30 @@
       margin-bottom: 20px; 
       box-sizing: border-box;
     }
+
+    .modal input[type="checkbox"] {
+      width: 22px;
+      height: 22px;
+      margin: 0;
+      accent-color: #00cc66;
+      transform: translateY(1px);
+    }
+
+    .report-option {
+      margin-top: 10px;
+      margin-bottom: 6px;
+    }
+
+    .report-option label {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 18px;
+      color: #ddd;
+      margin: 0;
+      line-height: 1.2;
+      cursor: pointer;
+    }
     
     .modal button { 
       margin-top: 20px; 
@@ -578,6 +638,13 @@
     </div>
   </div>
 
+  <div id="piLivePanel" class="pi-live-panel" aria-live="polite">
+    <span class="pi-live-title">PI TRIM</span>
+    <span class="pi-live-row">Src: <span id="piLiveSource" class="pi-live-value">Firmware</span></span>
+    <span class="pi-live-row">Kp: <span id="piLiveKp" class="pi-live-value">0.0000</span></span>
+    <span class="pi-live-row">Ki: <span id="piLiveKi" class="pi-live-value">0.0000</span></span>
+  </div>
+
   <div id="status">Connecting...</div>
   
   <!-- RPM Source Indicator -->
@@ -633,6 +700,7 @@
         <div class="reading">Pressure: <span id="pressureValue">---</span> hPa</div>
         <div class="reading">Relative humidity: <span id="ratioConfidence">---</span> %</div>
         <div class="reading">Air density: <span id="airDensityValue">---</span> kg/m³</div>
+        <div class="reading">Climate CF: <span id="climateCFValue">---</span></div>
       </div>
     </div>
 
@@ -668,6 +736,10 @@
         <text id="egtValue" x="280" y="198" fill="#ff8844" font-size="38" font-weight="bold" text-anchor="middle">---</text>
         <text x="310" y="223" fill="#fff" font-size="18" text-anchor="middle">°C</text>
       </svg>
+
+      <div class="loadcell-display" style="margin-top: 12px; text-align: center; width: 100%;">
+        🎯 Setpoint: <span id="rpmSetpointDisplay">0</span> RPM
+      </div>
     </div>
 
           <!-- Right: Torque Gauge with Loadcell Below -->
@@ -710,7 +782,7 @@
       
       <!-- Loadcell Display - Below the torque gauge -->
       <div class="loadcell-display" style="margin-top: 8px; text-align: center; width: var(--side-gauge-size);">
-        🔧 Setpoint: <span id="loadKgDisplay">0</span> RPM
+        ⚖️ Load: <span id="loadKgDisplay">0</span> kg
       </div>
 
       <!-- Acc. Energy Box -->
@@ -739,6 +811,9 @@
           <button id="savePdfModalButton" style="display:none;">💾 SAVE PDF</button>
         </div>
         <div class="peak-right" id="finalPeakTorque"></div>
+      </div>
+      <div id="modalPiRow" style="display:none; text-align:center; font-size:15px; color:#00ffaa; font-family:'Courier New',monospace; font-weight:700; margin: 8px 0 0 0; letter-spacing:1px;">
+        PI TRIM &mdash; Src: <span id="modalPiSource">Firmware</span> &nbsp;|&nbsp; Kp: <span id="modalPiKp">---</span> &nbsp;|&nbsp; Ki: <span id="modalPiKi">---</span>
       </div>
       <div class="run-date" id="runDate"></div>
     </div>
@@ -772,6 +847,10 @@
           <label><input type="radio" name="xAxisType" value="time"> Time (seconds)</label>
         </div>
       </div>
+
+      <div class="report-option">
+        <label><input type="checkbox" id="autoGenerateReportAuto"> Auto-generate PDF report when run completes</label>
+      </div>
       
       <button id="confirmAuto">▶ START AUTO RUN</button>
     </div>
@@ -799,6 +878,10 @@
           <label><input type="radio" name="xAxisTypeManual" value="time"> Time (seconds)</label>
         </div>
       </div>
+
+      <div class="report-option">
+        <label><input type="checkbox" id="autoGenerateReportManual"> Auto-generate PDF report when run completes</label>
+      </div>
       
       <button id="confirmManual">🎬 START MANUAL RECORDING</button>
     </div>
@@ -822,12 +905,21 @@
     let runStartTime = null;
     let xAxisChoice = "rpm";
     let ws = null;
+    let currentKpSource = "firmware";
     let currentRpmSource = "leafrpm";
     let lastActiveRpmSource = "leafrpm";
     let lastCanFallback = false;
+    let lastRunPiKpValue = NaN;
+    let lastRunPiKiValue = NaN;
+    let currentKpSetting = NaN;
+    let currentKiSetting = NaN;
     let suppressDynoModalReopen = false;
     let stopRequestPending = false;
     let stopRequestSentAt = 0;
+    let reportReadyActive = false;
+    let autoGenerateReportEnabled = false;
+    let autoGenerateReportTriggered = false;
+    const autoReportPrefKey = "metasense.autoGenerateReport";
     const autoButtonIdleLabel = "Auto Run (F8)";
     const autoButtonActiveLabel = "🔴 Auto Run ACTIVE (F8 to cancel)";
 	
@@ -848,6 +940,7 @@
     let currentAirDensity = 1.204;
     let currentAmbientTemp = 20.0;
     let currentPressure = 1013.25;
+    let currentClimateCF = 1.0;
     
     // Needle Gauge Variables
     const needleMinAngle = -200;
@@ -860,7 +953,7 @@
     let showEngineTorque = true;   // Default: Show Engine Torque
 
     // ============== UTILITY FUNCTIONS ==============
-    function showToast(message) {
+    function showToast(message, durationMs = 2200) {
       const existing = document.getElementById("toast");
       if (existing) existing.remove();
 
@@ -868,25 +961,109 @@
       toast.id = "toast";
       toast.textContent = message;
       toast.style.position = "fixed";
-      toast.style.bottom = "100px";
-      toast.style.left = "50%";
-      toast.style.transform = "translateX(-50%)";
+      toast.style.bottom = "12px";
+      toast.style.left = "12px";
       toast.style.background = "rgba(0, 150, 0, 0.95)";
       toast.style.color = "#ffffff";
-      toast.style.padding = "16px 40px";
-      toast.style.borderRadius = "12px";
-      toast.style.fontSize = "22px";
-      toast.style.fontWeight = "bold";
+      toast.style.padding = "8px 16px";
+      toast.style.borderRadius = "8px";
+      toast.style.fontSize = "15px";
+      toast.style.fontWeight = "600";
+      toast.style.lineHeight = "1.25";
+      toast.style.maxWidth = "min(420px, 88vw)";
+      toast.style.textAlign = "left";
       toast.style.zIndex = "2000";
+      toast.style.pointerEvents = "none";
       toast.style.boxShadow = "0 6px 20px rgba(0,0,0,0.8)";
-      toast.style.transition = "opacity 0.6s ease";
-      toast.style.opacity = "1";
+      toast.style.transition = "opacity 0.35s ease, transform 0.35s ease";
+      toast.style.opacity = "0";
+      toast.style.transform = "translateY(8px)";
       document.body.appendChild(toast);
 
+      requestAnimationFrame(() => {
+        toast.style.opacity = "1";
+        toast.style.transform = "translateY(0)";
+      });
+
+      const visibleFor = Number.isFinite(durationMs) ? Math.max(900, durationMs) : 2200;
       setTimeout(() => {
         toast.style.opacity = "0";
-        setTimeout(() => toast.remove(), 600);
-      }, 4000);
+        toast.style.transform = "translateY(6px)";
+        setTimeout(() => toast.remove(), 350);
+      }, visibleFor);
+    }
+
+    function updateRunPiPanel(msg) {
+      const panel = document.getElementById("piLivePanel");
+      const sourceEl = document.getElementById("piLiveSource");
+      const kpEl = document.getElementById("piLiveKp");
+      const kiEl = document.getElementById("piLiveKi");
+      if (!panel || !sourceEl || !kpEl || !kiEl) return;
+
+      const source = (msg && typeof msg.kp_source === "string") ? msg.kp_source : currentKpSource;
+      const kpLive = (msg && Number.isFinite(Number(msg.kp_live))) ? Number(msg.kp_live) :
+        ((msg && Number.isFinite(Number(msg.kp))) ? Number(msg.kp) :
+        (Number.isFinite(lastRunPiKpValue) ? lastRunPiKpValue : currentKpSetting));
+      const kiLive = (msg && Number.isFinite(Number(msg.ki_live))) ? Number(msg.ki_live) :
+        ((msg && Number.isFinite(Number(msg.ki))) ? Number(msg.ki) :
+        (Number.isFinite(lastRunPiKiValue) ? lastRunPiKiValue : currentKiSetting));
+
+      const runActive = (msg ? Boolean(msg.recording) : false) || isManualRecording || autoModeActive;
+      const modalPiRow = document.getElementById("modalPiRow");
+      const modalPiSource = document.getElementById("modalPiSource");
+      const modalPiKp = document.getElementById("modalPiKp");
+      const modalPiKi = document.getElementById("modalPiKi");
+
+      if (!runActive) {
+        panel.style.display = "none";
+        if (modalPiRow) modalPiRow.style.display = "none";
+        return;
+      }
+
+      const kpText = Number.isFinite(kpLive) ? kpLive.toFixed(4) : "---";
+      const kiText = Number.isFinite(kiLive) ? kiLive.toFixed(4) : "---";
+      const srcText = source === "pot3" ? "Pot3" : "Firmware";
+
+      if (Number.isFinite(kpLive)) lastRunPiKpValue = kpLive;
+      if (Number.isFinite(kiLive)) lastRunPiKiValue = kiLive;
+      kpEl.textContent = kpText;
+      kiEl.textContent = kiText;
+      sourceEl.textContent = srcText;
+      panel.style.display = "block";
+
+      if (modalPiRow) {
+        modalPiRow.style.display = "block";
+        if (modalPiSource) modalPiSource.textContent = srcText;
+        if (modalPiKp) modalPiKp.textContent = kpText;
+        if (modalPiKi) modalPiKi.textContent = kiText;
+      }
+    }
+
+    function setKpSourceUi(source) {
+      currentKpSource = (source === "pot3") ? "pot3" : "firmware";
+
+      const fw = document.getElementById("kpSourceRunFirmware");
+      const pot3 = document.getElementById("kpSourceRunPot3");
+      if (fw) fw.checked = currentKpSource === "firmware";
+      if (pot3) pot3.checked = currentKpSource === "pot3";
+
+      const activeLabel = document.getElementById("kpSourceActiveLabel");
+      if (activeLabel) {
+        activeLabel.textContent = currentKpSource === "pot3" ? "Active: Pot3" : "Active: Firmware";
+      }
+    }
+
+    function saveKpSourceFromRunPage() {
+      const selected = document.querySelector('input[name="kpSourceRun"]:checked');
+      const source = selected ? selected.value : "firmware";
+      setKpSourceUi(source);
+
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send("SET_SINGLE:kpSource=" + currentKpSource);
+        showToast("Kp source saved: " + (currentKpSource === "pot3" ? "Pot3" : "Firmware"));
+      } else {
+        showToast("Not connected. Kp source not saved.");
+      }
     }
     
     function rpmToAngle(rpm) {
@@ -1129,6 +1306,10 @@
       document.getElementById("airDensityValue").textContent = currentAirDensity.toFixed(3);
       document.getElementById("ambientTempValue").textContent = currentAmbientTemp.toFixed(1);
       document.getElementById("pressureValue").textContent = currentPressure.toFixed(1);
+      if (currentClimateCF !== undefined) {
+        const cfEl = document.getElementById("climateCFValue");
+        if (cfEl) cfEl.textContent = currentClimateCF.toFixed(4);
+      }
     }
     
     function updateModalXAxis() {
@@ -1157,6 +1338,60 @@
       document.getElementById("hpPeak").innerText = "";
       document.getElementById("torquePeak").innerText = "";
     }
+
+    function setAutoReportPreference(enabled) {
+      autoGenerateReportEnabled = enabled;
+      const autoCb = document.getElementById("autoGenerateReportAuto");
+      const manualCb = document.getElementById("autoGenerateReportManual");
+      if (autoCb) autoCb.checked = enabled;
+      if (manualCb) manualCb.checked = enabled;
+      try {
+        localStorage.setItem(autoReportPrefKey, enabled ? "1" : "0");
+      } catch (e) {
+        // Ignore storage failures (private mode, quota, etc.)
+      }
+    }
+
+    function loadAutoReportPreference() {
+      let enabled = false;
+      try {
+        enabled = localStorage.getItem(autoReportPrefKey) === "1";
+      } catch (e) {
+        enabled = false;
+      }
+      setAutoReportPreference(enabled);
+    }
+
+    function showReportSelection() {
+      reportReadyActive = true;
+      stopRequestPending = false;
+      autoModeActive = false;
+      isManualRecording = false;
+      document.getElementById("dynoModal").style.display = "block";
+      document.getElementById("modalTitle").textContent = "✅ RUN COMPLETE!";
+      document.getElementById("runDate").textContent = "📅 Date: " + new Date().toLocaleString();
+      document.getElementById("savePdfModalButton").style.display = "none";
+      document.getElementById("finishManualRun").style.display = "none";
+      document.getElementById("stopAutoRunModal").style.display = "none";
+      document.getElementById("autoRunButton").classList.remove("active");
+      document.getElementById("autoRunButton").innerHTML = autoButtonIdleLabel;
+      updateRunPiPanel();
+    }
+
+    function showLiveRunActions(isAutoRun) {
+      reportReadyActive = false;
+      if (isAutoRun) {
+        document.getElementById("stopAutoRunModal").style.display = "inline-block";
+        document.getElementById("finishManualRun").style.display = "none";
+      } else {
+        document.getElementById("finishManualRun").style.display = "inline-block";
+        document.getElementById("finishManualRun").textContent = "🏁 FINISH RUN (F12)";
+        document.getElementById("finishManualRun").style.background = "#00aa00";
+        document.getElementById("finishManualRun").style.borderColor = "#00ff00";
+        document.getElementById("stopAutoRunModal").style.display = "none";
+      }
+      document.getElementById("savePdfModalButton").style.display = "none";
+    }
     
     function finishManualRun() {
       const stopBtnVisible = document.getElementById("finishManualRun").style.display !== "none";
@@ -1165,10 +1400,12 @@
         cancelAutoRunFromUi();
         return;
       }
+      reportReadyActive = false;
       if (stopRequestPending && (Date.now() - stopRequestSentAt) < 1000) return;
       stopRequestPending = true;
       stopRequestSentAt = Date.now();
       if (ws) ws.send("MANUAL_STOP");
+      showReportSelection();
       showToast("Run stopped");
     }
 
@@ -1255,7 +1492,7 @@
         y += 7;
         
         pdf.text(
-          "Air Density: " + currentAirDensity.toFixed(3) + " kg/m³   Ambient: " + currentAmbientTemp.toFixed(1) + " °C   Pressure: " + currentPressure.toFixed(1) + " hPa",
+          "Air Density: " + currentAirDensity.toFixed(3) + " kg/m³   Ambient: " + currentAmbientTemp.toFixed(1) + " °C   Pressure: " + currentPressure.toFixed(1) + " hPa   Climate normalization factor: " + currentClimateCF.toFixed(4),
           20, y,
         );
         y += 12;
@@ -1342,7 +1579,6 @@
         const filename = `MetaSense_${(currentCustomer || "run").replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.pdf`;
         pdf.save(filename);
         showToast("PDF saved successfully!");
-        document.getElementById("dynoModal").style.display = "none";
       } catch (err) {
         console.error("PDF generation failed:", err);
         showToast("PDF save failed: " + (err.message || "unknown error"));
@@ -1365,7 +1601,11 @@
           
           if (msg.type === "settings") {
             maxVals = { rpm: msg.maxRPM, hp: msg.maxHP, torque: msg.maxTorque, armCm: msg.armCm };
+            currentKpSetting = Number.isFinite(Number(msg.kp)) ? Number(msg.kp) : currentKpSetting;
+            currentKiSetting = Number.isFinite(Number(msg.ki)) ? Number(msg.ki) : currentKiSetting;
             updateScaleLabels();
+            updateRunPiPanel();
+            setKpSourceUi(msg.kpSource || "firmware");
             currentRpmSource = msg.rpmSource || "leafrpm";
             lastActiveRpmSource = currentRpmSource;
             document.getElementById("rpmSourceValue").textContent = currentRpmSource === "leafrpm" ? "LEAF CAN RPM" : "Tachogen RPM";
@@ -1382,6 +1622,10 @@
           }
           
           if (msg.type === "data") {
+            if (typeof msg.kp_source === "string") {
+              setKpSourceUi(msg.kp_source);
+            }
+            updateRunPiPanel(msg);
             let displayRPM = msg.rpm || 0;
             const canFallback = Number(msg.can_fallback) === 1;
             const activeRpmSource = (typeof msg.rpm_source_active === "string" && msg.rpm_source_active.length > 0)
@@ -1397,13 +1641,6 @@
                 rpmSourceValue.textContent = (currentRpmSource === "leafrpm") ? "Tachogen RPM (fallback)" : "Tachogen RPM";
                 if (canFallbackBadge) {
                   canFallbackBadge.style.display = (currentRpmSource === "leafrpm") ? "inline-block" : "none";
-                }
-              }
-              if (lastActiveRpmSource !== activeRpmSource) {
-                if (activeRpmSource === "tachogen" && currentRpmSource === "leafrpm") {
-                  showToast("⚠️ CAN RPM unavailable: switched to tachogen");
-                } else if (activeRpmSource === "leafrpm") {
-                  showToast("✅ CAN RPM restored");
                 }
               }
             }
@@ -1455,6 +1692,10 @@
             
             updateNeedleGauge(displayRPM);
             updateGauge("hp", currentKW, maxVals.hp, "hpText", 2);
+
+            if (msg.rpm_target !== undefined) {
+              document.getElementById("rpmSetpointDisplay").textContent = Math.round(msg.rpm_target);
+            }
             
             // === TORQUE WITH TOGGLE ===drumRpmDisplay
             const engineTorque = Number.isFinite(Number(msg.torque)) ? Number(msg.torque) :
@@ -1474,10 +1715,13 @@
               }
 
             if (msg.load_kg !== undefined) {
-				document.getElementById("loadKgDisplay").textContent = msg.load_kg.toFixed(0);
-			}
+              document.getElementById("loadKgDisplay").textContent = Number(msg.load_kg).toFixed(1);
+            }
             
-            if (msg.drum_rpm !== undefined) {
+            if (msg.throttle_pct !== undefined) {
+              document.getElementById("drumRpmDisplay").textContent = Math.round(msg.throttle_pct);
+            } else if (msg.drum_rpm !== undefined) {
+              // Backward-compatible fallback for older firmware payloads.
               document.getElementById("drumRpmDisplay").textContent = Math.round(msg.drum_rpm);
             }
             
@@ -1486,6 +1730,7 @@
               currentAirDensity = msg.air_density;
               currentAmbientTemp = msg.ambient_temp;
               currentPressure = msg.pressure;
+              if (msg.climate_cf !== undefined) currentClimateCF = Number(msg.climate_cf);
               updateBMP280Display();
             }
             
@@ -1497,6 +1742,28 @@
             // EGT Handling
             const egtHot = Number.isFinite(Number(msg.egt_hot)) ? Number(msg.egt_hot) :
               (msg.mcps && msg.mcps["7"] && Number.isFinite(Number(msg.mcps["7"].hot)) ? Number(msg.mcps["7"].hot) : null);
+            {
+              const egtReady = Number(msg.egt_ready) === 1;
+              const egtStatus = Number.isFinite(Number(msg.egt_status)) ? Number(msg.egt_status) : 0;
+              const egtAddrRaw = Number(msg.egt_addr);
+              const egtAckAddrRaw = Number(msg.egt_ack_addr);
+              const i2cScan = (typeof msg.i2c_scan === "string" && msg.i2c_scan.length > 0) ? msg.i2c_scan : "?";
+              const egtAddr = Number.isFinite(egtAddrRaw) && egtAddrRaw >= 0 ? `0x${egtAddrRaw.toString(16).toUpperCase()}` : "--";
+              const egtAckAddr = Number.isFinite(egtAckAddrRaw) && egtAckAddrRaw >= 0 ? `0x${egtAckAddrRaw.toString(16).toUpperCase()}` : "--";
+              let egtState = "missing";
+              if (egtReady) {
+                if (egtStatus & 0x20) {
+                  egtState = "short";
+                } else if (egtStatus & 0x10) {
+                  egtState = "open";
+                } else if (egtStatus & 0x40) {
+                  egtState = "updating";
+                } else {
+                  egtState = "ok";
+                }
+              }
+
+            }
             if (egtHot !== null) {
                 document.getElementById("egtValue").textContent = Math.round(egtHot);
                 if (egtHot > peakEGT) {
@@ -1518,14 +1785,20 @@
             if (!suppressDynoModalReopen) {
           document.getElementById("dynoModal").style.display = "block";
             }
-    if (autoModeActive) {
-      document.getElementById("stopAutoRunModal").style.display = "inline-block";
+    if (reportReadyActive) {
+      document.getElementById("modalTitle").textContent = "✅ RUN COMPLETE!";
+      document.getElementById("savePdfModalButton").style.display = "none";
+      document.getElementById("stopAutoRunModal").style.display = "none";
+      document.getElementById("finishManualRun").style.display = "none";
+    } else if (stopRequestPending) {
+      document.getElementById("stopAutoRunModal").style.display = "none";
       document.getElementById("finishManualRun").style.display = "none";
     } else {
-      document.getElementById("finishManualRun").style.display = "inline-block";
-      document.getElementById("stopAutoRunModal").style.display = "none";
+      showLiveRunActions(autoModeActive);
     }
-    document.getElementById("savePdfModalButton").style.display = "none";
+    if (!reportReadyActive && !stopRequestPending) {
+      document.getElementById("savePdfModalButton").style.display = "none";
+    }
     
     const relativeTime = runStartTime ? ((performance.now() - runStartTime) / 1000).toFixed(2) : "0.00";
     currentRunData.push({
@@ -1544,20 +1817,7 @@
             }
           } 
 else if (msg.type === "run_complete") {
-  stopRequestPending = false;
-    document.getElementById("modalTitle").textContent = "✅ RUN COMPLETE!";
-    document.getElementById("runDate").textContent = "📅 Date: " + new Date().toLocaleString();
-    document.getElementById("savePdfModalButton").style.display = "block";
-    document.getElementById("finishManualRun").style.display = "none";
-    document.getElementById("finishManualRun").textContent = "🏁 FINISH RUN (F12)";
-    document.getElementById("stopAutoRunModal").style.display = "none";
-    
-    if (autoModeActive) {
-        document.getElementById("autoRunButton").classList.remove("active");
-        document.getElementById("autoRunButton").innerHTML = autoButtonIdleLabel;
-        autoModeActive = false;
-    }
-    isManualRecording = false;
+  showReportSelection();
     updateModalXAxis();
     
     // Send the smoothed run data to ESP32 for storage - use stored peaks
@@ -1580,29 +1840,17 @@ else if (msg.type === "run_complete") {
 }
 else if (msg.type === "info" || msg.type === "status") {
   const lowMsg = (msg.msg || "").toLowerCase();
-  const isRestartRequiredMsg = lowMsg.includes("restart required");
-  const isRunStoppedMsg = lowMsg.includes("cancelled") || lowMsg.includes("stopped") || lowMsg.includes("timeout");
+  const isRunStoppedMsg = lowMsg.includes("cancelled") || lowMsg.includes("stopped");
   showToast(isRunStoppedMsg ? "Run stopped" : msg.msg);
   if (lowMsg.includes("auto run armed") || lowMsg.includes("activated")) {
         autoModeActive = true;
+        autoGenerateReportTriggered = false;
         document.getElementById("autoRunButton").classList.add("active");
         document.getElementById("autoRunButton").innerHTML = autoButtonActiveLabel;
-      document.getElementById("stopAutoRunModal").style.display = "inline-block";
-      document.getElementById("finishManualRun").style.display = "none";
-  } else if (isRestartRequiredMsg) {
-        autoModeActive = false;
-        isManualRecording = false;
-        document.getElementById("autoRunButton").classList.remove("active");
-        document.getElementById("autoRunButton").innerHTML = autoButtonIdleLabel;
-        document.getElementById("stopAutoRunModal").style.display = "none";
-        document.getElementById("finishManualRun").style.display = "none";
-        showToast("System restart required");
+      showLiveRunActions(true);
+      updateRunPiPanel();
   } else if (isRunStoppedMsg) {
-        stopRequestPending = false;
-        autoModeActive = false;
-        document.getElementById("autoRunButton").classList.remove("active");
-        document.getElementById("autoRunButton").innerHTML = autoButtonIdleLabel;
-      document.getElementById("stopAutoRunModal").style.display = "none";
+      showReportSelection();
     }
 }
         } catch (e) {
@@ -1672,6 +1920,9 @@ else if (msg.type === "info" || msg.type === "status") {
       currentCustomer = document.getElementById("customerName").value.trim();
       currentUnit = document.getElementById("testUnit").value.trim();
       currentComments = document.getElementById("runComments").value.trim();
+      reportReadyActive = false;
+      setAutoReportPreference(document.getElementById("autoGenerateReportAuto").checked);
+      autoGenerateReportTriggered = false;
       
       if (start > 0 && end > start && end <= 30000) {
         if (ws) ws.send("SET_CUSTOMER:" + currentCustomer + "|" + currentUnit + "|" + currentComments);
@@ -1688,6 +1939,7 @@ else if (msg.type === "info" || msg.type === "status") {
         finalEGT = 0;
         xAxisChoice = document.querySelector('input[name="xAxisType"]:checked')?.value || "rpm";
         document.getElementById("autoModal").style.display = "none";
+        updateRunPiPanel();
         showToast("Auto Run activated!");
       } else {
         showToast("Invalid RPM range! Start < End ≤ 30000");
@@ -1707,6 +1959,9 @@ else if (msg.type === "info" || msg.type === "status") {
       currentCustomer = document.getElementById("manualCustomerName").value.trim();
       currentUnit = document.getElementById("manualTestUnit").value.trim();
       currentComments = document.getElementById("manualRunComments").value.trim();
+      reportReadyActive = false;
+      setAutoReportPreference(document.getElementById("autoGenerateReportManual").checked);
+      autoGenerateReportTriggered = false;
       
       if (!currentCustomer && !currentUnit) {
         showToast("Please enter at least Customer or Test Unit");
@@ -1725,6 +1980,7 @@ else if (msg.type === "info" || msg.type === "status") {
       xAxisChoice = document.querySelector('input[name="xAxisTypeManual"]:checked')?.value || "rpm";
       document.getElementById("manualModal").style.display = "none";
       isManualRecording = true;
+      updateRunPiPanel();
       document.getElementById("finishManualRun").style.display = "inline-block";
       showToast("Manual recording started - press F12 to finish");
     };
@@ -1738,20 +1994,26 @@ else if (msg.type === "info" || msg.type === "status") {
     
     document.getElementById("finishManualRun").onclick = finishManualRun;
     document.getElementById("stopAutoRunModal").onclick = cancelAutoRunFromUi;
-    document.getElementById("savePdfModalButton").onclick = generatePDF;
+    document.getElementById("savePdfModalButton").style.display = "none";
+    setKpSourceUi("firmware");
+
+    document.getElementById("autoGenerateReportAuto").addEventListener("change", (e) => {
+      setAutoReportPreference(Boolean(e.target.checked));
+    });
+    document.getElementById("autoGenerateReportManual").addEventListener("change", (e) => {
+      setAutoReportPreference(Boolean(e.target.checked));
+    });
+
+    loadAutoReportPreference();
 
     function cancelAutoRunFromUi() {
       if (stopRequestPending && (Date.now() - stopRequestSentAt) < 1000) return;
+      reportReadyActive = false;
       stopRequestPending = true;
       stopRequestSentAt = Date.now();
       suppressDynoModalReopen = true;
       if (ws) ws.send("CANCEL_AUTO_RUN");
-      autoModeActive = false;
-      document.getElementById("autoRunButton").classList.remove("active");
-      document.getElementById("autoRunButton").innerHTML = autoButtonIdleLabel;
-      document.getElementById("stopAutoRunModal").style.display = "none";
-      document.getElementById("finishManualRun").style.display = "none";
-      document.getElementById("finishManualRun").textContent = "🏁 FINISH RUN (F12)";
+      showReportSelection();
       showToast("Run stopped");
     }
     
@@ -1771,12 +2033,18 @@ else if (msg.type === "info" || msg.type === "status") {
     document.querySelectorAll(".close").forEach(function(span) {
       span.onclick = function() { 
         const modal = span.closest(".modal");
+        if (modal && modal.id === "dynoModal") {
+          if (reportReadyActive && autoGenerateReportEnabled && !autoGenerateReportTriggered && currentRunData.length > 0) {
+            autoGenerateReportTriggered = true;
+            generatePDF();
+          }
+        }
         modal.style.display = "none"; 
       };
     });
     
     window.onclick = function(event) {
-      if (event.target.classList.contains("modal")) {
+      if (event.target.classList.contains("modal") && event.target.id !== "dynoModal") {
         event.target.style.display = "none";
       }
     };

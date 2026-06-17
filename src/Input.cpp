@@ -3,17 +3,25 @@
 #include <Arduino.h>
 #include <ESPAsyncWebServer.h>
 #include <math.h>
+#include <Wire.h>
+
+#include <Adafruit_AHTX0.h>
+#include <Adafruit_BMP280.h>
+#include <Adafruit_NAU7802.h>
 
 #include "controlTask.h"
 #include "DynoStateMachine.h"
 #include "Settings.h"
 #include "RunStorage.h"
+#include "TempHAL.h"
+#include "globals.h"
 
 
 namespace MetaSense::HardwareOutputStateMachine {
 
 void begin();
 void update(float engineThrottlePercent, float setPoint, float rpm, float primaryBrakePercent);
+bool isMotorState();
 void stop();
 
 } // namespace MetaSense::HardwareOutputStateMachine
@@ -35,21 +43,44 @@ static float drumRpmFilt = 0.0f;
 static float loadKgFilt  = 0.0f;
 static float torqueFilt  = 0.0f;
 static float filteredAdc = 0.0f;
-
-// Fast 200 Hz pre-filter states (anti-aliasing before user filter)
-static float rpmPre     = 0.0f;
-static float loadPre    = 0.0f;
+constexpr uint8_t kLoadRawAverageWindow = 8;
+static float loadRawAverageBuffer[kLoadRawAverageWindow] = {0.0f};
+static uint8_t loadRawAverageCount = 0;
+static uint8_t loadRawAverageIndex = 0;
+static float loadRawAverageSum = 0.0f;
+constexpr uint8_t kTachoRawAverageWindow = kLoadRawAverageWindow;
+static float tachoRawAverageBuffer[kTachoRawAverageWindow] = {0.0f};
+static uint8_t tachoRawAverageCount = 0;
+static uint8_t tachoRawAverageIndex = 0;
+static float tachoRawAverageSum = 0.0f;
 
 // RPM inputs
 static float canRpm   = 0.0f;
 static float tachoRpm = 0.0f;
 static float tachoCal = 10.0f;   // tachogen calibration factor
 static float zeroOffset = 0.0f;
-static float calibrationFactor = 1.0f;
+static float zeroDeadbandRaw = 0.0f;
+static float calibrationFactor = 0.01f;
+static float torqueResidualOffsetNm = 0.0f;
+static TempHAL egtDigital;
+static bool egtDigitalReady = false;
+static String i2cScanSummary = "";
+static Adafruit_AHTX0 ambientAht;
+static Adafruit_BMP280 ambientBmp;
+static Adafruit_NAU7802 loadCellNau;
+static bool ambientAhtReady = false;
+static bool ambientBmpReady = false;
+static bool loadCellNauReady = false;
+static uint32_t lastLoadCellNauRetryMs = 0;
+static float ambientTempC = 20.0f;
+static float ambientHumidityPct = 50.0f;
+static float ambientPressureHpa = 1013.25f;
+static uint32_t lastAmbientSampleMs = 0;
 
 // CAN RPM validity timeout + plausibility
 static uint32_t lastCanRpmUpdate   = 0;
 static const uint32_t CAN_RPM_TIMEOUT_MS = 100;
+static const uint32_t CAN_RPM_MIN_UPDATE_MS = 20;
 static float lastCanRpm            = 0.0f;
 static const float CAN_MAX_JUMP    = 2000.0f;
 
@@ -67,6 +98,16 @@ constexpr float EGT_MAX_LIMIT_C = 950.0f;
 constexpr float TORQUE_MIN = -200.0f;
 constexpr float TORQUE_MAX =  200.0f;
 constexpr float RPM_SETPOINT_MAX = RPM_MAX_LIMIT;
+constexpr float RPM_SETPOINT_SAFE_MOTOR = 2000.0f;
+constexpr uint32_t kWebSocketPublishPeriodMs = 20;
+constexpr float kRuntimeKpMin = 0.005f;
+constexpr float kRuntimeKpMax = 0.200f;
+constexpr float kRuntimeKpAlpha = 0.12f;
+constexpr float kRuntimeKpApplyDelta = 0.001f;
+constexpr uint32_t kAmbientSamplePeriodMs = 200;
+constexpr uint32_t kLoadCellNauRetryPeriodMs = 5000;
+constexpr bool kEgtOnlyI2cInitMode = false;
+constexpr bool kNauOnlyI2cInitMode = false;
 
 // helpers
 float lpFilter(float prev, float input, float alpha)
@@ -74,21 +115,106 @@ float lpFilter(float prev, float input, float alpha)
     return prev + alpha * (input - prev);
 }
 
-// Frequency-correct LP filter: alpha from cutoff frequency and sample interval.
-// α = 1 - exp(-2π * fc * dt)  — stable for any loop rate.
-float lpFilterHz(float prev, float input, float cutoffHz, float dtSec)
+void resetLoadRawAverage(float seed)
 {
-    if (dtSec <= 0.0f) return prev;
-    const float a = 1.0f - expf(-2.0f * 3.14159265f * cutoffHz * dtSec);
-    return prev + a * (input - prev);
+    loadRawAverageCount = 0;
+    loadRawAverageIndex = 0;
+    loadRawAverageSum = 0.0f;
+
+    for (uint8_t i = 0; i < kLoadRawAverageWindow; ++i) {
+        loadRawAverageBuffer[i] = 0.0f;
+    }
+
+    if (isfinite(seed)) {
+        loadRawAverageBuffer[0] = seed;
+        loadRawAverageSum = seed;
+        loadRawAverageCount = 1;
+        loadRawAverageIndex = 1;
+    }
+}
+
+float applyLoadRawAverage(float sample)
+{
+    if (!isfinite(sample)) {
+        return sample;
+    }
+
+    if (loadRawAverageCount < kLoadRawAverageWindow) {
+        loadRawAverageBuffer[loadRawAverageIndex] = sample;
+        loadRawAverageSum += sample;
+        ++loadRawAverageCount;
+    } else {
+        loadRawAverageSum -= loadRawAverageBuffer[loadRawAverageIndex];
+        loadRawAverageBuffer[loadRawAverageIndex] = sample;
+        loadRawAverageSum += sample;
+    }
+
+    ++loadRawAverageIndex;
+    if (loadRawAverageIndex >= kLoadRawAverageWindow) {
+        loadRawAverageIndex = 0;
+    }
+
+    return loadRawAverageSum / static_cast<float>(loadRawAverageCount);
+}
+
+void resetTachoRawAverage(float seed)
+{
+    tachoRawAverageCount = 0;
+    tachoRawAverageIndex = 0;
+    tachoRawAverageSum = 0.0f;
+
+    for (uint8_t i = 0; i < kTachoRawAverageWindow; ++i) {
+        tachoRawAverageBuffer[i] = 0.0f;
+    }
+
+    if (isfinite(seed)) {
+        tachoRawAverageBuffer[0] = seed;
+        tachoRawAverageSum = seed;
+        tachoRawAverageCount = 1;
+        tachoRawAverageIndex = 1;
+    }
+}
+
+float applyTachoRawAverage(float sample)
+{
+    if (!isfinite(sample)) {
+        return sample;
+    }
+
+    if (tachoRawAverageCount < kTachoRawAverageWindow) {
+        tachoRawAverageBuffer[tachoRawAverageIndex] = sample;
+        tachoRawAverageSum += sample;
+        ++tachoRawAverageCount;
+    } else {
+        tachoRawAverageSum -= tachoRawAverageBuffer[tachoRawAverageIndex];
+        tachoRawAverageBuffer[tachoRawAverageIndex] = sample;
+        tachoRawAverageSum += sample;
+    }
+
+    ++tachoRawAverageIndex;
+    if (tachoRawAverageIndex >= kTachoRawAverageWindow) {
+        tachoRawAverageIndex = 0;
+    }
+
+    return tachoRawAverageSum / static_cast<float>(tachoRawAverageCount);
 }
 
 // ESP32-S3 ADC map provided for this hardware revision.
 constexpr uint8_t kRpmSetpointPin = 1; // ADC1_CH0
 constexpr uint8_t kThrottlePotPin = 2; // ADC1_CH1
 constexpr uint8_t kTachoPin = 3;       // ADC1_CH2
-constexpr uint8_t kDrumPin = 4;        // ADC1_CH3
-constexpr uint8_t kKpAnalogPin = 5;    // ADC1_CH4
+constexpr uint8_t kKpPotPin = 6;       // ADC1_CH5 (pot3 – runtime Kp, moved from GPIO4 to free CAN TX)
+constexpr uint8_t kLoadCellPin = 32;   // Load-cell analog input
+// ADC1_CH4 (GPIO 5) is available for future use
+// Drum RPM is derived from tachogen × (1/virtGearRatio)
+
+static float kpPotFilteredAdc = -1.0f;
+static float lastAppliedKp = -1.0f;
+
+// Digital inputs
+static bool prevSwState = false;
+static uint32_t swDebounceMs = 0;
+constexpr uint32_t kSwDebounceThresholdMs = 30;
 
 float readAdcSafe(uint8_t pin)
 {
@@ -107,17 +233,212 @@ float readAdcSafe(uint8_t pin)
 float readTachoRpm()
 {
     float v = readAdcSafe(kTachoPin);
+    v = applyTachoRawAverage(v);
     return v * tachoCal;
 }
 
-float readDrumRpm()     { return readAdcSafe(kDrumPin) * 0.1f; }
-float readLoadKg()      { return readAdcSafe(kThrottlePotPin) * 0.01f; }
-float readEgtHotC()     { return readAdcSafe(kKpAnalogPin) * 0.25f; }
-float readAmbientC()    { return 20.0f; }
-float readPressureHpa() { return 1013.25f; }
-float readAirDensity()  { return 1.225f; }
-float readHumidity()    { return 50.0f; }
+float readDrumRpm()
+{
+    // Drum RPM is derived from the tachogen by inverting the configured gear ratio.
+    // virtGearRatio = engineRpm / drumRpm, so drumRpm = tachoRpm / virtGearRatio.
+    const float ratio = MetaSense::Settings::virtGearRatio;
+    return (ratio > 0.01f) ? (tachoRpm / ratio) : tachoRpm;
+}
+float readLoadKg()
+{
+    if (loadCellNauReady) {
+        if (loadCellNau.available()) {
+            // NAU7802 returns raw signed ADC counts; scaling is applied later
+            // via zero offset + calibration factor in the telemetry path.
+            return static_cast<float>(loadCellNau.read());
+        }
+        // Keep returning last filtered RAW value if no fresh conversion is ready.
+        return filteredAdc;
+    }
+
+    // Backward-compatible fallback for boards wired without NAU7802.
+    return readAdcSafe(kLoadCellPin) * 0.01f;
+}
+
+bool sampleLoadRawStats(float& outAverageRaw, float& outMaxAbsDeviation, uint16_t timeoutMs = 220, uint8_t maxSamples = 24)
+{
+    float samples[24];
+    uint8_t count = 0;
+    const uint32_t start = millis();
+
+    while ((millis() - start) < timeoutMs && count < maxSamples) {
+        const float raw = readLoadKg();
+        if (isfinite(raw)) {
+            samples[count++] = raw;
+        }
+        delay(5);
+    }
+
+    if (count == 0) {
+        return false;
+    }
+
+    float sum = 0.0f;
+    for (uint8_t i = 0; i < count; ++i) {
+        sum += samples[i];
+    }
+    outAverageRaw = sum / static_cast<float>(count);
+
+    float maxDev = 0.0f;
+    for (uint8_t i = 0; i < count; ++i) {
+        const float dev = fabsf(samples[i] - outAverageRaw);
+        if (dev > maxDev) {
+            maxDev = dev;
+        }
+    }
+    outMaxAbsDeviation = maxDev;
+
+    return true;
+}
+
+void tryInitLoadCellNau()
+{
+    if (loadCellNauReady) {
+        return;
+    }
+
+    loadCellNauReady = loadCellNau.begin(&Wire);
+    if (loadCellNauReady) {
+        loadCellNau.setGain(NAU7802_GAIN_128);
+        loadCellNau.setRate(NAU7802_RATE_80SPS);
+        Serial.println("[Input] Load-cell ADC source ready (NAU7802 @ 0x2A)");
+        Serial0.println("[Input] Load-cell ADC source ready (NAU7802 @ 0x2A)");
+    } else {
+        Serial.println("[Input] Load-cell ADC source unavailable (NAU7802), using GPIO32 ADC fallback");
+        Serial0.println("[Input] Load-cell ADC source unavailable (NAU7802), using GPIO32 ADC fallback");
+    }
+}
+
+void updateAmbientInputs(bool forceSample)
+{
+    const uint32_t now = millis();
+    if (!forceSample && (now - lastAmbientSampleMs) < kAmbientSamplePeriodMs) {
+        return;
+    }
+    lastAmbientSampleMs = now;
+
+    if (ambientAhtReady) {
+        sensors_event_t humidityEvent;
+        sensors_event_t tempEvent;
+        ambientAht.getEvent(&humidityEvent, &tempEvent);
+
+        if (isfinite(tempEvent.temperature) && tempEvent.temperature > -50.0f && tempEvent.temperature < 120.0f) {
+            ambientTempC = tempEvent.temperature;
+        }
+        if (isfinite(humidityEvent.relative_humidity) && humidityEvent.relative_humidity >= 0.0f && humidityEvent.relative_humidity <= 100.0f) {
+            ambientHumidityPct = humidityEvent.relative_humidity;
+        }
+    }
+
+    if (ambientBmpReady) {
+        const float pressurePa = ambientBmp.readPressure();
+        if (isfinite(pressurePa) && pressurePa > 10000.0f && pressurePa < 120000.0f) {
+            ambientPressureHpa = pressurePa / 100.0f;
+        }
+
+        if (!ambientAhtReady) {
+            const float bmpTemp = ambientBmp.readTemperature();
+            if (isfinite(bmpTemp) && bmpTemp > -50.0f && bmpTemp < 120.0f) {
+                ambientTempC = bmpTemp;
+            }
+        }
+    }
+}
+
+float readEgtHotC()
+{
+    if (!egtDigital.isReady()) {
+        return 0.0f;
+    }
+
+    const float egt = egtDigital.readHotC();
+    if (!isfinite(egt) || egt < 0.0f || egt > 1800.0f) {
+        return 0.0f;
+    }
+
+    return egt;
+}
+
+float readEgtAmbientC()
+{
+    if (!egtDigital.isReady()) {
+        return 0.0f;
+    }
+
+    const float ambient = egtDigital.readAmbientC();
+    if (!isfinite(ambient) || ambient < -50.0f || ambient > 200.0f) {
+        return 0.0f;
+    }
+
+    return ambient;
+}
+
+float readAmbientC()    { updateAmbientInputs(false); return ambientTempC; }
+float readPressureHpa() { updateAmbientInputs(false); return ambientPressureHpa; }
+float computeAirDensityKgM3(float tempC, float pressureHpa, float humidityPct)
+{
+    // Magnus formula for saturation vapour pressure (hPa)
+    const float Psat = 6.1078f * expf(17.269f * tempC / (237.3f + tempC));
+    const float Pv   = (humidityPct / 100.0f) * Psat;  // partial vapour pressure, hPa
+    const float Pd   = pressureHpa - Pv;               // dry-air partial pressure, hPa
+    const float T_K  = tempC + 273.15f;
+    // Ideal gas: ρ = Pd/(Rd*T) + Pv/(Rv*T)
+    const float Pd_Pa = Pd * 100.0f;
+    const float Pv_Pa = Pv * 100.0f;
+    const float rho = (Pd_Pa / (287.058f * T_K)) + (Pv_Pa / (461.495f * T_K));
+    return (rho > 0.0f) ? rho : 1.225f;
+}
+
+float readAirDensity()  { return computeAirDensityKgM3(ambientTempC, ambientPressureHpa, ambientHumidityPct); }
+float readHumidity()    { updateAmbientInputs(false); return ambientHumidityPct; }
 float readETorque()     { return 0.0f; }
+
+void updateI2cScanSummary()
+{
+    String summary;
+    for (uint8_t addr = 0x08; addr <= 0x77; ++addr) {
+        Wire.beginTransmission(addr);
+        if (Wire.endTransmission() == 0) {
+            if (!summary.isEmpty()) {
+                summary += ",";
+            }
+            char buf[6];
+            snprintf(buf, sizeof(buf), "0x%02X", addr);
+            summary += buf;
+        }
+    }
+    i2cScanSummary = summary.isEmpty() ? String("none") : summary;
+}
+
+void applyRuntimeKpFromPot(bool forceApply)
+{
+    const float adc = readAdcSafe(kKpPotPin);
+    if (kpPotFilteredAdc < 0.0f) {
+        kpPotFilteredAdc = adc;
+    } else {
+        kpPotFilteredAdc = lpFilter(kpPotFilteredAdc, adc, kRuntimeKpAlpha);
+    }
+
+    float normalized = kpPotFilteredAdc / 4095.0f;
+    if (normalized < 0.0f) normalized = 0.0f;
+    if (normalized > 1.0f) normalized = 1.0f;
+
+    const float kpFromPot = kRuntimeKpMin + normalized * (kRuntimeKpMax - kRuntimeKpMin);
+    if (!forceApply && fabsf(kpFromPot - lastAppliedKp) < kRuntimeKpApplyDelta) {
+        return;
+    }
+
+    MetaSense::ControlTask::configurePI(kpFromPot,
+                                        MetaSense::Settings::ki,
+                                        TORQUE_MIN,
+                                        TORQUE_MAX);
+    lastAppliedKp = kpFromPot;
+}
 
 float readRpmSetpointPot()
 {
@@ -173,11 +494,18 @@ void updateDyno(MetaSense::Telemetry& t, float dtSec)
 
     } else {
         // --- Brake / load-cell dyno path (original) ---
-        t.torqueNm      = t.loadKg * 9.82f;
+        const float armCm = (MetaSense::Settings::armCm > 0.01f) ? MetaSense::Settings::armCm : 0.01f;
+        const float rawTorqueNm = (t.loadKg * 9.82f / 100.0f) * armCm;
+        t.torqueNm      = rawTorqueNm - torqueResidualOffsetNm;
         t.brakeTorqueNm = t.torqueNm;
 
-        torqueFilt = lpFilter(torqueFilt, t.torqueNm, MetaSense::Settings::filterAlpha);
-        t.torqueNm = torqueFilt;
+        // --- Climate correction: normalise torque/power to standard conditions ---
+        // Reference: 1013.25 hPa, 20 °C, 0 % RH  (ρ_ref ≈ 1.2041 kg/m³)
+        const float rhoActual = computeAirDensityKgM3(ambientTempC, ambientPressureHpa, ambientHumidityPct);
+        const float rhoRef    = computeAirDensityKgM3(20.0f, 1013.25f, 0.0f);
+        t.climateCF = (rhoActual > 0.3f) ? (rhoRef / rhoActual) : 1.0f;
+        t.torqueNm      *= t.climateCF;
+        t.brakeTorqueNm  = t.torqueNm;
 
         // P(W) = T(Nm) * ω(rad/s) = T * rpm * 2π / 60
         // Correct for drivetrain losses to get crank power.
@@ -224,14 +552,20 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
     json += "\"can_fallback\":" + String(canFallbackActive ? 1 : 0) + ",";
     json += "\"rpm_source_active\":\"" + String(activeRpmFromCan ? "leafrpm" : "tachogen") + "\",";
     json += "\"drum_rpm\":" + String(data.drumRpm, 0) + ",";
+    json += "\"rpm_target\":" + String(data.rpmTarget, 0) + ",";
+    json += "\"kp_source\":\"" + String(MetaSense::Settings::usePot3Kp ? "pot3" : "firmware") + "\",";
+    json += "\"kp_live\":" + String(MetaSense::Settings::usePot3Kp && lastAppliedKp >= 0.0f ? lastAppliedKp : MetaSense::Settings::kp, 4) + ",";
+    json += "\"ki_live\":" + String(MetaSense::Settings::ki, 4) + ",";
+    json += "\"throttle_pct\":" + String(data.throttlePercent, 0) + ",";
     json += "\"kw\":" + String(data.kw, 2) + ",";
     json += "\"torque\":" + String(data.torqueNm, 2) + ",";
     json += "\"brakeTorque\":" + String(data.brakeTorqueNm, 2) + ",";
-    json += "\"load_kg\":" + String(data.loadKg, 0) + ",";
+    json += "\"load_kg\":" + String(data.loadKg, 1) + ",";
     json += "\"recording\":" + String(isRecording ? "true" : "false") + ",";
     json += "\"peakTorque\":" + String(data.peakTorque, 2) + ",";
     json += "\"peakTorque_RPM\":" + String(data.peakTorque_RPM, 0) + ",";
     json += "\"air_density\":" + String(data.airDensity, 3) + ",";
+    json += "\"climate_cf\":" + String(data.climateCF, 4) + ",";
     json += "\"ambient_temp\":" + String(data.ambientC, 1) + ",";
     json += "\"pressure\":" + String(data.pressureHpa, 1) + ",";
     json += "\"gear_ratio\":" + String(data.eTorque, 2) + ",";
@@ -240,7 +574,18 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
     json += "\"rel_humidity\":" + String(data.humidity, 1) + ",";
     json += "\"ratio_confidence\":" + String(data.humidity / 100.0f, 3) + ",";
     json += "\"egt_hot\":" + String(data.egtHotC, 1) + ",";
+    json += "\"egt_status\":" + String(data.egtStatus) + ",";
+    json += "\"egt_ready\":" + String(data.egtReady ? 1 : 0) + ",";
+    json += "\"egt_addr\":" + String(data.egtAddress) + ",";
+    json += "\"egt_ack_addr\":" + String(data.egtAckAddress) + ",";
+    json += "\"i2c_scan\":\"" + i2cScanSummary + "\",";
+    json += "\"load_source\":\"" + String(loadCellNauReady ? "nau7802" : "adc32") + "\",";
+    json += "\"nau_ready\":" + String(loadCellNauReady ? 1 : 0) + ",";
+    json += "\"nau_data_ready\":" + String((loadCellNauReady && loadCellNau.available()) ? 1 : 0) + ",";
+    json += "\"heartbeat_ms\":" + String(millis()) + ",";
     json += "\"dyno_mode\":\"" + String(MetaSense::toString(data.mode)) + "\",";
+    json += "\"vcu_ready\":" + String(data.vcuReady ? 1 : 0) + ",";
+    json += "\"sw_active\":" + String(data.swActive ? 1 : 0) + ",";
 
     json += "\"mcps\":{";
     float hot = data.egtHotC;
@@ -256,6 +601,27 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
     json += "}";
     json += "}";
     MetaSense::WebSocketServer::socket().textAll(json);
+}
+
+void publishTelemetry()
+{
+    static uint32_t lastPublishedVersion = 0;
+    static uint32_t lastSendMs = 0;
+
+    const uint32_t now = millis();
+    if (now - lastSendMs < kWebSocketPublishPeriodMs) {
+        return;
+    }
+
+    const uint32_t currentVersion = MetaSense::RunStorage::version();
+    if (currentVersion == lastPublishedVersion) {
+        return;
+    }
+
+    lastPublishedVersion = currentVersion;
+    lastSendMs = now;
+    const MetaSense::Telemetry telemetry = MetaSense::RunStorage::latest();
+    notifyClients(telemetry, MetaSense::DynoStateMachine::isRecording());
 }
 
 void notifyRunComplete(const MetaSense::Telemetry& data)
@@ -281,15 +647,80 @@ void notifyRunComplete(const MetaSense::Telemetry& data)
 
 namespace MetaSense::Input { // EXTERNAL SCOPE
 
+void tareMainGui()
+{
+    tare();
+
+    float avgRaw = 0.0f;
+    float maxDev = 0.0f;
+    if (sampleLoadRawStats(avgRaw, maxDev)) {
+        float netRaw = avgRaw - zeroOffset;
+        if (fabsf(netRaw) < zeroDeadbandRaw) {
+            netRaw = 0.0f;
+        }
+
+        const float residualLoadKg = netRaw * calibrationFactor;
+        const float armCm = (MetaSense::Settings::armCm > 0.01f) ? MetaSense::Settings::armCm : 0.01f;
+        torqueResidualOffsetNm = (residualLoadKg * 9.82f / 100.0f) * armCm;
+    } else {
+        torqueResidualOffsetNm = 0.0f;
+    }
+}
+
 void tare()
 {
-    zeroOffset = filteredAdc;
+    float avgRaw = 0.0f;
+    float maxDev = 0.0f;
+    if (sampleLoadRawStats(avgRaw, maxDev)) {
+        zeroOffset = avgRaw;
+        zeroDeadbandRaw = max(2.0f, maxDev * 3.0f);
+        filteredAdc = avgRaw;
+        resetLoadRawAverage(avgRaw);
+        loadKgFilt = 0.0f;
+    } else {
+        zeroOffset = filteredAdc;
+        zeroDeadbandRaw = 2.0f;
+        resetLoadRawAverage(filteredAdc);
+        loadKgFilt = 0.0f;
+    }
+
+    // Force immediate zero output on the load-cell torque path after tare.
+    torqueFilt = 0.0f;
+    tele.loadKg = 0.0f;
+    tele.torqueNm = 0.0f;
+    tele.brakeTorqueNm = 0.0f;
 }
 
 void setCalibrationFactor(float factor)
 {
     calibrationFactor = factor;
     MetaSense::RunStorage::saveCalibration();
+}
+
+bool calibrateWithKnownWeight(float knownWeightKg, float& outFactor)
+{
+    if (!(knownWeightKg > 0.0f) || !isfinite(knownWeightKg)) {
+        return false;
+    }
+
+    float avgRaw = filteredAdc;
+    float maxDev = 0.0f;
+    (void)sampleLoadRawStats(avgRaw, maxDev);
+
+    // Calibration uses current averaged raw sensor counts relative to tare offset.
+    const float netRaw = avgRaw - zeroOffset;
+    if (!isfinite(netRaw) || fabsf(netRaw) < 1e-6f) {
+        return false;
+    }
+
+    const float factor = knownWeightKg / netRaw;
+    if (!isfinite(factor)) {
+        return false;
+    }
+
+    setCalibrationFactor(factor);
+    outFactor = factor;
+    return true;
 }
 
 float getCalibrationFactor()
@@ -312,30 +743,115 @@ float torqueNm()
     return tele.torqueNm;
 }
 
+bool isVcuReady()
+{
+    return tele.vcuReady;
+}
+
 void updateCanRpm(float rpm)
 {
+    const uint32_t now = millis();
+    if (now - lastCanRpmUpdate < CAN_RPM_MIN_UPDATE_MS) {
+        return;
+    }
+
     if (fabs(rpm - lastCanRpm) > CAN_MAX_JUMP)
         return;
 
     if (rpm > 0 && rpm < 20000) {
         canRpm = rpm;
         lastCanRpm = rpm;
-        lastCanRpmUpdate = millis();
+        lastCanRpmUpdate = now;
     }
 }
 
 void begin()
 {
     tele = MetaSense::Telemetry();
+    torqueResidualOffsetNm = 0.0f;
     zeroOffset = 0.0f;
-    calibrationFactor = 1.0f;
+    calibrationFactor = 0.01f;
     filteredAdc = 0.0f;
+    resetLoadRawAverage(filteredAdc);
+    resetTachoRawAverage(0.0f);
+    {
+        float storedZero = 0.0f;
+        float storedFactor = 0.01f;
+        if (MetaSense::RunStorage::loadCalibration(storedZero, storedFactor)) {
+            if (isfinite(storedZero)) {
+                zeroOffset = storedZero;
+                filteredAdc = storedZero;
+                resetLoadRawAverage(filteredAdc);
+            }
+            if (isfinite(storedFactor) && storedFactor > 0.0f) {
+                calibrationFactor = storedFactor;
+            }
+        }
+    }
+    kpPotFilteredAdc = -1.0f;
+    lastAppliedKp = -1.0f;
     MetaSense::ControlTask::configurePI(MetaSense::Settings::kp,
                                         MetaSense::Settings::ki,
                                         TORQUE_MIN,
                                         TORQUE_MAX);
+    if (MetaSense::Settings::usePot3Kp) {
+        applyRuntimeKpFromPot(true);
+    }
 
+    // Digital inputs
+    pinMode(MetaSense::Globals::kRampSwitchPin, INPUT_PULLUP);  // SW switch – active LOW
+    pinMode(MetaSense::Globals::kRbPlusInputPin, INPUT_PULLUP); // VCU ready – active LOW
+    prevSwState = (digitalRead(MetaSense::Globals::kRampSwitchPin) == LOW);
+
+    // Bring relay/control outputs to a known-safe state before probing I2C sensors.
     MetaSense::HardwareOutputStateMachine::begin();
+
+    if (kEgtOnlyI2cInitMode || kNauOnlyI2cInitMode) {
+        ambientAhtReady = false;
+        ambientBmpReady = false;
+        Serial.println("[Input] NAU-only I2C mode: skipping AHT/BMP initialization");
+        Serial0.println("[Input] NAU-only I2C mode: skipping AHT/BMP initialization");
+    } else {
+        ambientAhtReady = ambientAht.begin();
+        ambientBmpReady = ambientBmp.begin(0x76) || ambientBmp.begin(0x77);
+        if (ambientAhtReady) {
+            Serial.println("[Input] Ambient temperature/humidity source ready (AHT)");
+            Serial0.println("[Input] Ambient temperature/humidity source ready (AHT)");
+        } else {
+            Serial.println("[Input] Ambient temperature/humidity source unavailable");
+            Serial0.println("[Input] Ambient temperature/humidity source unavailable");
+        }
+        if (ambientBmpReady) {
+            Serial.println("[Input] Ambient pressure source ready (BMP)");
+            Serial0.println("[Input] Ambient pressure source ready (BMP)");
+        } else {
+            Serial.println("[Input] Ambient pressure source unavailable");
+            Serial0.println("[Input] Ambient pressure source unavailable");
+        }
+    }
+
+    if (!kNauOnlyI2cInitMode) {
+        egtDigitalReady = egtDigital.begin();
+        if (egtDigitalReady) {
+            Serial.println("[Input] EGT digital source ready (MCP9600)");
+            Serial0.println("[Input] EGT digital source ready (MCP9600)");
+        } else {
+            Serial.println("[Input] EGT digital source unavailable");
+            Serial0.println("[Input] EGT digital source unavailable");
+        }
+    } else {
+        egtDigitalReady = false;
+        Serial.println("[Input] NAU-only I2C mode: skipping MCP9600 initialization");
+        Serial0.println("[Input] NAU-only I2C mode: skipping MCP9600 initialization");
+    }
+
+    tryInitLoadCellNau();
+
+    updateI2cScanSummary();
+    Serial.printf("[Input] I2C devices: %s\n", i2cScanSummary.c_str());
+    Serial0.printf("[Input] I2C devices: %s\n", i2cScanSummary.c_str());
+
+    updateAmbientInputs(true);
 }
 
 void startRecording()
@@ -361,34 +877,73 @@ void loop()
 {
     static bool prevRecording = false;
     static uint32_t last = millis();
+    static uint32_t lastEgtRetryMs = 0;
     uint32_t now = millis();
     float dtSec = (now - last) / 1000.0f;
     last = now;
 
+    if (!loadCellNauReady && (now - lastLoadCellNauRetryMs) >= kLoadCellNauRetryPeriodMs) {
+        lastLoadCellNauRetryMs = now;
+        tryInitLoadCellNau();
+        updateI2cScanSummary();
+    }
+
+    if (!egtDigital.isReady() && (now - lastEgtRetryMs) >= 10000) {
+        lastEgtRetryMs = now;
+        egtDigitalReady = egtDigital.begin();
+    }
+
+    if (MetaSense::Settings::usePot3Kp) {
+        applyRuntimeKpFromPot(false);
+    }
+
+    // --- VCU ready (RB+, GPIO 36, active LOW) ---
+    tele.vcuReady = true;
+    if (!tele.vcuReady) {
+        // Global VCU interlock: dyno cannot run unless VCU/RB+ ready is asserted.
+        if (MetaSense::DynoStateMachine::isAutoRunActive()) {
+            MetaSense::DynoStateMachine::setAutoMode(false);
+            MetaSense::DynoStateMachine::setPanelAuto(false);
+            MetaSense::DynoStateMachine::abortAutoRun();
+        }
+        if (MetaSense::DynoStateMachine::isRecording()) {
+            MetaSense::DynoStateMachine::stopRecording();
+        }
+        MetaSense::Settings::setRpmTarget(0.0f);
+    }
+
+    // --- SW switch recording toggle (GPIO 35, active LOW, debounced) ---
+    {
+        const bool swNow = (digitalRead(MetaSense::Globals::kRampSwitchPin) == LOW);
+        if (swNow != prevSwState) {
+            if ((now - swDebounceMs) >= kSwDebounceThresholdMs) {
+                swDebounceMs = now;
+                prevSwState = swNow;
+                tele.swActive = swNow;
+                if (swNow && tele.vcuReady) {
+                    // Rising edge + VCU ready: toggle recording
+                    if (!MetaSense::DynoStateMachine::isRecording()) {
+                        MetaSense::DynoStateMachine::startRecording();
+                    } else {
+                        MetaSense::DynoStateMachine::stopRecording();
+                    }
+                }
+            }
+        } else {
+            swDebounceMs = now;
+            tele.swActive = swNow;
+        }
+    }
+
     float alpha = MetaSense::Settings::filterAlpha;
 
-    // RPM source selectable from settings: Leaf CAN or tachogen analog.
-    // In inertia mode, tachogen is mandatory.
+    // RPM source: Leaf CAN is primary, tachogen on GPIO 3 is the active fallback.
     tachoRpm = readTachoRpm();
     bool canValid = (millis() - lastCanRpmUpdate) < CAN_RPM_TIMEOUT_MS;
     float rpmRaw = 0.0f;
-    const bool forceTachoInInertia = MetaSense::Settings::inertiaMode;
-    if (!forceTachoInInertia && MetaSense::Settings::useCanLeafRpm) {
-        // Default to Leaf CAN RPM, but fall back to tachogen when CAN times out.
-        canFallbackActive = !canValid;
-        activeRpmFromCan = canValid;
-        rpmRaw = canValid ? canRpm : tachoRpm;
-    } else {
-        canFallbackActive = false;
-        activeRpmFromCan = false;
-        rpmRaw = tachoRpm;
-    }
-
-    // 200 Hz pre-filter on tachogen path (CAN RPM comes pre-filtered from motor controller)
-    if (!canValid || !MetaSense::Settings::useCanLeafRpm) {
-        rpmPre = lpFilterHz(rpmPre, rpmRaw, 200.0f, dtSec);
-        rpmRaw = rpmPre;
-    }
+    canFallbackActive = !canValid;
+    activeRpmFromCan = canValid;
+    rpmRaw = canValid ? canRpm : tachoRpm;
 
     rpmFilt = lpFilter(rpmFilt, rpmRaw, alpha);
     tele.rpm = rpmFilt;
@@ -403,20 +958,27 @@ void loop()
     // other sensors
     float drumRaw = readDrumRpm();
     float loadRaw = readLoadKg();
-
-    // 200 Hz pre-filter on loadcell ADC before user-configurable slow filter
-    loadPre = lpFilterHz(loadPre, loadRaw, 200.0f, dtSec);
-    loadRaw = loadPre;
+    loadRaw = applyLoadRawAverage(loadRaw);
 
     drumRpmFilt = lpFilter(drumRpmFilt, drumRaw, alpha);
-    loadKgFilt  = lpFilter(loadKgFilt, loadRaw, alpha);
-    filteredAdc = loadKgFilt;
+    filteredAdc = loadRaw;
 
     tele.drumRpm = drumRpmFilt;
-    tele.loadKg  = (filteredAdc - zeroOffset) * calibrationFactor;
+    float netRaw = filteredAdc - zeroOffset;
+    if (fabsf(netRaw) <= zeroDeadbandRaw) {
+        netRaw = 0.0f;
+    }
+    const float loadKgRaw = netRaw * calibrationFactor;
+    loadKgFilt = lpFilter(loadKgFilt, loadKgRaw, alpha);
+    tele.loadKg  = loadKgFilt;
 
+    updateAmbientInputs(false);
+    tele.egtReady    = egtDigital.isReady();
+    tele.egtStatus   = egtDigital.status();
+    tele.egtAddress  = egtDigital.address();
+    tele.egtAckAddress = egtDigital.ackAddress();
     tele.egtHotC     = readEgtHotC();
-    tele.egtAmbientC = readAmbientC();
+    tele.egtAmbientC = readEgtAmbientC();
     tele.ambientC    = readAmbientC();
     tele.pressureHpa = readPressureHpa();
     tele.airDensity  = readAirDensity();
@@ -426,17 +988,21 @@ void loop()
     MetaSense::DynoStateMachine::setManualRpmTarget(manualRpmTarget);
     MetaSense::DynoStateMachine::update();
 
-    if (MetaSense::DynoStateMachine::isRestartRequired()) {
+    if (!tele.vcuReady) {
         tele.rpmTarget = 0.0f;
         MetaSense::Settings::setRpmTarget(0.0f);
-    } else if (MetaSense::DynoStateMachine::isAutoRunActive() || MetaSense::DynoStateMachine::isSafetyShutdownActive()) {
+    } else if (MetaSense::DynoStateMachine::isAutoRunActive()) {
         // In autorun, preserve target provided by state machine path.
         tele.rpmTarget = MetaSense::Settings::getRpmTarget();
     } else {
         // In manual mode, pot is the active RPM target source.
         tele.rpmTarget = manualRpmTarget;
-        MetaSense::Settings::setRpmTarget(tele.rpmTarget);
     }
+
+    if (MetaSense::HardwareOutputStateMachine::isMotorState() && tele.rpmTarget > RPM_SETPOINT_SAFE_MOTOR) {
+        tele.rpmTarget = RPM_SETPOINT_SAFE_MOTOR;
+    }
+    MetaSense::Settings::setRpmTarget(tele.rpmTarget);
 
     updateDyno(tele, dtSec);
 
@@ -456,9 +1022,17 @@ void loop()
         dtSec);
     if (!safe) torqueCmd = 0.0f;
 
-    const float primaryBrakeSignedPercent = (torqueCmd / TORQUE_MAX) * 100.0f;
-    const float engineThrottlePercent = (MetaSense::DynoStateMachine::isRestartRequired() ||
-                                         MetaSense::DynoStateMachine::isSafetyShutdownActive()) ? 0.0f : readThrottlePotPercent();
+    const float maxAllowedRpm = (MetaSense::Settings::maxRPM > 0.0f) ? MetaSense::Settings::maxRPM : RPM_MAX_LIMIT;
+    const float maxAllowedTorque = (MetaSense::Settings::maxTorque > 0.0f) ? MetaSense::Settings::maxTorque : TORQUE_MAX;
+    const bool rpmLimitExceeded = tele.rpm > maxAllowedRpm;
+    const bool torqueLimitExceeded = fabsf(tele.torqueNm) > maxAllowedTorque;
+    const bool throttleSafetyCut = rpmLimitExceeded || torqueLimitExceeded;
+
+    const float primaryBrakeSignedPercent = tele.vcuReady ? (torqueCmd / TORQUE_MAX) * 100.0f : 0.0f;
+    // POT2 on AD1 (GPIO2, 0-3.3V) is the engine throttle setpoint source.
+    // Map directly to GPIO45 PWM as 0-100% servo output.
+    const float engineThrottlePercent = throttleSafetyCut ? 0.0f : readThrottlePotPercent();
+    tele.throttlePercent = engineThrottlePercent;
 
     MetaSense::HardwareOutputStateMachine::update(
         engineThrottlePercent,
@@ -479,12 +1053,11 @@ void loop()
         notifyRunComplete(tele);
     }
     prevRecording = tele.recording;
+}
 
-    static uint32_t lastSend = 0;
-    if (now - lastSend >= 50) {
-        lastSend = now;
-        notifyClients(tele, tele.recording);
-    }
+void publish()
+{
+    publishTelemetry();
 }
 
 } // namespace MetaSense::Input

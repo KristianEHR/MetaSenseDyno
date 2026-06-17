@@ -4,32 +4,40 @@ Adafruit_NAU7802::Adafruit_NAU7802()
 : _wire(&Wire), _initialized(false) {}
 
 bool Adafruit_NAU7802::begin(TwoWire *wire) {
+  if (wire == nullptr) {
+    return false;
+  }
   _wire = wire;
-  _wire->begin();
+  // Do NOT call _wire->begin() — the application configures I2C pins/clock.
 
-  if (!reset()) {
-    return false;
+  // Step 1: assert register reset (RR = bit 0)
+  writeRegister(NAU7802_PU_CTRL, NAU7802_PU_CTRL_RR);
+  delay(2);
+
+  // Step 2: deassert reset, power up digital + analog circuits
+  writeRegister(NAU7802_PU_CTRL, NAU7802_PU_CTRL_PUD | NAU7802_PU_CTRL_PUA);
+
+  // Step 3: wait for PUR (Power Up Ready, bit 3) to indicate both supplies ready
+  uint32_t start = millis();
+  while (millis() - start < 200) {
+    uint8_t pu = readRegister(NAU7802_PU_CTRL);
+    if (pu & NAU7802_PU_CTRL_PUR) {
+      _initialized = true;
+      return true;
+    }
+    delay(5);
   }
-  if (!powerUp()) {
-    return false;
-  }
-  _initialized = true;
-  return true;
+  return false;
 }
 
 bool Adafruit_NAU7802::reset() {
-  // Simple reset: toggle PU_CTRL bits
-  writeRegister(NAU7802_PU_CTRL, NAU7802_PU_CTRL_PUD | NAU7802_PU_CTRL_PUA);
-  delay(2);
-  writeRegister(NAU7802_PU_CTRL, NAU7802_PU_CTRL_PUD | NAU7802_PU_CTRL_PUA | NAU7802_PU_CTRL_PUR);
+  writeRegister(NAU7802_PU_CTRL, NAU7802_PU_CTRL_RR);
   delay(2);
   return true;
 }
 
 bool Adafruit_NAU7802::powerUp() {
-  // Enable analog + digital + oscillator
-  uint8_t pu = NAU7802_PU_CTRL_PUD | NAU7802_PU_CTRL_PUA | NAU7802_PU_CTRL_OSCS | NAU7802_PU_CTRL_AVDDS;
-  writeRegister(NAU7802_PU_CTRL, pu);
+  writeRegister(NAU7802_PU_CTRL, NAU7802_PU_CTRL_PUD | NAU7802_PU_CTRL_PUA);
   return waitForPowerUp();
 }
 
@@ -37,10 +45,10 @@ bool Adafruit_NAU7802::waitForPowerUp(uint16_t timeout_ms) {
   uint32_t start = millis();
   while (millis() - start < timeout_ms) {
     uint8_t pu = readRegister(NAU7802_PU_CTRL);
-    if (pu & NAU7802_PU_CTRL_PUA) {
+    if (pu & NAU7802_PU_CTRL_PUR) {
       return true;
     }
-    delay(2);
+    delay(5);
   }
   return false;
 }
@@ -61,9 +69,9 @@ void Adafruit_NAU7802::setRate(NAU7802_SampleRate rate) {
 
 bool Adafruit_NAU7802::available() {
   if (!_initialized) return false;
-  // DRDY is bit 5 in CTRL2 or INT_STAT depending on revision; we poll INT_STAT here
-  uint8_t stat = readRegister(NAU7802_INT_STAT);
-  return (stat & 0x20) != 0; // DRDY bit
+  // CR (Conversion Ready) is bit 5 of PU_CTRL
+  uint8_t pu = readRegister(NAU7802_PU_CTRL);
+  return (pu & NAU7802_PU_CTRL_CR) != 0;
 }
 
 bool Adafruit_NAU7802::waitForConversion(uint16_t timeout_ms) {

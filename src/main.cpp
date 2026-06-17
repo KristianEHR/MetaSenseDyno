@@ -1,27 +1,67 @@
 #include <Arduino.h>
 #include "controlTask.h"
+#include "CommandRouter.h"
+#include "Input.h"
 #include "ModbusPublisher.h"
+#include "RunStorage.h"
+#include "Settings.h"
 #include "WebSocketServer.h"
 
 #include <ESPAsyncWebServer.h>
 #include <LittleFS.h>
 #include <WiFi.h>
 #include <ArduinoOTA.h>
+#include <Wire.h>
+
+#include "globals.h"
 
 const char* ssid     = "5djnmv47";
 const char* password = "Niser0201";
 
 namespace {
-
+ 
 MetaSense::ModbusPublisher modbusPublisher;
 AsyncWebServer webServer(80);
 bool otaStarted = false;
 bool webServerStarted = false;
+TaskHandle_t controlTaskHandle = nullptr;
+TaskHandle_t networkTaskHandle = nullptr;
+TaskHandle_t modbusTaskHandle = nullptr;
 
 constexpr const char* kOtaHostname = "dyno-controller";
 constexpr const char* kOtaPassword = "metasense";
+constexpr uint32_t kI2cClockHz = 25000;
+constexpr uint16_t kI2cTimeoutMs = 50;
+constexpr uint32_t kControlPeriodMs = 100;
+constexpr uint32_t kModbusPeriodMs = 50;
+constexpr uint32_t kHeartbeatPeriodMs = 5000;
+constexpr UBaseType_t kControlTaskPriority = 5;
+constexpr UBaseType_t kNetworkTaskPriority = 3;
+constexpr UBaseType_t kModbusTaskPriority = 1;
 
 bool wifiCredentialsConfigured();
+
+void scanI2cBus()
+{
+    uint8_t found = 0;
+    for (uint8_t addr = 0x08; addr <= 0x77; ++addr) {
+        Wire.beginTransmission(addr);
+        const uint8_t err = Wire.endTransmission();
+        if (err == 0) {
+            ++found;
+            Serial.printf("[BOOT] I2C device found @ 0x%02X\n", addr);
+            Serial0.printf("[BOOT] I2C device found @ 0x%02X\n", addr);
+        }
+    }
+
+    if (found == 0) {
+        Serial.println("[BOOT] I2C scan: no devices found");
+        Serial0.println("[BOOT] I2C scan: no devices found");
+    } else {
+        Serial.printf("[BOOT] I2C scan complete: %u device(s)\n", found);
+        Serial0.printf("[BOOT] I2C scan complete: %u device(s)\n", found);
+    }
+}
 
 const char* wifiStatusToString(wl_status_t status)
 {
@@ -208,54 +248,151 @@ void setupOtaOnceConnected()
     }
 }
 
+void controlTaskEntry(void* /*parameter*/)
+{
+    TickType_t lastWake = xTaskGetTickCount();
+
+    for (;;) {
+        MetaSense::ControlTask::loop();
+        vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(kControlPeriodMs));
+    }
+}
+
+void modbusTaskEntry(void* /*parameter*/)
+{
+    TickType_t lastWake = xTaskGetTickCount();
+
+    for (;;) {
+        modbusPublisher.update();
+        vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(kModbusPeriodMs));
+    }
+}
+
+void networkTaskEntry(void* /*parameter*/)
+{
+    uint32_t lastStatusMs = 0;
+
+    for (;;) {
+        (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(25));
+
+        setupOtaOnceConnected();
+
+        if (otaStarted) {
+            ArduinoOTA.handle();
+        }
+
+        MetaSense::WebSocketServer::loop();
+        MetaSense::Input::publish();
+
+        const uint32_t now = millis();
+        if (now - lastStatusMs > kHeartbeatPeriodMs) {
+            lastStatusMs = now;
+            if (wifiCredentialsConfigured()) {
+                const wl_status_t status = WiFi.status();
+                const String ip = WiFi.localIP().toString();
+                Serial.printf("[HEARTBEAT] ssid=%s, wifi=%d (%s), ip=%s, ota=%s\n",
+                              ssid,
+                              static_cast<int>(status),
+                              wifiStatusToString(status),
+                              ip.c_str(),
+                              otaStarted ? "ready" : "not-ready");
+                Serial0.printf("[HEARTBEAT] ssid=%s, wifi=%d (%s), ip=%s, ota=%s\n",
+                               ssid,
+                               static_cast<int>(status),
+                               wifiStatusToString(status),
+                               ip.c_str(),
+                               otaStarted ? "ready" : "not-ready");
+            }
+        }
+
+    }
+}
+
 } // anonymous namespace
 
 void setup()
 {
-    Serial0.begin(115200);
     Serial.begin(115200);
+    Serial0.begin(115200);
     delay(200);
     logLine("[BOOT] MetaSense startup");
+    Wire.begin(MetaSense::Globals::kI2cSdaPin, MetaSense::Globals::kI2cSclPin);
+    Wire.setClock(kI2cClockHz);
+    Wire.setTimeOut(kI2cTimeoutMs);
+    Serial.printf("[BOOT] I2C ready (SDA=%d, SCL=%d)\n",
+                  MetaSense::Globals::kI2cSdaPin,
+                  MetaSense::Globals::kI2cSclPin);
+    Serial0.printf("[BOOT] I2C ready (SDA=%d, SCL=%d)\n",
+                   MetaSense::Globals::kI2cSdaPin,
+                   MetaSense::Globals::kI2cSclPin);
+    Serial.printf("[BOOT] I2C timing: %lu Hz, timeout=%u ms\n",
+                  static_cast<unsigned long>(kI2cClockHz),
+                  static_cast<unsigned>(kI2cTimeoutMs));
+    Serial0.printf("[BOOT] I2C timing: %lu Hz, timeout=%u ms\n",
+                   static_cast<unsigned long>(kI2cClockHz),
+                   static_cast<unsigned>(kI2cTimeoutMs));
+    MetaSense::Settings::loadFromStorage();
+    Serial.println("[BOOT] Settings loaded from storage (if available)");
+    Serial0.println("[BOOT] Settings loaded from storage (if available)");
+    scanI2cBus();
     logWifiConfiguration();
 
-    setupWifi();
     MetaSense::ControlTask::begin();
+    if (MetaSense::CommandRouter::loadFactoryProfileOnBoot()) {
+        logLine("[BOOT] Factory profile loaded from FS");
+    } else {
+        logLine("[BOOT] No factory profile found in FS");
+    }
+    setupWifi();
     if (!modbusPublisher.begin()) {
         logLine("[BOOT] ModbusPublisher begin failed");
     }
+
+    BaseType_t controlCreated = xTaskCreatePinnedToCore(
+        controlTaskEntry,
+        "controlTask",
+        8192,
+        nullptr,
+        kControlTaskPriority,
+        &controlTaskHandle,
+        1);
+
+    BaseType_t networkCreated = xTaskCreatePinnedToCore(
+        networkTaskEntry,
+        "networkTask",
+        12288,
+        nullptr,
+        kNetworkTaskPriority,
+        &networkTaskHandle,
+        0);
+
+    BaseType_t modbusCreated = xTaskCreatePinnedToCore(
+        modbusTaskEntry,
+        "modbusTask",
+        8192,
+        nullptr,
+        kModbusTaskPriority,
+        &modbusTaskHandle,
+        0);
+
+    if (controlCreated != pdPASS) {
+        logLine("[BOOT] Failed to start control task");
+    }
+
+    if (networkCreated != pdPASS) {
+        logLine("[BOOT] Failed to start network task");
+    }
+
+    if (modbusCreated != pdPASS) {
+        logLine("[BOOT] Failed to start modbus task");
+    }
+
+    MetaSense::RunStorage::setPublishTaskHandle(networkTaskHandle);
 
     logLine("[BOOT] setup complete");
 }
 
 void loop()
 {
-    setupOtaOnceConnected();
-    if (otaStarted) {
-        ArduinoOTA.handle();
-    }
-
-    MetaSense::WebSocketServer::loop();
-
-    MetaSense::ControlTask::loop();
-    modbusPublisher.update();
-
-    static uint32_t lastStatusMs = 0;
-    const uint32_t now = millis();
-    if (now - lastStatusMs > 3000) {
-        lastStatusMs = now;
-        if (wifiCredentialsConfigured()) {
-            const wl_status_t status = WiFi.status();
-            const String ip = WiFi.localIP().toString();
-            Serial.printf("[BOOT] WiFi status: %d (%s), board IP: %s, OTA: %s\n",
-                          static_cast<int>(status),
-                          wifiStatusToString(status),
-                          ip.c_str(),
-                          otaStarted ? "ready" : "not-ready");
-            Serial0.printf("[BOOT] WiFi status: %d (%s), board IP: %s, OTA: %s\n",
-                           static_cast<int>(status),
-                           wifiStatusToString(status),
-                           ip.c_str(),
-                           otaStarted ? "ready" : "not-ready");
-        }
-    }
+    vTaskDelay(pdMS_TO_TICKS(1000));
 }

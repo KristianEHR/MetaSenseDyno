@@ -5,6 +5,7 @@ namespace MetaSense::Settings {
 extern float filterAlpha;
 extern float kp;
 extern float ki;
+extern bool usePot3Kp;
 
 // Gauge display ranges (sent back in settings snapshot)
 extern float maxRPM;
@@ -30,6 +31,9 @@ extern float virtGearRatio;     // drum RPM × ratio = engine RPM (1.0 = direct)
 void setDrumParams(float massKg, float radiusM, float wallM);
 void setDrumInertiaCustom(float J);
 void setInertiaMode(bool enabled);
+void resetToDefaults();
+void loadFromStorage();
+void saveToStorage();
 
 void setRpmTarget(float rpm);
 float getRpmTarget();

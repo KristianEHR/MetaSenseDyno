@@ -1,43 +1,74 @@
 #include "Settings.h"
 #include <math.h>
+#include <Preferences.h>
 
 namespace {
 
-float rpmTargetLocal = 0.0f;
-float tachoCalLocal = 10.0f;
-float rpmStartLocal = 1500.0f;
-float rpmEndLocal = 5500.0f;
+constexpr float kDefaultRpmTarget = 0.0f;
+constexpr float kDefaultTachoCal = 10.0f;
+constexpr float kDefaultRpmStart = 1500.0f;
+constexpr float kDefaultRpmEnd = 5500.0f;
+
+constexpr float kDefaultFilterAlpha = 0.2f;
+constexpr float kDefaultKp = 0.02f;
+constexpr float kDefaultKi = 0.05f;
+constexpr bool  kDefaultUsePot3Kp = false;
+
+constexpr float kDefaultMaxRPM = 18000.0f;
+constexpr float kDefaultMaxHP = 25.0f;
+constexpr float kDefaultMaxTorque = 200.0f;
+constexpr float kDefaultArmCm = 20.0f;
+
+constexpr float kDefaultPulsesPerRev = 1.0f;
+constexpr float kDefaultPulsesPerRevDrum = 1.0f;
+
+constexpr float kDefaultDrivetrainEff = 95.0f;
+constexpr bool  kDefaultInertiaMode = false;
+constexpr bool  kDefaultUseCanLeafRpm = true;
+constexpr float kDefaultDrumMassKg = 10.0f;
+constexpr float kDefaultDrumRadiusM = 0.15f;
+constexpr float kDefaultDrumWallM = 0.0f;
+constexpr float kDefaultVirtGearRatio = 1.0f;
+constexpr const char* kSettingsNs = "settings";
+constexpr const char* kSettingsInitKey = "init";
+
+float rpmTargetLocal = kDefaultRpmTarget;
+float tachoCalLocal = kDefaultTachoCal;
+float rpmStartLocal = kDefaultRpmStart;
+float rpmEndLocal = kDefaultRpmEnd;
 
 } // anonymous namespace
 
 
 namespace MetaSense::Settings {
 
-float filterAlpha = 0.2f;
-float kp = 0.05f;
-float ki = 0.10f;
+float filterAlpha = kDefaultFilterAlpha;
+// Conservative baseline for 100 ms control loop cadence.
+float kp = kDefaultKp;
+float ki = kDefaultKi;
+bool usePot3Kp = kDefaultUsePot3Kp;
 
 // Gauge display ranges
-float maxRPM          = 18000.0f;
-float maxHP           = 25.0f;
-float maxTorque       = 200.0f;
-float armCm           = 20.0f;
+float maxRPM          = kDefaultMaxRPM;
+float maxHP           = kDefaultMaxHP;
+float maxTorque       = kDefaultMaxTorque;
+float armCm           = kDefaultArmCm;
 
 // Pulse inputs
-float pulsesPerRev     = 1.0f;
-float pulsesPerRevDrum = 1.0f;
+float pulsesPerRev     = kDefaultPulsesPerRev;
+float pulsesPerRevDrum = kDefaultPulsesPerRevDrum;
 
 // Drivetrain efficiency
-float drivetrainEff    = 95.0f;
+float drivetrainEff    = kDefaultDrivetrainEff;
 
 // Inertia dyno parameters (defaults)
-bool  inertiaMode     = false;
-bool  useCanLeafRpm   = true;
-float drumMassKg      = 10.0f;   // kg
-float drumRadiusM     = 0.15f;   // 30 cm diameter → 0.15 m radius
-float drumWallM       = 0.0f;    // 0 = solid cylinder
-float drumInertiaKgM2 = 0.1125f; // J = 0.5 * 10 * 0.15^2 = 0.1125 kg·m²
-float virtGearRatio   = 1.0f;    // drum→engine ratio
+bool  inertiaMode     = kDefaultInertiaMode;
+bool  useCanLeafRpm   = kDefaultUseCanLeafRpm;
+float drumMassKg      = kDefaultDrumMassKg;   // kg
+float drumRadiusM     = kDefaultDrumRadiusM;  // 30 cm diameter → 0.15 m radius
+float drumWallM       = kDefaultDrumWallM;    // 0 = solid cylinder
+float drumInertiaKgM2 = 0.1125f;              // recomputed by resetToDefaults
+float virtGearRatio   = kDefaultVirtGearRatio; // drum→engine ratio
 
 // Recomputes J from mass, outer radius and wall thickness.
 // Solid cylinder:  J = 0.5 * m * R²
@@ -69,6 +100,135 @@ void setDrumInertiaCustom(float J)
 void setInertiaMode(bool enabled)
 {
     inertiaMode = enabled;
+}
+
+void resetToDefaults()
+{
+    filterAlpha = kDefaultFilterAlpha;
+    kp = kDefaultKp;
+    ki = kDefaultKi;
+    usePot3Kp = kDefaultUsePot3Kp;
+
+    maxRPM = kDefaultMaxRPM;
+    maxHP = kDefaultMaxHP;
+    maxTorque = kDefaultMaxTorque;
+    armCm = kDefaultArmCm;
+
+    pulsesPerRev = kDefaultPulsesPerRev;
+    pulsesPerRevDrum = kDefaultPulsesPerRevDrum;
+
+    drivetrainEff = kDefaultDrivetrainEff;
+
+    inertiaMode = kDefaultInertiaMode;
+    useCanLeafRpm = kDefaultUseCanLeafRpm;
+    drumMassKg = kDefaultDrumMassKg;
+    drumRadiusM = kDefaultDrumRadiusM;
+    drumWallM = kDefaultDrumWallM;
+    virtGearRatio = kDefaultVirtGearRatio;
+    recomputeInertia();
+
+    rpmTargetLocal = kDefaultRpmTarget;
+    tachoCalLocal = kDefaultTachoCal;
+    rpmStartLocal = kDefaultRpmStart;
+    rpmEndLocal = kDefaultRpmEnd;
+}
+
+void loadFromStorage()
+{
+    Preferences prefs;
+    if (!prefs.begin(kSettingsNs, true)) {
+        return;
+    }
+
+    const bool hasData = prefs.getBool(kSettingsInitKey, false);
+    if (!hasData) {
+        prefs.end();
+        return;
+    }
+
+    filterAlpha = prefs.getFloat("filterAlpha", filterAlpha);
+    kp = prefs.getFloat("kp", kp);
+    ki = prefs.getFloat("ki", ki);
+    usePot3Kp = prefs.getBool("pot3kp", usePot3Kp);
+
+    maxRPM = prefs.getFloat("maxRPM", maxRPM);
+    maxHP = prefs.getFloat("maxHP", maxHP);
+    maxTorque = prefs.getFloat("maxTorque", maxTorque);
+    armCm = prefs.getFloat("armCm", armCm);
+
+    pulsesPerRev = prefs.getFloat("pprEng", pulsesPerRev);
+    pulsesPerRevDrum = prefs.getFloat("pprDrum", pulsesPerRevDrum);
+    drivetrainEff = prefs.getFloat("driveEff", drivetrainEff);
+
+    inertiaMode = prefs.getBool("inertia", inertiaMode);
+    useCanLeafRpm = true;
+    drumMassKg = prefs.getFloat("drumMass", drumMassKg);
+    drumRadiusM = prefs.getFloat("drumRad", drumRadiusM);
+    drumWallM = prefs.getFloat("drumWall", drumWallM);
+    virtGearRatio = prefs.getFloat("gearRatio", virtGearRatio);
+
+    rpmTargetLocal = prefs.getFloat("rpmTarget", rpmTargetLocal);
+    tachoCalLocal = prefs.getFloat("tachoCal", tachoCalLocal);
+    rpmStartLocal = prefs.getFloat("rpmStart", rpmStartLocal);
+    rpmEndLocal = prefs.getFloat("rpmEnd", rpmEndLocal);
+
+    prefs.end();
+
+    if (drumRadiusM <= 0.0f) {
+        drumRadiusM = kDefaultDrumRadiusM;
+    }
+    if (drumMassKg <= 0.0f) {
+        drumMassKg = kDefaultDrumMassKg;
+    }
+    if (pulsesPerRev <= 0.0f) {
+        pulsesPerRev = kDefaultPulsesPerRev;
+    }
+    if (pulsesPerRevDrum <= 0.0f) {
+        pulsesPerRevDrum = kDefaultPulsesPerRevDrum;
+    }
+    if (virtGearRatio <= 0.0f) {
+        virtGearRatio = kDefaultVirtGearRatio;
+    }
+
+    recomputeInertia();
+}
+
+void saveToStorage()
+{
+    Preferences prefs;
+    if (!prefs.begin(kSettingsNs, false)) {
+        return;
+    }
+
+    prefs.putBool(kSettingsInitKey, true);
+
+    prefs.putFloat("filterAlpha", filterAlpha);
+    prefs.putFloat("kp", kp);
+    prefs.putFloat("ki", ki);
+    prefs.putBool("pot3kp", usePot3Kp);
+
+    prefs.putFloat("maxRPM", maxRPM);
+    prefs.putFloat("maxHP", maxHP);
+    prefs.putFloat("maxTorque", maxTorque);
+    prefs.putFloat("armCm", armCm);
+
+    prefs.putFloat("pprEng", pulsesPerRev);
+    prefs.putFloat("pprDrum", pulsesPerRevDrum);
+    prefs.putFloat("driveEff", drivetrainEff);
+
+    prefs.putBool("inertia", inertiaMode);
+    prefs.putBool("canRpm", true);
+    prefs.putFloat("drumMass", drumMassKg);
+    prefs.putFloat("drumRad", drumRadiusM);
+    prefs.putFloat("drumWall", drumWallM);
+    prefs.putFloat("gearRatio", virtGearRatio);
+
+    prefs.putFloat("rpmTarget", rpmTargetLocal);
+    prefs.putFloat("tachoCal", tachoCalLocal);
+    prefs.putFloat("rpmStart", rpmStartLocal);
+    prefs.putFloat("rpmEnd", rpmEndLocal);
+
+    prefs.end();
 }
 
 void setRpmTarget(float rpm)

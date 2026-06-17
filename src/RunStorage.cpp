@@ -1,9 +1,12 @@
 #include "RunStorage.h"
 #include <LittleFS.h>
 #include <ArduinoJson.h>
+#include <Preferences.h>
 #include <time.h>
 #include <vector>
 #include <algorithm>
+
+#include "Input.h"
 
 namespace {
 
@@ -14,7 +17,10 @@ uint32_t getEpochTime()
     return (now > 1000000000L) ? (uint32_t)now : (uint32_t)(millis() / 1000);
 }
 
+portMUX_TYPE telemetryMux = portMUX_INITIALIZER_UNLOCKED;
 MetaSense::Telemetry lastRun;
+uint32_t telemetryVersion = 0;
+TaskHandle_t publishTaskHandle = nullptr;
 const char* RUNS_DIR = "/runs";
 
 // Returns sorted list of run filenames (base names only, e.g. "run_000.json")
@@ -50,17 +56,72 @@ namespace MetaSense::RunStorage {
 
 void save(const MetaSense::Telemetry& telemetry)
 {
+    portENTER_CRITICAL(&telemetryMux);
     lastRun = telemetry;
+    ++telemetryVersion;
+    portEXIT_CRITICAL(&telemetryMux);
+
+    if (publishTaskHandle != nullptr) {
+        xTaskNotifyGive(publishTaskHandle);
+    }
 }
 
-const MetaSense::Telemetry& latest()
+MetaSense::Telemetry latest()
 {
-    return lastRun;
+    MetaSense::Telemetry snapshot;
+    portENTER_CRITICAL(&telemetryMux);
+    snapshot = lastRun;
+    portEXIT_CRITICAL(&telemetryMux);
+    return snapshot;
+}
+
+uint32_t version()
+{
+    uint32_t currentVersion = 0;
+    portENTER_CRITICAL(&telemetryMux);
+    currentVersion = telemetryVersion;
+    portEXIT_CRITICAL(&telemetryMux);
+    return currentVersion;
+}
+
+void setPublishTaskHandle(TaskHandle_t handle)
+{
+    publishTaskHandle = handle;
 }
 
 void flush() {}
 
-void saveCalibration() {}
+void saveCalibration()
+{
+    Preferences prefs;
+    if (!prefs.begin("calib", false)) {
+        return;
+    }
+
+    prefs.putBool("init", true);
+    prefs.putFloat("zero", MetaSense::Input::getZeroOffset());
+    prefs.putFloat("factor", MetaSense::Input::getCalibrationFactor());
+    prefs.end();
+}
+
+bool loadCalibration(float& zeroOffset, float& calibrationFactor)
+{
+    Preferences prefs;
+    if (!prefs.begin("calib", true)) {
+        return false;
+    }
+
+    const bool hasData = prefs.getBool("init", false);
+    if (!hasData) {
+        prefs.end();
+        return false;
+    }
+
+    zeroOffset = prefs.getFloat("zero", 0.0f);
+    calibrationFactor = prefs.getFloat("factor", 0.01f);
+    prefs.end();
+    return true;
+}
 
 // ─── Persistent run history ─────────────────────────────────────────────────
 

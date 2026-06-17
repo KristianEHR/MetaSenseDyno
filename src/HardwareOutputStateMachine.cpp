@@ -237,6 +237,11 @@ void setStateMotorDyno()
     setStateLed(state);
 }
 
+bool isMotorState()
+{
+    return state == OutputState::MOTOR;
+}
+
 void stop()
 {
     writeThrottle(0.0f);

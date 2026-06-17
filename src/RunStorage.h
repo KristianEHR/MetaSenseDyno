@@ -7,9 +7,12 @@ namespace MetaSense::RunStorage {
 
 // Live telemetry snapshot
 void save(const MetaSense::Telemetry& telemetry);
-const MetaSense::Telemetry& latest();
+MetaSense::Telemetry latest();
+uint32_t version();
+void setPublishTaskHandle(TaskHandle_t handle);
 void flush();
 void saveCalibration();
+bool loadCalibration(float& zeroOffset, float& calibrationFactor);
 
 // Persistent run history (LittleFS)
 bool saveRun(const String& payload);           // payload = JSON after "SAVE_RUN_DATA:"

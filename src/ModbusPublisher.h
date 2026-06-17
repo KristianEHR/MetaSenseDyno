@@ -15,6 +15,7 @@ private:
     WiFiClient _client;
     uint16_t _regCount = 0;
     unsigned long _lastUpdate = 0;
+    uint32_t _lastUpdateVersion = 0;
 };
 
 } // namespace MetaSense

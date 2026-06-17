@@ -54,7 +54,8 @@ bool ModbusPublisher::begin(uint16_t port, uint16_t regCount)
 
 void ModbusPublisher::update()
 {
-    const MetaSense::Telemetry& telemetry = MetaSense::RunStorage::latest();
+    const uint32_t currentVersion = MetaSense::RunStorage::version();
+    const MetaSense::Telemetry telemetry = MetaSense::RunStorage::latest();
 
     if (_wifiServer != nullptr) {
         WiFiClient nextClient = _wifiServer->available();
@@ -69,8 +70,9 @@ void ModbusPublisher::update()
     }
 
     unsigned long now = millis();
-    if (now - _lastUpdate < 50) return;   // 50 ms update rate
+    if (now - _lastUpdate < 50 && currentVersion == _lastUpdateVersion) return;
     _lastUpdate = now;
+    _lastUpdateVersion = currentVersion;
 
     if (_regCount < 21) {
         return;

@@ -103,6 +103,40 @@
       font-size: 20px; 
       margin-top: 0;
     }
+    .radio-row {
+      display: flex;
+      gap: 18px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin: 6px 0 10px;
+    }
+    .radio-row label {
+      margin: 0;
+      font-size: 18px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #dddddd;
+    }
+    .radio-row input[type="radio"] {
+      width: auto;
+      margin: 0;
+      transform: scale(1.2);
+    }
+    .kp-source-card {
+      margin-top: 14px;
+      padding: 14px;
+      border: 2px solid #88ff88;
+      border-radius: 10px;
+      background: rgba(20, 60, 20, 0.32);
+      box-shadow: inset 0 0 0 1px rgba(136, 255, 136, 0.2);
+    }
+    .kp-source-card .card-title {
+      margin: 0 0 8px;
+      font-size: 18px;
+      font-weight: 700;
+      color: #bbffbb;
+    }
 
     .back-btn {
       position: fixed;
@@ -192,15 +226,48 @@
         2. Place known weight → enter it below → click CALIBRATE<br>
         <strong>Important:</strong> New calibration factor will be very small (usually 0.0001–0.01 range) — this is normal!
       </div>
-      <button onclick="tare()">⚖️ TARE (ZERO)</button>
+      <button id="tareButton" onclick="tare()">⚖️ TARE (ZERO)</button>
       <label>Known Weight (kg)</label>
       <input type="number" id="knownWeight" placeholder="e.g. 5.000" step="0.001">
-      <button onclick="calibrate()">🔧 CALIBRATE</button>
+      <button id="calibrateButton" onclick="calibrate()">🔧 CALIBRATE</button>
     </div>
 
     <label>Current Calibration Factor</label>
     <input type="text" id="calFactor" readonly style="background:#303030; font-family: monospace;">
     <div class="current-value" id="calFactorCurrent"></div>
+
+    <div class="section">
+      <label>PI Control Gains</label>
+      <div class="info">
+        These values control the active dyno PI loop and are saved to NVS.<br>
+        Stable baseline recommendation: Kp = 0.0500, Ki = 0.0200.
+      </div>
+      <label>Kp (Proportional Gain)</label>
+      <div class="param-row">
+        <input type="number" id="kp" value="0.0200" min="0" max="10" step="0.0001">
+        <button onclick="saveSingle('kp', event)">💾 SAVE</button>
+      </div>
+      <label>Ki (Integral Gain)</label>
+      <div class="param-row">
+        <input type="number" id="ki" value="0.0500" min="0" max="10" step="0.0001">
+        <button onclick="saveSingle('ki', event)">💾 SAVE</button>
+      </div>
+
+      <div class="kp-source-card">
+        <p class="card-title">Kp Source Selector</p>
+        <div class="info" style="margin-top: 0; margin-bottom: 10px;">
+          Choose whether PI Kp comes from firmware setting above or live Pot3 adjustment.
+        </div>
+        <div class="param-row">
+          <div class="radio-row" role="radiogroup" aria-label="Kp source selector">
+            <label><input type="radio" name="kpSource" id="kpSourceFirmware" value="firmware" checked> Firmware Kp</label>
+            <label><input type="radio" name="kpSource" id="kpSourcePot3" value="pot3"> Pot3 (live)</label>
+          </div>
+          <input type="hidden" id="kpSource" value="firmware">
+          <button onclick="saveSingle('kpSource', event)">💾 SAVE</button>
+        </div>
+      </div>
+    </div>
 
     <div class="section">
       <label>Max RPM Gauge Range</label>
@@ -239,12 +306,9 @@
       </div>
 
       <label>RPM Source</label>
-      <div class="param-row">
-        <select id="rpmSource" onchange="updateUIVisibility()"></select>
-        <button onclick="saveSingle('rpmSource', event)">💾 SAVE</button>
+      <div class="info" id="rpmSourceInfo">
+        Leaf CAN RPM is fixed as the primary RPM source with automatic tachogen fallback on GPIO 3.
       </div>
-
-      <div id="rpmSourceInfo" class="info"></div>
 
       <!-- Brake-specific settings -->
       <div id="brakeRatioSection">
@@ -319,8 +383,15 @@
         </div>
         <div class="info">Used to convert drum RPM to engine RPM in fixed-ratio inertia setups.</div>
       </div>
-      
-      <button onclick="resetSectionDefaults()" class="reset-btn">⟳ Reset All to Defaults</button>
+
+      <label>Factory Settings File (FS Refresh)</label>
+      <div class="info">
+        Writes current NVS-backed settings and calibration into the factory profile file on filesystem.
+        Use this after uploading filesystem if you want a fresh factory file snapshot.
+      </div>
+      <button onclick="uploadFactorySettings(event)">🏭 UPLOAD FACTORY SETTINGS TO FS</button>
+
+      <button onclick="resetSectionDefaults(event)" class="reset-btn">⟳ Reset All to Defaults</button>
     </div>
 
     <div id="inertiaSection" class="section hidden">
@@ -366,7 +437,7 @@
       <input type="text" id="wifiSSID" placeholder="Your network name">
       <label>WiFi Password</label>
       <input type="password" id="wifiPass" placeholder="Your network password">
-      <button onclick="connectWiFi()">📡 CONNECT TO WIFI</button>
+      <button onclick="connectWiFi(event)">📡 CONNECT TO WIFI</button>
     </div>
 
 
@@ -402,7 +473,7 @@
 
     function updateUIVisibility() {
       const mode = document.getElementById("dynoMode").value;
-      const source = document.getElementById("rpmSource").value;
+      const source = "leafrpm";
 
       document.getElementById("inertiaSection").classList.toggle("hidden", mode !== "inertia");
       document.getElementById("gearRatioSection").classList.toggle("hidden", mode !== "inertia");
@@ -412,34 +483,102 @@
       document.getElementById("brakeRatioSection").classList.toggle("hidden", mode !== "brake");
 
       const infoDiv = document.getElementById("rpmSourceInfo");
-      let info = "";
-
-      if (source === "leafrpm") {
-        info = "🔧 <strong>LEAF CAN RPM:</strong><br>• Uses RPM from LEAF CAN message<br>• Best when CAN stream is stable and available";
-      } else if (source === "tachogen") {
-        info = "📈 <strong>Tachogen Analog RPM:</strong><br>• Uses tachogen analog input (ADC channel mapped in firmware)<br>• Useful when CAN RPM is unavailable";
+      if (infoDiv) {
+        infoDiv.innerHTML = "🔧 <strong>LEAF CAN RPM:</strong><br>Primary source. Tachogen analog on GPIO 3 is used automatically if CAN is unavailable.";
       }
-      infoDiv.innerHTML = info;
     }
 
     function rebuildRpmSourceOptions() {
-      const mode = document.getElementById("dynoMode").value;
-      const rpmSelect = document.getElementById("rpmSource");
-      const currentValue = rpmSelect.value;
-      
-      rpmSelect.innerHTML = "";
-      
-      rpmSelect.add(new Option("LEAF CAN RPM", "leafrpm"));
-      rpmSelect.add(new Option("Tachogen Analog", "tachogen"));
-      
-      if ([...rpmSelect.options].some(opt => opt.value === currentValue)) {
-        rpmSelect.value = currentValue;
-      } else {
-        rpmSelect.value = rpmSelect.options[0].value;
+      const infoDiv = document.getElementById("rpmSourceInfo");
+      if (infoDiv) {
+        infoDiv.innerHTML = "🔧 <strong>LEAF CAN RPM:</strong><br>Primary source. Tachogen analog on GPIO 3 is used automatically if CAN is unavailable.";
       }
     }
 
+    function setKpSourceSelection(source) {
+      const sourceVal = source === "pot3" ? "pot3" : "firmware";
+      const hidden = document.getElementById("kpSource");
+      if (hidden) hidden.value = sourceVal;
+
+      const fw = document.getElementById("kpSourceFirmware");
+      const pot3 = document.getElementById("kpSourcePot3");
+      if (fw) fw.checked = sourceVal === "firmware";
+      if (pot3) pot3.checked = sourceVal === "pot3";
+    }
+
     let ws = null;
+    let tarePending = false;
+    let calibratePending = false;
+    const criticalActionArms = {};
+
+    function resetArmedButton(button) {
+      if (!button) return;
+      const defaultText = button.dataset.defaultText || button.textContent;
+      button.textContent = defaultText;
+      button.style.background = "#404040";
+    }
+
+    function requireArmedClick(button, key, armedLabel) {
+      if (!button) return false;
+
+      if (!button.dataset.defaultText) {
+        button.dataset.defaultText = button.textContent;
+      }
+
+      const now = Date.now();
+      const armTs = criticalActionArms[key] || 0;
+      const armWindowMs = 5000;
+
+      if (now - armTs > armWindowMs) {
+        criticalActionArms[key] = now;
+        button.textContent = armedLabel;
+        button.style.background = "#a05050";
+        showToast("Confirm action: click the same button again");
+
+        setTimeout(() => {
+          if (criticalActionArms[key] === now) {
+            delete criticalActionArms[key];
+            resetArmedButton(button);
+          }
+        }, armWindowMs);
+        return false;
+      }
+
+      delete criticalActionArms[key];
+      resetArmedButton(button);
+      return true;
+    }
+
+
+    function setTareButtonBusy(isBusy) {
+      const tareBtn = document.getElementById("tareButton");
+      if (!tareBtn) return;
+      tareBtn.disabled = isBusy;
+      tareBtn.textContent = isBusy ? "⏳ TARE IN PROGRESS..." : "⚖️ TARE (ZERO)";
+      tareBtn.style.opacity = isBusy ? "0.75" : "1";
+      tareBtn.style.cursor = isBusy ? "wait" : "pointer";
+    }
+
+    function setCalibrateButtonBusy(isBusy) {
+      const calibrateBtn = document.getElementById("calibrateButton");
+      if (!calibrateBtn) return;
+      calibrateBtn.disabled = isBusy;
+      calibrateBtn.textContent = isBusy ? "⏳ CALIBRATING..." : "🔧 CALIBRATE";
+      calibrateBtn.style.opacity = isBusy ? "0.75" : "1";
+      calibrateBtn.style.cursor = isBusy ? "wait" : "pointer";
+    }
+
+    function uploadFactorySettings(event) {
+      const btn = event ? event.currentTarget : null;
+      if (!requireArmedClick(btn, "uploadFactoryFs", "⚠️ CLICK AGAIN TO UPLOAD FACTORY SETTINGS")) {
+        return;
+      }
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        showToast("Not connected. Cannot upload factory settings to FS.");
+        return;
+      }
+      ws.send("SAVE_FACTORY_PROFILE");
+    }
 
     const connectWS = function() {
       ws = new WebSocket("ws://" + location.hostname + "/ws");
@@ -453,6 +592,21 @@
           const msg = JSON.parse(evt.data);
           if (msg.type === "settings") {
             document.getElementById("calFactor").value = msg.calFactor !== undefined ? Number(msg.calFactor).toFixed(6) : "0.000000";
+            const kpElem = document.getElementById("kp");
+            const kiElem = document.getElementById("ki");
+            if (kpElem && msg.kp !== undefined) {
+              const kpVal = Number(msg.kp);
+              if (Number.isFinite(kpVal)) {
+                kpElem.value = kpVal.toFixed(4);
+              }
+            }
+            if (kiElem && msg.ki !== undefined) {
+              const kiVal = Number(msg.ki);
+              if (Number.isFinite(kiVal)) {
+                kiElem.value = kiVal.toFixed(4);
+              }
+            }
+            setKpSourceSelection(msg.kpSource || "firmware");
             document.getElementById("maxRPM").value = msg.maxRPM;
             document.getElementById("maxHP").value = msg.maxHP;
             document.getElementById("maxTorque").value = msg.maxTorque;
@@ -471,17 +625,42 @@
 			document.getElementById("drivetrainEff").value = msg.drivetrainEff || 93.0;
             
             rebuildRpmSourceOptions();
-            document.getElementById("rpmSource").value = msg.rpmSource || "spark";
-            
+
             updateUIVisibility();
 			 // Update version display
   const versionEl = document.getElementById("versionInfo");
   if (versionEl && msg.version && msg.buildDate) {
     versionEl.innerHTML = `MetaSense V${msg.version} | ${msg.buildDate}`;
   }
-            
-          } else if (msg.type === "info") {
+
+          } else if (msg.type === "info" || msg.type === "status") {
             showToast(msg.msg);
+
+            if (tarePending) {
+              const text = String(msg.msg || "").toLowerCase();
+              if (text.includes("tare applied") || text.includes("zero=")) {
+                tarePending = false;
+                setTareButtonBusy(false);
+              }
+            }
+
+            if (calibratePending) {
+              const text = String(msg.msg || "").toLowerCase();
+              if (text.includes("calibration factor updated") || text.includes("factor=")) {
+                const factorMatch = String(msg.msg || "").match(/factor\s*=\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
+                if (factorMatch && factorMatch[1] !== undefined) {
+                  const parsed = Number(factorMatch[1]);
+                  if (Number.isFinite(parsed)) {
+                    document.getElementById("calFactor").value = parsed.toFixed(6);
+                  }
+                }
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                  ws.send("GET_SETTINGS");
+                }
+                calibratePending = false;
+                setCalibrateButtonBusy(false);
+              }
+            }
           }
         } catch (e) {
           console.error("WebSocket message error:", e);
@@ -496,17 +675,45 @@
 
     connectWS();
 
-    const tare = function() { 
-      if (ws) ws.send("TARE"); 
-      showToast("Tare command sent");
+    const tare = function() {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        showToast("Not connected. Cannot tare now.");
+        return;
+      }
+
+      tarePending = true;
+      setTareButtonBusy(true);
+      ws.send("CALIBRATE_ZERO");
+      showToast("Tare command sent, waiting for confirmation...");
+
+      setTimeout(() => {
+        if (!tarePending) return;
+        tarePending = false;
+        setTareButtonBusy(false);
+        showToast("No tare confirmation received. Check connection and retry.");
+      }, 2500);
     };
     
     const calibrate = function() {
       const weight = document.getElementById("knownWeight").value.trim();
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        showToast("Not connected. Cannot calibrate now.");
+        return;
+      }
+
       if (weight && parseFloat(weight) > 0) {
-        if (ws) ws.send("CALIBRATE:" + weight);
+        calibratePending = true;
+        setCalibrateButtonBusy(true);
+        ws.send("CALIBRATE:" + weight);
         document.getElementById("knownWeight").value = "";
-        showToast("Calibration sent with " + weight + "kg");
+        showToast("Calibration sent with " + weight + "kg, waiting for confirmation...");
+
+        setTimeout(() => {
+          if (!calibratePending) return;
+          calibratePending = false;
+          setCalibrateButtonBusy(false);
+          showToast("No calibration confirmation received. Check load and retry.");
+        }, 3000);
       } else {
         showToast("Enter valid weight!");
       }
@@ -515,6 +722,12 @@
     const saveSingle = function(key, event) {
       const elem = document.getElementById(key);
       if (!elem) return;
+      if (key === "kpSource") {
+        const selected = document.querySelector('input[name="kpSource"]:checked');
+        if (selected) {
+          elem.value = selected.value;
+        }
+      }
       const val = elem.tagName === "SELECT" ? elem.value : elem.value.trim();
       if (ws) ws.send("SET_SINGLE:" + key + "=" + val);
       
@@ -530,27 +743,37 @@
       showToast(key + " saved!");
     };
 
-    const connectWiFi = function() {
+    const connectWiFi = function(event) {
+      const btn = event ? event.currentTarget : null;
+      if (!requireArmedClick(btn, "connectWifi", "⚠️ CLICK AGAIN TO CONNECT")) {
+        return;
+      }
       const ssid = document.getElementById("wifiSSID").value.trim();
       const pass = document.getElementById("wifiPass").value;
       if (ssid) {
-        if (confirm("Connect to WiFi '" + ssid + "'? ESP32 will reboot.")) {
-          if (ws) ws.send("WIFI_CLIENT:" + ssid + ":" + pass);
-          showToast("Connecting to WiFi... ESP32 will reboot");
-        }
+        if (ws) ws.send("WIFI_CLIENT:" + ssid + ":" + pass);
+        showToast("Connecting to WiFi... ESP32 will reboot");
       } else {
         showToast("Enter SSID!");
       }
     };
 
-    const resetSectionDefaults = function() {
-      if (confirm("Reset ALL settings to factory defaults?")) {
-        if (ws) ws.send("RESET_ALL_SETTINGS");
-        showToast("All settings reset to defaults");
+    const resetSectionDefaults = function(event) {
+      const btn = event ? event.currentTarget : null;
+      if (!requireArmedClick(btn, "resetDefaults", "⚠️ CLICK AGAIN TO RESET")) {
+        return;
       }
+      if (ws) ws.send("RESET_ALL_SETTINGS");
+      showToast("All settings reset to defaults");
     };
 
     rebuildRpmSourceOptions();
+    document.querySelectorAll('input[name="kpSource"]').forEach((radio) => {
+      radio.addEventListener("change", () => {
+        setKpSourceSelection(radio.value);
+      });
+    });
+    setKpSourceSelection("firmware");
     updateUIVisibility();
   </script>
 </body>

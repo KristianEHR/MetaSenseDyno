@@ -14,14 +14,15 @@
 #define NAU7802_ADCO_B0   0x14
 #define NAU7802_INT_STAT  0x02  // DRDY bit also readable here on some revs
 
-// Bits
-#define NAU7802_PU_CTRL_PUD   0x01
-#define NAU7802_PU_CTRL_PUA   0x02
-#define NAU7802_PU_CTRL_PUR   0x04
-#define NAU7802_PU_CTRL_CS    0x08
-#define NAU7802_PU_CTRL_CR    0x10
-#define NAU7802_PU_CTRL_OSCS  0x20
-#define NAU7802_PU_CTRL_AVDDS 0x40
+// PU_CTRL register bits (NAU7802 datasheet, section 9.3)
+#define NAU7802_PU_CTRL_RR    0x01  // Register Reset (write 1 to reset)
+#define NAU7802_PU_CTRL_PUD   0x02  // Power Up Digital circuit
+#define NAU7802_PU_CTRL_PUA   0x04  // Power Up Analog circuit
+#define NAU7802_PU_CTRL_PUR   0x08  // Power Up Ready (read-only)
+#define NAU7802_PU_CTRL_CS    0x10  // Cycle Start (start conversion)
+#define NAU7802_PU_CTRL_CR    0x20  // Conversion Ready (read-only)
+#define NAU7802_PU_CTRL_OSCS  0x40  // System clock source select
+#define NAU7802_PU_CTRL_AVDDS 0x80  // AVDD source select
 
 // Gain enum
 typedef enum _gains {

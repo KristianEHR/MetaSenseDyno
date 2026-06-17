@@ -1,0 +1,99 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj
+2 0 obj<< /Type /Pages /Kids [3 0 R 6 0 R] /Count 2 >>endobj
+3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>endobj
+4 0 obj<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>endobj
+5 0 obj<< /Length 610 >>stream
+BT
+/F1 18 Tf
+72 770 Td
+(MetaSense DYNO) Tj
+/F1 11 Tf
+0 -28 Td
+(GPIO Mappings Report) Tj
+0 -14 Td
+0 -14 Td
+(Overview) Tj
+0 -14 Td
+(This report lists the currently allocated GPIOs in the active firmware,) Tj
+0 -14 Td
+(plus the attic CAN mapping that is kept free for future use in the) Tj
+0 -14 Td
+(active firmware.) Tj
+0 -14 Td
+0 -14 Td
+(Notes) Tj
+0 -14 Td
+(- No conflicts were found in the active firmware.) Tj
+0 -14 Td
+(- CAN TX/RX are currently free in the active firmware.) Tj
+0 -14 Td
+(- Pot3 / Kp has been remapped to GPIO 6.) Tj
+0 -14 Td
+0 -14 Td
+(Generated for the current project state.) Tj
+0 -14 Td
+ET
+endstream endobj
+6 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 7 0 R >>endobj
+7 0 obj<< /Length 910 >>stream
+BT
+/F1 18 Tf
+72 770 Td
+(GPIO Table) Tj
+/F1 11 Tf
+0 -28 Td
+0 -14 Td
+(GPIO | Signal | Notes) Tj
+0 -14 Td
+(1 | RPM setpoint pot | ADC1_CH0) Tj
+0 -14 Td
+(2 | Throttle pot | ADC1_CH1) Tj
+0 -14 Td
+(3 | Tachogen RPM | ADC1_CH2) Tj
+0 -14 Td
+(4 | CAN TX | attic mapping, free in active firmware) Tj
+0 -14 Td
+(5 | CAN RX | attic mapping, free in active firmware) Tj
+0 -14 Td
+(6 | Kp pot \(pot3\) | ADC1_CH5) Tj
+0 -14 Td
+(17 | I2C SDA | shared bus) Tj
+0 -14 Td
+(18 | I2C SCL | shared bus) Tj
+0 -14 Td
+(32 | Load cell ADC fallback | analog input) Tj
+0 -14 Td
+(35 | Panel SW switch | active LOW) Tj
+0 -14 Td
+(36 | VCU / RB+ ready | active LOW) Tj
+0 -14 Td
+(38 | RB- FET | output) Tj
+0 -14 Td
+(39 | SSSR | output) Tj
+0 -14 Td
+(40 | Brake PWM | LEDC channel 1) Tj
+0 -14 Td
+(41 | Throttle VCU PWM | LEDC channel 2) Tj
+0 -14 Td
+(45 | Engine throttle PWM | LEDC channel 0) Tj
+0 -14 Td
+(48 | Onboard LED | RGB LED) Tj
+0 -14 Td
+ET
+endstream endobj
+xref
+0 8
+0000000000 65535 f 
+0000000015 00000 n 
+0000000062 00000 n 
+0000000123 00000 n 
+0000000247 00000 n 
+0000000315 00000 n 
+0000000974 00000 n 
+0000001098 00000 n 
+trailer<< /Size 8 /Root 1 0 R >>
+startxref
+2057
+%%EOF
