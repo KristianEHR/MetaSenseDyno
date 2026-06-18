@@ -16,10 +16,16 @@ constexpr int kRbMinusFetPin = 38;
 constexpr int kSssrPin = 39;
 
 constexpr int kThrottlePwmChannel = 0;
-constexpr int kBrakePwmChannel = 1;
-constexpr int kDynoThrottlePwmChannel = 2;
-constexpr int kPwmFrequencyHz = 20000;
-constexpr int kPwmResolutionBits = 8;
-constexpr unsigned int kHoldingRegisterCount = 15;
+constexpr int kBrakePwmChannel = 2;
+constexpr int kDynoThrottlePwmChannel = 4;
+
+constexpr int kServoPwmFrequencyHz = 50;
+constexpr int kServoPwmResolutionBits = 14;
+constexpr int kServoPulseMinUs = 1000;
+constexpr int kServoPulseMaxUs = 2000;
+
+constexpr int kActuatorPwmFrequencyHz = 5000;
+constexpr int kActuatorPwmResolutionBits = 10;
+constexpr unsigned int kHoldingRegisterCount = 20;
 
 } // namespace MetaSense::Globals

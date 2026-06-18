@@ -6,7 +6,9 @@ namespace {
 
 constexpr uint8_t kSdaPin = 17;
 constexpr uint8_t kSclPin = 18;
-constexpr uint32_t kI2cClockHz = 100000;
+constexpr uint32_t kI2cClockHz = 25000;
+constexpr uint16_t kI2cTimeoutMs = 50;
+constexpr uint16_t kInitSettleDelayMs = 300;
 constexpr uint8_t kPreferredAddr = 0x67;
 constexpr uint8_t kMinProbeAddr = 0x60;
 constexpr uint8_t kMaxProbeAddr = 0x67;
@@ -37,6 +39,18 @@ uint8_t i2cProbe(uint8_t addr) {
   return Wire.endTransmission();
 }
 
+const char* i2cErrToText(uint8_t err) {
+  switch (err) {
+    case 0: return "ACK";
+    case 1: return "DATA_TOO_LONG";
+    case 2: return "NACK_ADDR";
+    case 3: return "NACK_DATA";
+    case 4: return "OTHER";
+    case 5: return "TIMEOUT";
+    default: return "UNKNOWN";
+  }
+}
+
 void scanI2c() {
   uint8_t found = 0;
   for (uint8_t addr = 0x08; addr <= 0x77; ++addr) {
@@ -51,7 +65,7 @@ void scanI2c() {
 
 bool tryInitAt(uint8_t addr) {
   const uint8_t err = i2cProbe(addr);
-  logf("[EGT-DIAG] probe 0x%02X err=%u\n", addr, err);
+  logf("[EGT-DIAG] probe 0x%02X err=%u (%s)\n", addr, err, i2cErrToText(err));
   if (err != 0) {
     return false;
   }
@@ -115,8 +129,13 @@ void setup() {
 
   Wire.begin(kSdaPin, kSclPin);
   Wire.setClock(kI2cClockHz);
+  Wire.setTimeOut(kI2cTimeoutMs);
+  logf("[EGT-DIAG] I2C clock=%lu timeout=%u\n",
+       static_cast<unsigned long>(kI2cClockHz),
+       static_cast<unsigned>(kI2cTimeoutMs));
 
   scanI2c();
+  delay(kInitSettleDelayMs);
   initMcp();
 }
 

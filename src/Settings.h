@@ -6,6 +6,8 @@ extern float filterAlpha;
 extern float kp;
 extern float ki;
 extern bool usePot3Kp;
+extern float ambientRhOffsetPct;
+extern float motorModeMaxRpm;
 
 // Gauge display ranges (sent back in settings snapshot)
 extern float maxRPM;

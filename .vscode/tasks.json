@@ -148,6 +148,23 @@
 				"upload"
 			],
 			"isBackground": false
+		},
+		{
+			"label": "Upload (esp32s3-USB)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-USB",
+				"-t",
+				"upload"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$platformio"
+			],
+			"group": "build"
 		}
 	]
 }

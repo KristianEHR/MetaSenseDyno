@@ -21,11 +21,54 @@ Adafruit_NeoPixel strip(MetaSense::Globals::kOnboardLedCount,
                         MetaSense::Globals::kOnboardLedPin,
                         NEO_GRB + NEO_KHZ800);
 
-void writeChannel(int channel, float percent)
+int pwmMaxValue(int bits)
+{
+    if (bits <= 1) {
+        return 1;
+    }
+    if (bits >= 15) {
+        return 32767;
+    }
+    return (1 << bits) - 1;
+}
+
+void setupServoPwmChannel(int pin, int channel)
+{
+    ledcSetup(channel,
+              MetaSense::Globals::kServoPwmFrequencyHz,
+              MetaSense::Globals::kServoPwmResolutionBits);
+    ledcAttachPin(pin, channel);
+    ledcWrite(channel, 0);
+}
+
+void setupActuatorPwmChannel(int pin, int channel)
+{
+    ledcSetup(channel,
+              MetaSense::Globals::kActuatorPwmFrequencyHz,
+              MetaSense::Globals::kActuatorPwmResolutionBits);
+    ledcAttachPin(pin, channel);
+    ledcWrite(channel, 0);
+}
+
+void writeActuatorChannel(int channel, float percent)
 {
     percent = constrain(percent, 0.0f, 100.0f);
-    int pwm = (int)(percent * 255.0f / 100.0f);
+    const int maxPwm = pwmMaxValue(MetaSense::Globals::kActuatorPwmResolutionBits);
+    int pwm = static_cast<int>(percent * static_cast<float>(maxPwm) / 100.0f);
     ledcWrite(channel, pwm);
+}
+
+void writeThrottleServo(float percent)
+{
+    percent = constrain(percent, 0.0f, 100.0f);
+
+    const float pulseUs = MetaSense::Globals::kServoPulseMinUs +
+        (percent / 100.0f) * (MetaSense::Globals::kServoPulseMaxUs - MetaSense::Globals::kServoPulseMinUs);
+    const float periodUs = 1000000.0f / static_cast<float>(MetaSense::Globals::kServoPwmFrequencyHz);
+    const int maxPwm = pwmMaxValue(MetaSense::Globals::kServoPwmResolutionBits);
+    const int pwm = static_cast<int>((pulseUs / periodUs) * static_cast<float>(maxPwm));
+
+    ledcWrite(MetaSense::Globals::kThrottlePwmChannel, constrain(pwm, 0, maxPwm));
 }
 
 void setRelayOutputs(bool rbMinusOn, bool sssrOn)
@@ -41,20 +84,20 @@ void writePrimaryBrakeSplit(OutputState hwState, float signedPercent)
     switch (hwState) {
     case OutputState::START:
     case OutputState::MOTOR:
-        writeChannel(MetaSense::Globals::kBrakePwmChannel,
+        writeActuatorChannel(MetaSense::Globals::kBrakePwmChannel,
                      signedPercent > 0.0f ? signedPercent : 0.0f);
-        writeChannel(MetaSense::Globals::kDynoThrottlePwmChannel, 0.0f);
+        writeActuatorChannel(MetaSense::Globals::kDynoThrottlePwmChannel, 0.0f);
         break;
 
     case OutputState::DYNO:
-        writeChannel(MetaSense::Globals::kBrakePwmChannel, 0.0f);
-        writeChannel(MetaSense::Globals::kDynoThrottlePwmChannel,
+        writeActuatorChannel(MetaSense::Globals::kBrakePwmChannel, 0.0f);
+        writeActuatorChannel(MetaSense::Globals::kDynoThrottlePwmChannel,
                      signedPercent < 0.0f ? -signedPercent : 0.0f);
         break;
 
     case OutputState::IDLE:
-        writeChannel(MetaSense::Globals::kBrakePwmChannel, 0.0f);
-        writeChannel(MetaSense::Globals::kDynoThrottlePwmChannel, 0.0f);
+        writeActuatorChannel(MetaSense::Globals::kBrakePwmChannel, 0.0f);
+        writeActuatorChannel(MetaSense::Globals::kDynoThrottlePwmChannel, 0.0f);
         break;
     }
 }
@@ -84,7 +127,7 @@ void setStateLed(OutputState hwState)
 
 void applyOutputs(OutputState nextState, OutputState prevState, float engineThrottlePercent, float primaryBrakePercent)
 {
-    writeChannel(MetaSense::Globals::kThrottlePwmChannel, engineThrottlePercent);
+    writeThrottleServo(engineThrottlePercent);
 
     switch (nextState) {
     case OutputState::START:
@@ -137,23 +180,12 @@ void begin()
     strip.clear();
     strip.show();
 
-    ledcSetup(MetaSense::Globals::kThrottlePwmChannel,
-              MetaSense::Globals::kPwmFrequencyHz,
-              MetaSense::Globals::kPwmResolutionBits);
-    ledcAttachPin(MetaSense::Globals::kThrottlePin,
-                  MetaSense::Globals::kThrottlePwmChannel);
-
-    ledcSetup(MetaSense::Globals::kBrakePwmChannel,
-              MetaSense::Globals::kPwmFrequencyHz,
-              MetaSense::Globals::kPwmResolutionBits);
-    ledcAttachPin(MetaSense::Globals::kBrakePin,
-                  MetaSense::Globals::kBrakePwmChannel);
-
-    ledcSetup(MetaSense::Globals::kDynoThrottlePwmChannel,
-              MetaSense::Globals::kPwmFrequencyHz,
-              MetaSense::Globals::kPwmResolutionBits);
-    ledcAttachPin(MetaSense::Globals::kThrottleVcuPin,
-                  MetaSense::Globals::kDynoThrottlePwmChannel);
+    setupServoPwmChannel(MetaSense::Globals::kThrottlePin,
+                         MetaSense::Globals::kThrottlePwmChannel);
+    setupActuatorPwmChannel(MetaSense::Globals::kBrakePin,
+                            MetaSense::Globals::kBrakePwmChannel);
+    setupActuatorPwmChannel(MetaSense::Globals::kThrottleVcuPin,
+                            MetaSense::Globals::kDynoThrottlePwmChannel);
 
     pinMode(MetaSense::Globals::kRbMinusFetPin, OUTPUT);
     pinMode(MetaSense::Globals::kSssrPin, OUTPUT);
@@ -167,17 +199,17 @@ void begin()
 
 void writeThrottle(float percent)
 {
-    writeChannel(MetaSense::Globals::kThrottlePwmChannel, percent);
+    writeThrottleServo(percent);
 }
 
 void writeBrake(float percent)
 {
-    writeChannel(MetaSense::Globals::kBrakePwmChannel, percent);
+    writeActuatorChannel(MetaSense::Globals::kBrakePwmChannel, percent);
 }
 
 void writeDynoThrottle(float percent)
 {
-    writeChannel(MetaSense::Globals::kDynoThrottlePwmChannel, percent);
+    writeActuatorChannel(MetaSense::Globals::kDynoThrottlePwmChannel, percent);
 }
 
 void update(float engineThrottlePercent, float setPoint, float rpm, float primaryBrakePercent)

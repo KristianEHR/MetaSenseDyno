@@ -358,6 +358,20 @@
         <input type="number" id="rpmFilter" value="0.50" min="0.1" max="0.9" step="0.05">
         <button onclick="saveSingle('rpmFilter', event)">💾 SAVE</button>
       </div>
+
+      <label>Ambient RH Offset (%)</label>
+      <div class="info">Calibration offset added to measured relative humidity before display and correction.</div>
+      <div class="param-row">
+        <input type="number" id="rhOffsetPct" value="0.0" min="-50" max="50" step="0.1">
+        <button onclick="saveSingle('rhOffsetPct', event)">💾 SAVE</button>
+      </div>
+
+      <label>Motor Mode Max RPM</label>
+      <div class="info">Upper RPM target cap applied while hardware output state machine is in motor mode.</div>
+      <div class="param-row">
+        <input type="number" id="motorModeMaxRpm" value="2000" min="100" max="20000" step="100">
+        <button onclick="saveSingle('motorModeMaxRpm', event)">💾 SAVE</button>
+      </div>
 	  
 	       <!-- Drivetrain Efficiency -->
       <label>Drivetrain Efficiency (%) — Crank Power Correction</label>
@@ -613,6 +627,8 @@
             document.getElementById("armCm").value = msg.armCm;
             document.getElementById("pulsesPerRev").value = msg.pulsesPerRev || 1.0;
             document.getElementById("rpmFilter").value = msg.rpmFilter;
+            document.getElementById("rhOffsetPct").value = msg.rhOffsetPct !== undefined ? msg.rhOffsetPct : 0.0;
+            document.getElementById("motorModeMaxRpm").value = msg.motorModeMaxRpm !== undefined ? msg.motorModeMaxRpm : 2000;
             document.getElementById("dynoMode").value = msg.mode;
             document.getElementById("virtGearRatio").value = msg.virtGearRatio || 1.0;
             document.getElementById("drumMass").value = msg.drumMass;

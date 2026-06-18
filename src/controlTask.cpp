@@ -13,8 +13,8 @@ PIController piController;
 
 float clampTorque(float torque)
 {
-    if (torque < -200.0f) return -200.0f;
-    if (torque > 200.0f) return 200.0f;
+    if (torque < -50.0f) return -50.0f;
+    if (torque > 50.0f) return 50.0f;
     return torque;
 }
 
@@ -27,8 +27,8 @@ void begin()
     MetaSense::DynoStateMachine::setTorqueFeedForward(0.0f);
     configurePI(MetaSense::Settings::kp,
                 MetaSense::Settings::ki,
-                -200.0f,
-                200.0f);
+                -50.0f,
+                50.0f);
     resetPI();
     MetaSense::Input::begin();
 }

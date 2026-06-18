@@ -10,9 +10,13 @@ constexpr float kDefaultRpmStart = 1500.0f;
 constexpr float kDefaultRpmEnd = 5500.0f;
 
 constexpr float kDefaultFilterAlpha = 0.2f;
-constexpr float kDefaultKp = 0.02f;
-constexpr float kDefaultKi = 0.05f;
+constexpr float kDefaultKp = 0.073f;
+constexpr float kDefaultKi = 0.524f;
+constexpr float kLegacyDefaultKp = 0.02f;
+constexpr float kLegacyDefaultKi = 0.05f;
 constexpr bool  kDefaultUsePot3Kp = false;
+constexpr float kDefaultAmbientRhOffsetPct = 0.0f;
+constexpr float kDefaultMotorModeMaxRpm = 2000.0f;
 
 constexpr float kDefaultMaxRPM = 18000.0f;
 constexpr float kDefaultMaxHP = 25.0f;
@@ -47,6 +51,8 @@ float filterAlpha = kDefaultFilterAlpha;
 float kp = kDefaultKp;
 float ki = kDefaultKi;
 bool usePot3Kp = kDefaultUsePot3Kp;
+float ambientRhOffsetPct = kDefaultAmbientRhOffsetPct;
+float motorModeMaxRpm = kDefaultMotorModeMaxRpm;
 
 // Gauge display ranges
 float maxRPM          = kDefaultMaxRPM;
@@ -108,6 +114,8 @@ void resetToDefaults()
     kp = kDefaultKp;
     ki = kDefaultKi;
     usePot3Kp = kDefaultUsePot3Kp;
+    ambientRhOffsetPct = kDefaultAmbientRhOffsetPct;
+    motorModeMaxRpm = kDefaultMotorModeMaxRpm;
 
     maxRPM = kDefaultMaxRPM;
     maxHP = kDefaultMaxHP;
@@ -150,6 +158,16 @@ void loadFromStorage()
     kp = prefs.getFloat("kp", kp);
     ki = prefs.getFloat("ki", ki);
     usePot3Kp = prefs.getBool("pot3kp", usePot3Kp);
+    ambientRhOffsetPct = prefs.getFloat("rhOffPct", ambientRhOffsetPct);
+    motorModeMaxRpm = prefs.getFloat("motorMaxRpm", motorModeMaxRpm);
+
+    // One-time migration: only bump unchanged legacy defaults to the
+    // physics-based RPM-domain PI gains. Preserve user-tuned values.
+    if (fabsf(kp - kLegacyDefaultKp) < 0.0005f &&
+        fabsf(ki - kLegacyDefaultKi) < 0.0005f) {
+        kp = kDefaultKp;
+        ki = kDefaultKi;
+    }
 
     maxRPM = prefs.getFloat("maxRPM", maxRPM);
     maxHP = prefs.getFloat("maxHP", maxHP);
@@ -206,6 +224,8 @@ void saveToStorage()
     prefs.putFloat("kp", kp);
     prefs.putFloat("ki", ki);
     prefs.putBool("pot3kp", usePot3Kp);
+    prefs.putFloat("rhOffPct", ambientRhOffsetPct);
+    prefs.putFloat("motorMaxRpm", motorModeMaxRpm);
 
     prefs.putFloat("maxRPM", maxRPM);
     prefs.putFloat("maxHP", maxHP);

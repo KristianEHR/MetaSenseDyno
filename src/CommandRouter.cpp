@@ -98,6 +98,8 @@ String buildProfilePayload(bool includeTypeEnvelope)
     json += ",\"kp\":" + String(MetaSense::Settings::kp, 4);
     json += ",\"ki\":" + String(MetaSense::Settings::ki, 4);
     json += ",\"kpSource\":\"" + String(MetaSense::Settings::usePot3Kp ? "pot3" : "firmware") + "\"";
+    json += ",\"rhOffsetPct\":" + String(MetaSense::Settings::ambientRhOffsetPct, 1);
+    json += ",\"motorModeMaxRpm\":" + String(MetaSense::Settings::motorModeMaxRpm, 0);
     json += ",\"pulsesPerRev\":" + String(MetaSense::Settings::pulsesPerRev, 2);
     json += ",\"pulsesPerRevDrum\":" + String(MetaSense::Settings::pulsesPerRevDrum, 2);
     json += ",\"rpmFilter\":" + String(MetaSense::Settings::filterAlpha, 3);
@@ -169,6 +171,8 @@ bool applyProfilePayload(const String& payload)
         const String kpSource = profile["kpSource"].as<String>();
         MetaSense::Settings::usePot3Kp = (kpSource == "pot3");
     }
+    if (!profile["rhOffsetPct"].isNull()) MetaSense::Settings::ambientRhOffsetPct = profile["rhOffsetPct"].as<float>();
+    if (!profile["motorModeMaxRpm"].isNull()) MetaSense::Settings::motorModeMaxRpm = profile["motorModeMaxRpm"].as<float>();
     if (!profile["tachoCal"].isNull()) MetaSense::Settings::setTachoCal(profile["tachoCal"].as<float>());
     if (!profile["rpmTarget"].isNull()) MetaSense::Settings::setRpmTarget(profile["rpmTarget"].as<float>());
     if (!profile["rpmStart"].isNull()) MetaSense::Settings::setRpmStart(profile["rpmStart"].as<float>());
@@ -268,6 +272,8 @@ void sendSettingsSnapshot()
     json += ",\"kp\":" + String(MetaSense::Settings::kp, 4);
     json += ",\"ki\":" + String(MetaSense::Settings::ki, 4);
     json += ",\"kpSource\":\"" + String(MetaSense::Settings::usePot3Kp ? "pot3" : "firmware") + "\"";
+    json += ",\"rhOffsetPct\":" + String(MetaSense::Settings::ambientRhOffsetPct, 1);
+    json += ",\"motorModeMaxRpm\":" + String(MetaSense::Settings::motorModeMaxRpm, 0);
     json += ",\"pulsesPerRev\":" + String(MetaSense::Settings::pulsesPerRev, 2);
     json += ",\"rpmFilter\":" + String(MetaSense::Settings::filterAlpha, 3);
     json += ",\"mode\":" + String(MetaSense::Settings::inertiaMode ? "\"inertia\"" : "\"brake\"");
@@ -668,6 +674,16 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
                                                     0.0f,
                                                     static_cast<float>(MetaSense::Settings::maxTorque));
             }
+        } else if (key == "rhOffsetPct") {
+            if (fval < -50.0f) {
+                MetaSense::Settings::ambientRhOffsetPct = -50.0f;
+            } else if (fval > 50.0f) {
+                MetaSense::Settings::ambientRhOffsetPct = 50.0f;
+            } else {
+                MetaSense::Settings::ambientRhOffsetPct = fval;
+            }
+        } else if (key == "motorModeMaxRpm") {
+            MetaSense::Settings::motorModeMaxRpm = (fval > 0.0f) ? fval : MetaSense::Settings::motorModeMaxRpm;
         } else if (key == "pulsesPerRev") {
             MetaSense::Settings::pulsesPerRev = (fval > 0.0f) ? fval : MetaSense::Settings::pulsesPerRev;
         } else if (key == "pulsesPerRevDrum") {

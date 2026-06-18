@@ -5,8 +5,7 @@
 #include <math.h>
 #include <Wire.h>
 
-#include <Adafruit_AHTX0.h>
-#include <Adafruit_BMP280.h>
+#include <Adafruit_BME680.h>
 #include <Adafruit_NAU7802.h>
 
 #include "controlTask.h"
@@ -43,7 +42,7 @@ static float drumRpmFilt = 0.0f;
 static float loadKgFilt  = 0.0f;
 static float torqueFilt  = 0.0f;
 static float filteredAdc = 0.0f;
-constexpr uint8_t kLoadRawAverageWindow = 8;
+constexpr uint8_t kLoadRawAverageWindow = 10;
 static float loadRawAverageBuffer[kLoadRawAverageWindow] = {0.0f};
 static uint8_t loadRawAverageCount = 0;
 static uint8_t loadRawAverageIndex = 0;
@@ -65,11 +64,11 @@ static float torqueResidualOffsetNm = 0.0f;
 static TempHAL egtDigital;
 static bool egtDigitalReady = false;
 static String i2cScanSummary = "";
-static Adafruit_AHTX0 ambientAht;
-static Adafruit_BMP280 ambientBmp;
+static Adafruit_BME680 ambientBme;
 static Adafruit_NAU7802 loadCellNau;
-static bool ambientAhtReady = false;
-static bool ambientBmpReady = false;
+static bool ambientBmeReady = false;
+static bool ambientBmeReadPending = false;
+static uint32_t ambientBmeReadReadyMs = 0;
 static bool loadCellNauReady = false;
 static uint32_t lastLoadCellNauRetryMs = 0;
 static float ambientTempC = 20.0f;
@@ -98,13 +97,12 @@ constexpr float EGT_MAX_LIMIT_C = 950.0f;
 constexpr float TORQUE_MIN = -200.0f;
 constexpr float TORQUE_MAX =  200.0f;
 constexpr float RPM_SETPOINT_MAX = RPM_MAX_LIMIT;
-constexpr float RPM_SETPOINT_SAFE_MOTOR = 2000.0f;
-constexpr uint32_t kWebSocketPublishPeriodMs = 20;
+constexpr uint32_t kWebSocketPublishPeriodMs = 50;
 constexpr float kRuntimeKpMin = 0.005f;
 constexpr float kRuntimeKpMax = 0.200f;
 constexpr float kRuntimeKpAlpha = 0.12f;
 constexpr float kRuntimeKpApplyDelta = 0.001f;
-constexpr uint32_t kAmbientSamplePeriodMs = 200;
+constexpr uint32_t kAmbientSamplePeriodMs = 1000;
 constexpr uint32_t kLoadCellNauRetryPeriodMs = 5000;
 constexpr bool kEgtOnlyI2cInitMode = false;
 constexpr bool kNauOnlyI2cInitMode = false;
@@ -316,37 +314,52 @@ void tryInitLoadCellNau()
 
 void updateAmbientInputs(bool forceSample)
 {
+    if (!ambientBmeReady) {
+        return;
+    }
+
     const uint32_t now = millis();
+
+    // Complete any in-flight forced conversion without blocking the loop.
+    if (ambientBmeReadPending) {
+        const bool readyToFinish = forceSample ||
+            (static_cast<int32_t>(now - ambientBmeReadReadyMs) >= 0);
+        if (readyToFinish) {
+            if (ambientBme.endReading()) {
+                const float bmeTemp = ambientBme.temperature;
+                const float bmeHumidity = ambientBme.humidity;
+                const float pressurePa = ambientBme.pressure;
+
+                if (isfinite(bmeTemp) && bmeTemp > -50.0f && bmeTemp < 120.0f) {
+                    ambientTempC = bmeTemp;
+                }
+                if (isfinite(bmeHumidity)) {
+                    float humidityWithOffset = bmeHumidity + MetaSense::Settings::ambientRhOffsetPct;
+                    if (humidityWithOffset < 0.0f) humidityWithOffset = 0.0f;
+                    if (humidityWithOffset > 100.0f) humidityWithOffset = 100.0f;
+                    ambientHumidityPct = humidityWithOffset;
+                }
+                if (isfinite(pressurePa) && pressurePa > 10000.0f && pressurePa < 120000.0f) {
+                    ambientPressureHpa = pressurePa / 100.0f;
+                }
+            }
+            ambientBmeReadPending = false;
+            lastAmbientSampleMs = now;
+        }
+    }
+
+    if (ambientBmeReadPending) {
+        return;
+    }
+
     if (!forceSample && (now - lastAmbientSampleMs) < kAmbientSamplePeriodMs) {
         return;
     }
-    lastAmbientSampleMs = now;
 
-    if (ambientAhtReady) {
-        sensors_event_t humidityEvent;
-        sensors_event_t tempEvent;
-        ambientAht.getEvent(&humidityEvent, &tempEvent);
-
-        if (isfinite(tempEvent.temperature) && tempEvent.temperature > -50.0f && tempEvent.temperature < 120.0f) {
-            ambientTempC = tempEvent.temperature;
-        }
-        if (isfinite(humidityEvent.relative_humidity) && humidityEvent.relative_humidity >= 0.0f && humidityEvent.relative_humidity <= 100.0f) {
-            ambientHumidityPct = humidityEvent.relative_humidity;
-        }
-    }
-
-    if (ambientBmpReady) {
-        const float pressurePa = ambientBmp.readPressure();
-        if (isfinite(pressurePa) && pressurePa > 10000.0f && pressurePa < 120000.0f) {
-            ambientPressureHpa = pressurePa / 100.0f;
-        }
-
-        if (!ambientAhtReady) {
-            const float bmpTemp = ambientBmp.readTemperature();
-            if (isfinite(bmpTemp) && bmpTemp > -50.0f && bmpTemp < 120.0f) {
-                ambientTempC = bmpTemp;
-            }
-        }
+    const uint32_t readyAtMs = ambientBme.beginReading();
+    if (readyAtMs != 0) {
+        ambientBmeReadPending = true;
+        ambientBmeReadReadyMs = readyAtMs;
     }
 }
 
@@ -533,15 +546,6 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         return;
     }
 
-    // Skip this send if any connected client has a full message queue.
-    // Prevents the "Too many messages queued: closing connection" error
-    // that occurs when the browser can't drain the WebSocket fast enough.
-    for (auto& client : wsock.getClients()) {
-        if (client.queueIsFull()) {
-            return;
-        }
-    }
-
     String json;
     json.reserve(512);
 
@@ -600,7 +604,12 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
 
     json += "}";
     json += "}";
-    MetaSense::WebSocketServer::socket().textAll(json);
+    for (auto& client : wsock.getClients()) {
+        if (!client.canSend() || client.queueIsFull()) {
+            continue;
+        }
+        client.text(json);
+    }
 }
 
 void publishTelemetry()
@@ -807,26 +816,24 @@ void begin()
     MetaSense::HardwareOutputStateMachine::begin();
 
     if (kEgtOnlyI2cInitMode || kNauOnlyI2cInitMode) {
-        ambientAhtReady = false;
-        ambientBmpReady = false;
-        Serial.println("[Input] NAU-only I2C mode: skipping AHT/BMP initialization");
-        Serial0.println("[Input] NAU-only I2C mode: skipping AHT/BMP initialization");
+        ambientBmeReady = false;
+        ambientBmeReadPending = false;
+        Serial.println("[Input] NAU-only I2C mode: skipping BME680 initialization");
+        Serial0.println("[Input] NAU-only I2C mode: skipping BME680 initialization");
     } else {
-        ambientAhtReady = ambientAht.begin();
-        ambientBmpReady = ambientBmp.begin(0x76) || ambientBmp.begin(0x77);
-        if (ambientAhtReady) {
-            Serial.println("[Input] Ambient temperature/humidity source ready (AHT)");
-            Serial0.println("[Input] Ambient temperature/humidity source ready (AHT)");
+        ambientBmeReady = ambientBme.begin(0x76) || ambientBme.begin(0x77);
+        ambientBmeReadPending = false;
+        if (ambientBmeReady) {
+            ambientBme.setTemperatureOversampling(BME680_OS_1X);
+            ambientBme.setHumidityOversampling(BME680_OS_1X);
+            ambientBme.setPressureOversampling(BME680_OS_1X);
+            ambientBme.setIIRFilterSize(BME680_FILTER_SIZE_0);
+            ambientBme.setGasHeater(0, 0);
+            Serial.println("[Input] Ambient source ready (BME680)");
+            Serial0.println("[Input] Ambient source ready (BME680)");
         } else {
-            Serial.println("[Input] Ambient temperature/humidity source unavailable");
-            Serial0.println("[Input] Ambient temperature/humidity source unavailable");
-        }
-        if (ambientBmpReady) {
-            Serial.println("[Input] Ambient pressure source ready (BMP)");
-            Serial0.println("[Input] Ambient pressure source ready (BMP)");
-        } else {
-            Serial.println("[Input] Ambient pressure source unavailable");
-            Serial0.println("[Input] Ambient pressure source unavailable");
+            Serial.println("[Input] Ambient source unavailable (BME680)");
+            Serial0.println("[Input] Ambient source unavailable (BME680)");
         }
     }
 
@@ -999,8 +1006,11 @@ void loop()
         tele.rpmTarget = manualRpmTarget;
     }
 
-    if (MetaSense::HardwareOutputStateMachine::isMotorState() && tele.rpmTarget > RPM_SETPOINT_SAFE_MOTOR) {
-        tele.rpmTarget = RPM_SETPOINT_SAFE_MOTOR;
+    const float motorModeCapRpm = (MetaSense::Settings::motorModeMaxRpm > 0.0f)
+        ? MetaSense::Settings::motorModeMaxRpm
+        : RPM_SETPOINT_MAX;
+    if (MetaSense::HardwareOutputStateMachine::isMotorState() && tele.rpmTarget > motorModeCapRpm) {
+        tele.rpmTarget = motorModeCapRpm;
     }
     MetaSense::Settings::setRpmTarget(tele.rpmTarget);
 

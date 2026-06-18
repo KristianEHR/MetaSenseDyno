@@ -12,6 +12,7 @@
 #include <WiFi.h>
 #include <ArduinoOTA.h>
 #include <Wire.h>
+#include <time.h>
 
 #include "globals.h"
 
@@ -34,12 +35,18 @@ constexpr uint32_t kI2cClockHz = 25000;
 constexpr uint16_t kI2cTimeoutMs = 50;
 constexpr uint32_t kControlPeriodMs = 100;
 constexpr uint32_t kModbusPeriodMs = 50;
-constexpr uint32_t kHeartbeatPeriodMs = 5000;
+constexpr uint32_t kHeartbeatPeriodMs = 10000;
 constexpr UBaseType_t kControlTaskPriority = 5;
 constexpr UBaseType_t kNetworkTaskPriority = 3;
 constexpr UBaseType_t kModbusTaskPriority = 1;
 
 bool wifiCredentialsConfigured();
+
+uint32_t heartbeatTimestamp()
+{
+    time_t now = time(nullptr);
+    return (now > 1000000000L) ? (uint32_t)now : (uint32_t)(millis() / 1000);
+}
 
 void scanI2cBus()
 {
@@ -290,13 +297,16 @@ void networkTaskEntry(void* /*parameter*/)
             if (wifiCredentialsConfigured()) {
                 const wl_status_t status = WiFi.status();
                 const String ip = WiFi.localIP().toString();
-                Serial.printf("[HEARTBEAT] ssid=%s, wifi=%d (%s), ip=%s, ota=%s\n",
+                const uint32_t ts = heartbeatTimestamp();
+                Serial.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s\n",
+                              static_cast<unsigned long>(ts),
                               ssid,
                               static_cast<int>(status),
                               wifiStatusToString(status),
                               ip.c_str(),
                               otaStarted ? "ready" : "not-ready");
-                Serial0.printf("[HEARTBEAT] ssid=%s, wifi=%d (%s), ip=%s, ota=%s\n",
+                Serial0.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s\n",
+                               static_cast<unsigned long>(ts),
                                ssid,
                                static_cast<int>(status),
                                wifiStatusToString(status),
