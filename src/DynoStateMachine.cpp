@@ -243,6 +243,11 @@ float lastRunEnergyMJ()
     return lastRunEnergy;
 }
 
+bool isEnergyMeasuring()
+{
+    return measuringMJ;
+}
+
 bool isRunFinished()
 {
     return runFinished;
@@ -330,10 +335,31 @@ void update()
         case State::AUTO_UP_EXP:
         {
             float commanded = rpmRampUp.update();
+            if (commanded > rpmEnd) {
+                commanded = rpmEnd;
+            }
             MetaSense::Settings::setRpmTarget(commanded);
+
+            if (!recording) {
+                startRecording();
+            }
 
             // Update energy accumulator in measurement window
             updateEnergy(rpm, torqueNm);
+
+            // Auto run stop condition: conclude run when end RPM is reached.
+            // This guarantees recording finalization for history persistence.
+            const bool reachedEndRpm = (rpm >= rpmEnd) || (commanded >= (rpmEnd * 0.995f));
+            if (reachedEndRpm) {
+                lastRunEnergy = energyMJ;
+                runFinished   = true;
+                if (recording) {
+                    stopRecording();
+                }
+                autoMode = false;
+                panelAuto = false;
+                state = State::MANUAL;
+            }
             break;
         }
 
@@ -346,6 +372,9 @@ void update()
                 // Sweep finished normally
                 lastRunEnergy = energyMJ;
                 runFinished   = true;
+                if (recording) {
+                    stopRecording();
+                }
                 // End auto-run and return to manual control after rampdown.
                 autoMode = false;
                 panelAuto = false;
@@ -357,6 +386,9 @@ void update()
         case State::AUTO_DONE:
         {
             // Legacy state: immediately fall back to manual.
+            if (recording) {
+                stopRecording();
+            }
             autoMode = false;
             panelAuto = false;
             state = State::MANUAL;

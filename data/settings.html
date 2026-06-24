@@ -228,8 +228,10 @@
       </div>
       <button id="tareButton" onclick="tare()">⚖️ TARE (ZERO)</button>
       <label>Known Weight (kg)</label>
-      <input type="number" id="knownWeight" placeholder="e.g. 5.000" step="0.001">
+      <input type="number" id="knownWeight" value="3.404" placeholder="e.g. 3.404" step="0.001">
       <button id="calibrateButton" onclick="calibrate()">🔧 CALIBRATE</button>
+      <button onclick="startRawCapture(event)">📼 START RAW CAPTURE (20 s)</button>
+      <button onclick="location.href='/captures'">📂 OPEN CAPTURE BROWSER</button>
     </div>
 
     <label>Current Calibration Factor</label>
@@ -357,6 +359,34 @@
       <div class="param-row">
         <input type="number" id="rpmFilter" value="0.50" min="0.1" max="0.9" step="0.05">
         <button onclick="saveSingle('rpmFilter', event)">💾 SAVE</button>
+      </div>
+
+      <label>Load Moving Average Window (N samples)</label>
+      <div class="info">Applies to load-cell raw smoothing before zero/deadband and torque conversion. Lower N = faster response.</div>
+      <div class="param-row">
+        <input type="number" id="loadAvgN" value="5" min="1" max="48" step="1">
+        <button onclick="saveSingle('loadAvgN', event)">💾 SAVE</button>
+      </div>
+
+      <label>Load Stage B Window (N2 samples)</label>
+      <div class="info">Used only when Load Filter Mode is set to B. This is the second MA coefficient/window.</div>
+      <div class="param-row">
+        <input type="number" id="loadAvgN2" value="5" min="1" max="48" step="1">
+        <button onclick="saveSingle('loadAvgN2', event)">💾 SAVE</button>
+      </div>
+
+      <label>Load Filter Mode (A/B compare)</label>
+      <div class="info">
+        <strong>A: Moving Average</strong> (fast, low CPU) using N from Load Moving Average Window.<br>
+        <strong>B: Two-stage Moving Average</strong> (more smoothing, more lag) uses a second MA stage instead of the alpha stage.<br>
+        A keeps the original MA + alpha order.
+      </div>
+      <div class="param-row">
+        <select id="loadFilterMode">
+          <option value="moving_avg">A - Moving Average (fast)</option>
+          <option value="two_stage_ma">B - Two-stage Moving Average (effective)</option>
+        </select>
+        <button onclick="saveSingle('loadFilterMode', event)">💾 SAVE</button>
       </div>
 
       <label>Ambient RH Offset (%)</label>
@@ -627,6 +657,9 @@
             document.getElementById("armCm").value = msg.armCm;
             document.getElementById("pulsesPerRev").value = msg.pulsesPerRev || 1.0;
             document.getElementById("rpmFilter").value = msg.rpmFilter;
+            document.getElementById("loadAvgN").value = msg.loadAvgN !== undefined ? msg.loadAvgN : 5;
+            document.getElementById("loadAvgN2").value = msg.loadAvgN2 !== undefined ? msg.loadAvgN2 : 5;
+            document.getElementById("loadFilterMode").value = msg.loadFilterMode || "moving_avg";
             document.getElementById("rhOffsetPct").value = msg.rhOffsetPct !== undefined ? msg.rhOffsetPct : 0.0;
             document.getElementById("motorModeMaxRpm").value = msg.motorModeMaxRpm !== undefined ? msg.motorModeMaxRpm : 2000;
             document.getElementById("dynoMode").value = msg.mode;
@@ -662,10 +695,30 @@
 
             if (calibratePending) {
               const text = String(msg.msg || "").toLowerCase();
-              if (text.includes("calibration factor updated") || text.includes("factor=")) {
+              const calibrationDone =
+                text.includes("calibration done") ||
+                text.includes("new factor") ||
+                text.includes("calibration factor updated") ||
+                text.includes("factor=");
+
+              const calibrationFailed =
+                text.includes("calibration rejected") ||
+                text.includes("calibration failed") ||
+                text.includes("not enough stable readings") ||
+                text.includes("load not stable enough") ||
+                text.includes("calibration busy") ||
+                text.includes("invalid calibration weight");
+
+              if (calibrationDone) {
                 const factorMatch = String(msg.msg || "").match(/factor\s*=\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
+                const factorMatchAlt = String(msg.msg || "").match(/new factor:\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/i);
                 if (factorMatch && factorMatch[1] !== undefined) {
                   const parsed = Number(factorMatch[1]);
+                  if (Number.isFinite(parsed)) {
+                    document.getElementById("calFactor").value = parsed.toFixed(6);
+                  }
+                } else if (factorMatchAlt && factorMatchAlt[1] !== undefined) {
+                  const parsed = Number(factorMatchAlt[1]);
                   if (Number.isFinite(parsed)) {
                     document.getElementById("calFactor").value = parsed.toFixed(6);
                   }
@@ -673,6 +726,9 @@
                 if (ws && ws.readyState === WebSocket.OPEN) {
                   ws.send("GET_SETTINGS");
                 }
+                calibratePending = false;
+                setCalibrateButtonBusy(false);
+              } else if (calibrationFailed) {
                 calibratePending = false;
                 setCalibrateButtonBusy(false);
               }
@@ -711,17 +767,22 @@
     };
     
     const calibrate = function() {
-      const weight = document.getElementById("knownWeight").value.trim();
+      const knownWeightInput = document.getElementById("knownWeight");
+      let weight = knownWeightInput.value.trim();
       if (!ws || ws.readyState !== WebSocket.OPEN) {
         showToast("Not connected. Cannot calibrate now.");
         return;
       }
 
-      if (weight && parseFloat(weight) > 0) {
+      if (!weight || !(parseFloat(weight) > 0)) {
+        weight = "3.404";
+        knownWeightInput.value = weight;
+      }
+
+      if (parseFloat(weight) > 0) {
         calibratePending = true;
         setCalibrateButtonBusy(true);
         ws.send("CALIBRATE:" + weight);
-        document.getElementById("knownWeight").value = "";
         showToast("Calibration sent with " + weight + "kg, waiting for confirmation...");
 
         setTimeout(() => {
@@ -729,10 +790,24 @@
           calibratePending = false;
           setCalibrateButtonBusy(false);
           showToast("No calibration confirmation received. Check load and retry.");
-        }, 3000);
+        }, 12000);
       } else {
         showToast("Enter valid weight!");
       }
+    };
+
+    const startRawCapture = function(event) {
+      const btn = event ? event.currentTarget : null;
+      if (!requireArmedClick(btn, "rawCapture", "⚠️ CLICK AGAIN TO START CAPTURE")) {
+        return;
+      }
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        showToast("Not connected. Cannot start raw capture now.");
+        return;
+      }
+
+      ws.send("START_RAW_CAPTURE");
+      showToast("Raw capture started for 20 s");
     };
 
     const saveSingle = function(key, event) {

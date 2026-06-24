@@ -2,13 +2,16 @@
 
 #include <Arduino.h>
 #include <ESPAsyncWebServer.h>
+#include <freertos/semphr.h>
 #include <math.h>
+#include <esp_timer.h>
 #include <Wire.h>
 
 #include <Adafruit_BME680.h>
 #include <Adafruit_NAU7802.h>
 
 #include "controlTask.h"
+#include "I2cBusLock.h"
 #include "DynoStateMachine.h"
 #include "Settings.h"
 #include "RunStorage.h"
@@ -42,16 +45,34 @@ static float drumRpmFilt = 0.0f;
 static float loadKgFilt  = 0.0f;
 static float torqueFilt  = 0.0f;
 static float filteredAdc = 0.0f;
-constexpr uint8_t kLoadRawAverageWindow = 10;
-static float loadRawAverageBuffer[kLoadRawAverageWindow] = {0.0f};
+constexpr uint8_t kLoadRawAverageWindowMax = 48;
+constexpr uint8_t kLoadRawAverageWindowDefault = 5;
+constexpr uint8_t kLoadFilterModeMovingAverage = 0;
+constexpr uint8_t kLoadFilterModeTwoStageMovingAverage = 1;
+static float loadRawAverageBuffer[kLoadRawAverageWindowMax] = {0.0f};
 static uint8_t loadRawAverageCount = 0;
 static uint8_t loadRawAverageIndex = 0;
 static float loadRawAverageSum = 0.0f;
-constexpr uint8_t kTachoRawAverageWindow = kLoadRawAverageWindow;
+static uint8_t loadRawAverageActiveWindow = kLoadRawAverageWindowDefault;
+static float loadKgAverageBuffer[kLoadRawAverageWindowMax] = {0.0f};
+static uint8_t loadKgAverageCount = 0;
+static uint8_t loadKgAverageIndex = 0;
+static float loadKgAverageSum = 0.0f;
+static uint8_t loadKgAverageActiveWindow = kLoadRawAverageWindowDefault;
+constexpr uint8_t kTachoRawAverageWindow = kLoadRawAverageWindowDefault;
 static float tachoRawAverageBuffer[kTachoRawAverageWindow] = {0.0f};
 static uint8_t tachoRawAverageCount = 0;
 static uint8_t tachoRawAverageIndex = 0;
 static float tachoRawAverageSum = 0.0f;
+constexpr uint8_t kAuxRawAverageWindow = 8;
+static float massflowRawAverageBuffer[kAuxRawAverageWindow] = {0.0f};
+static uint8_t massflowRawAverageCount = 0;
+static uint8_t massflowRawAverageIndex = 0;
+static float massflowRawAverageSum = 0.0f;
+static float lambdaRawAverageBuffer[kAuxRawAverageWindow] = {0.0f};
+static uint8_t lambdaRawAverageCount = 0;
+static uint8_t lambdaRawAverageIndex = 0;
+static float lambdaRawAverageSum = 0.0f;
 
 // RPM inputs
 static float canRpm   = 0.0f;
@@ -60,17 +81,35 @@ static float tachoCal = 10.0f;   // tachogen calibration factor
 static float zeroOffset = 0.0f;
 static float zeroDeadbandRaw = 0.0f;
 static float calibrationFactor = 0.01f;
-static float torqueResidualOffsetNm = 0.0f;
 static TempHAL egtDigital;
 static bool egtDigitalReady = false;
 static String i2cScanSummary = "";
 static Adafruit_BME680 ambientBme;
 static Adafruit_NAU7802 loadCellNau;
+static SemaphoreHandle_t loadCellMutex = nullptr;
+static TaskHandle_t loadCellSamplerTaskHandle = nullptr;
+static TaskHandle_t calibrationTaskHandle = nullptr;
 static bool ambientBmeReady = false;
 static bool ambientBmeReadPending = false;
 static uint32_t ambientBmeReadReadyMs = 0;
 static bool loadCellNauReady = false;
+static bool loadCellNauLdoConfigured = false;
+static bool loadCellNauInternalCalOk = false;
+static uint8_t loadCellNauInternalCalAttempts = 0;
+static uint16_t loadCellCurrentRateSps = 0;
+static uint8_t loadCellCurrentGainValue = 128;
 static uint32_t lastLoadCellNauRetryMs = 0;
+#if defined(METASENSE_STREAM_DIAGNOSTICS) && (METASENSE_STREAM_DIAGNOSTICS != 0)
+static uint32_t wsSentTotal = 0;
+static uint32_t wsSkipBacklogTotal = 0;
+static uint32_t wsSkipFullTotal = 0;
+static uint32_t wsSkipNoSendTotal = 0;
+#endif
+#if defined(METASENSE_JSON_DELAY_COUNTERS) && (METASENSE_JSON_DELAY_COUNTERS != 0)
+static uint16_t wsJsonLastLen = 0;
+static uint16_t wsJsonMaxLen = 0;
+static uint32_t wsJsonOverReserveTotal = 0;
+#endif
 static float ambientTempC = 20.0f;
 static float ambientHumidityPct = 50.0f;
 static float ambientPressureHpa = 1013.25f;
@@ -97,15 +136,75 @@ constexpr float EGT_MAX_LIMIT_C = 950.0f;
 constexpr float TORQUE_MIN = -200.0f;
 constexpr float TORQUE_MAX =  200.0f;
 constexpr float RPM_SETPOINT_MAX = RPM_MAX_LIMIT;
-constexpr uint32_t kWebSocketPublishPeriodMs = 50;
+// 40 Hz telemetry publish reduces visible UI drag while keeping bandwidth moderate.
+constexpr uint32_t kWebSocketPublishPeriodMs = 50;   // 20 Hz fast telemetry cadence
+constexpr uint32_t kWebSocketSlowPublishPeriodMs = 500; // 2 Hz slow telemetry cadence
+constexpr uint8_t kWebSocketSlowTelemetrySlices = 15;
+#ifndef METASENSE_STREAM_DIAGNOSTICS
+#define METASENSE_STREAM_DIAGNOSTICS 0
+#endif
+// Compile-time facility for JSON delay counter diagnostics (disabled by default for production)
+#ifndef METASENSE_JSON_DELAY_COUNTERS
+#define METASENSE_JSON_DELAY_COUNTERS 0  // Set to 1 to enable JSON size measurements
+#endif
 constexpr float kRuntimeKpMin = 0.005f;
 constexpr float kRuntimeKpMax = 0.200f;
 constexpr float kRuntimeKpAlpha = 0.12f;
 constexpr float kRuntimeKpApplyDelta = 0.001f;
 constexpr uint32_t kAmbientSamplePeriodMs = 1000;
 constexpr uint32_t kLoadCellNauRetryPeriodMs = 5000;
+constexpr uint16_t kMcp9600BootSettleDelayMs = 1000;
+constexpr uint16_t kMcp9600BootRetryDelayMs = 500;
 constexpr bool kEgtOnlyI2cInitMode = false;
 constexpr bool kNauOnlyI2cInitMode = false;
+constexpr float kAuxAnalogFilterAlpha = 0.20f;
+constexpr float kMassflowMaxM3h = 300.0f;
+constexpr NAU7802_Gain kLoadCellDefaultRuntimeGain = NAU7802_GAIN_128;
+constexpr NAU7802_Gain kLoadCellStableGain = NAU7802_GAIN_128;
+constexpr NAU7802_SampleRate kLoadCellDefaultRuntimeRate = NAU7802_RATE_80SPS;
+constexpr NAU7802_SampleRate kLoadCellStableRate = NAU7802_RATE_80SPS;
+constexpr float kLambdaMin = 0.50f;
+constexpr uint8_t kCalibrationSkipFirstSamples = 10;
+constexpr uint32_t kCalibrationSettlingMs = 2000;
+constexpr uint32_t kCalibrationDurationMs = 5000;
+constexpr uint32_t kCalibrationSamplePeriodMs = 50;
+constexpr uint8_t kLoadRawBurstSamples = 4;
+constexpr uint8_t kLoadRawStatsMaxSamples = 96;
+constexpr uint32_t kLoadCellSamplerPeriodMs = 5;
+constexpr uint8_t kLoadCellSamplerWindow = 12;
+constexpr float kLoadCellOutlierMinJumpRaw = 400.0f;
+constexpr float kLoadCellOutlierRelativeJump = 0.25f;
+constexpr float kTareDeadbandMaxRaw = 40.0f;
+constexpr uint8_t kNauRateSwitchMinDiscardSamples = 4;
+constexpr uint8_t kNauRateSwitchMaxDiscardSamples = 12;
+constexpr uint32_t kNauRateSwitchMinSettleMs = 80;
+constexpr uint32_t kNauRateSwitchMaxSettleMs = 900;
+constexpr uint32_t kNauRateSwitchRestartDelayMs = 2;
+constexpr uint16_t kNauLdoRampDelayMs = 250;
+constexpr NAU7802_LDO kLoadCellDefaultLdo = NAU7802_LDO_3V0;
+constexpr uint8_t kNauInitFlushReadings = 10;
+constexpr uint8_t kNauInternalCalMaxAttempts = 3;
+constexpr uint16_t kNauInternalCalRetryDelayMs = 1000;
+
+static volatile bool calibRequestPending = false;
+static volatile bool tareRequestPending = false;
+static volatile bool calibBusy = false;
+static volatile bool loadCellExclusiveSampling = false;
+static volatile uint32_t loadCellSamplerLastUs = 0;
+static volatile uint32_t loadCellSamplerMaxUs = 0;
+static volatile uint32_t loadCellSamplerEmaUs = 0;
+static volatile uint32_t loadCellSamplerLoops = 0;
+static float calibKnownWeightKg = 0.0f;
+static float loadCellSamplerBuffer[kLoadCellSamplerWindow] = {0.0f};
+static uint8_t loadCellSamplerCount = 0;
+static uint8_t loadCellSamplerIndex = 0;
+static float loadCellSamplerSum = 0.0f;
+static float loadCellSamplerAverageRaw = 0.0f;
+static bool loadCellSamplerValid = false;
+static volatile uint64_t lastRawCaptureAppendUs = 0;
+portMUX_TYPE calibMux = portMUX_INITIALIZER_UNLOCKED;
+portMUX_TYPE loadCellSamplerMux = portMUX_INITIALIZER_UNLOCKED;
+constexpr float kLambdaMax = 1.50f;
 
 // helpers
 float lpFilter(float prev, float input, float alpha)
@@ -113,13 +212,257 @@ float lpFilter(float prev, float input, float alpha)
     return prev + alpha * (input - prev);
 }
 
+uint16_t nauSampleRateToSps(NAU7802_SampleRate rate)
+{
+    switch (rate) {
+        case NAU7802_RATE_10SPS:  return 10;
+        case NAU7802_RATE_20SPS:  return 20;
+        case NAU7802_RATE_40SPS:  return 40;
+        case NAU7802_RATE_80SPS:  return 80;
+        case NAU7802_RATE_320SPS: return 320;
+        default: return 0;
+    }
+}
+
+uint8_t nauGainToValue(NAU7802_Gain gain)
+{
+    switch (gain) {
+        case NAU7802_GAIN_1: return 1;
+        case NAU7802_GAIN_2: return 2;
+        case NAU7802_GAIN_4: return 4;
+        case NAU7802_GAIN_8: return 8;
+        case NAU7802_GAIN_16: return 16;
+        case NAU7802_GAIN_32: return 32;
+        case NAU7802_GAIN_64: return 64;
+        case NAU7802_GAIN_128: return 128;
+        default: return 0;
+    }
+}
+
+NAU7802_Gain loadCellGainFromSetting(uint16_t gainValue)
+{
+    switch (gainValue) {
+        case 1: return NAU7802_GAIN_1;
+        case 2: return NAU7802_GAIN_2;
+        case 4: return NAU7802_GAIN_4;
+        case 8: return NAU7802_GAIN_8;
+        case 16: return NAU7802_GAIN_16;
+        case 32: return NAU7802_GAIN_32;
+        case 64: return NAU7802_GAIN_64;
+        case 128: return NAU7802_GAIN_128;
+        default: return kLoadCellDefaultRuntimeGain;
+    }
+}
+
+NAU7802_SampleRate loadCellRateFromSetting(uint16_t rateSps)
+{
+    switch (rateSps) {
+        case 10: return NAU7802_RATE_10SPS;
+        case 20: return NAU7802_RATE_20SPS;
+        case 40: return NAU7802_RATE_40SPS;
+        case 80: return NAU7802_RATE_80SPS;
+        case 320: return NAU7802_RATE_320SPS;
+        default: return kLoadCellDefaultRuntimeRate;
+    }
+}
+
+NAU7802_Gain currentRuntimeLoadCellGain()
+{
+    return loadCellGainFromSetting(MetaSense::Settings::loadCellGain);
+}
+
+NAU7802_SampleRate currentRuntimeLoadCellRate()
+{
+    return loadCellRateFromSetting(MetaSense::Settings::loadCellRateSps);
+}
+
+struct NauTransitionProfile {
+    NAU7802_Gain gain;
+    NAU7802_SampleRate rate;
+    uint32_t settleMs;
+    uint8_t discardSamples;
+};
+
+#define NAU_PROFILE(g, r, s, d) { g, r, s, d }
+constexpr NauTransitionProfile kNauTransitionProfiles[] = {
+    NAU_PROFILE(NAU7802_GAIN_1,   NAU7802_RATE_10SPS,  700, 7),
+    NAU_PROFILE(NAU7802_GAIN_1,   NAU7802_RATE_20SPS,  450, 9),
+    NAU_PROFILE(NAU7802_GAIN_1,   NAU7802_RATE_40SPS,  260, 10),
+    NAU_PROFILE(NAU7802_GAIN_1,   NAU7802_RATE_80SPS,  160, 10),
+    NAU_PROFILE(NAU7802_GAIN_1,   NAU7802_RATE_320SPS, 100, 12),
+    NAU_PROFILE(NAU7802_GAIN_2,   NAU7802_RATE_10SPS,  700, 7),
+    NAU_PROFILE(NAU7802_GAIN_2,   NAU7802_RATE_20SPS,  450, 9),
+    NAU_PROFILE(NAU7802_GAIN_2,   NAU7802_RATE_40SPS,  260, 10),
+    NAU_PROFILE(NAU7802_GAIN_2,   NAU7802_RATE_80SPS,  160, 10),
+    NAU_PROFILE(NAU7802_GAIN_2,   NAU7802_RATE_320SPS, 100, 12),
+    NAU_PROFILE(NAU7802_GAIN_4,   NAU7802_RATE_10SPS,  700, 7),
+    NAU_PROFILE(NAU7802_GAIN_4,   NAU7802_RATE_20SPS,  450, 9),
+    NAU_PROFILE(NAU7802_GAIN_4,   NAU7802_RATE_40SPS,  260, 10),
+    NAU_PROFILE(NAU7802_GAIN_4,   NAU7802_RATE_80SPS,  160, 10),
+    NAU_PROFILE(NAU7802_GAIN_4,   NAU7802_RATE_320SPS, 100, 12),
+    NAU_PROFILE(NAU7802_GAIN_8,   NAU7802_RATE_10SPS,  700, 7),
+    NAU_PROFILE(NAU7802_GAIN_8,   NAU7802_RATE_20SPS,  450, 9),
+    NAU_PROFILE(NAU7802_GAIN_8,   NAU7802_RATE_40SPS,  260, 10),
+    NAU_PROFILE(NAU7802_GAIN_8,   NAU7802_RATE_80SPS,  160, 10),
+    NAU_PROFILE(NAU7802_GAIN_8,   NAU7802_RATE_320SPS, 100, 12),
+    NAU_PROFILE(NAU7802_GAIN_16,  NAU7802_RATE_10SPS,  700, 7),
+    NAU_PROFILE(NAU7802_GAIN_16,  NAU7802_RATE_20SPS,  450, 9),
+    NAU_PROFILE(NAU7802_GAIN_16,  NAU7802_RATE_40SPS,  260, 10),
+    NAU_PROFILE(NAU7802_GAIN_16,  NAU7802_RATE_80SPS,  160, 10),
+    NAU_PROFILE(NAU7802_GAIN_16,  NAU7802_RATE_320SPS, 100, 12),
+    NAU_PROFILE(NAU7802_GAIN_32,  NAU7802_RATE_10SPS,  700, 7),
+    NAU_PROFILE(NAU7802_GAIN_32,  NAU7802_RATE_20SPS,  450, 9),
+    NAU_PROFILE(NAU7802_GAIN_32,  NAU7802_RATE_40SPS,  260, 10),
+    NAU_PROFILE(NAU7802_GAIN_32,  NAU7802_RATE_80SPS,  160, 10),
+    NAU_PROFILE(NAU7802_GAIN_32,  NAU7802_RATE_320SPS, 100, 12),
+    NAU_PROFILE(NAU7802_GAIN_64,  NAU7802_RATE_10SPS,  700, 7),
+    NAU_PROFILE(NAU7802_GAIN_64,  NAU7802_RATE_20SPS,  450, 9),
+    NAU_PROFILE(NAU7802_GAIN_64,  NAU7802_RATE_40SPS,  260, 10),
+    NAU_PROFILE(NAU7802_GAIN_64,  NAU7802_RATE_80SPS,  160, 10),
+    NAU_PROFILE(NAU7802_GAIN_64,  NAU7802_RATE_320SPS, 100, 12),
+    NAU_PROFILE(NAU7802_GAIN_128, NAU7802_RATE_10SPS,  700, 7),
+    NAU_PROFILE(NAU7802_GAIN_128, NAU7802_RATE_20SPS,  450, 9),
+    NAU_PROFILE(NAU7802_GAIN_128, NAU7802_RATE_40SPS,  260, 10),
+    NAU_PROFILE(NAU7802_GAIN_128, NAU7802_RATE_80SPS,  160, 10),
+    NAU_PROFILE(NAU7802_GAIN_128, NAU7802_RATE_320SPS, 100, 12),
+};
+#undef NAU_PROFILE
+
+const NauTransitionProfile* findNauTransitionProfile(NAU7802_Gain gain, NAU7802_SampleRate rate)
+{
+    for (const NauTransitionProfile& profile : kNauTransitionProfiles) {
+        if (profile.gain == gain && profile.rate == rate) {
+            return &profile;
+        }
+    }
+    return nullptr;
+}
+
+void resetLoadCellSampler(float seed)
+{
+    portENTER_CRITICAL(&loadCellSamplerMux);
+    loadCellSamplerCount = 0;
+    loadCellSamplerIndex = 0;
+    loadCellSamplerSum = 0.0f;
+    loadCellSamplerAverageRaw = seed;
+    const bool seedLooksReal = isfinite(seed) && (fabsf(seed) > kLoadCellOutlierMinJumpRaw);
+    loadCellSamplerValid = seedLooksReal;
+
+    for (uint8_t i = 0; i < kLoadCellSamplerWindow; ++i) {
+        loadCellSamplerBuffer[i] = 0.0f;
+    }
+
+    if (seedLooksReal) {
+        loadCellSamplerBuffer[0] = seed;
+        loadCellSamplerSum = seed;
+        loadCellSamplerCount = 1;
+        loadCellSamplerIndex = 1;
+    }
+    portEXIT_CRITICAL(&loadCellSamplerMux);
+}
+
+void pushLoadCellSamplerRaw(float raw)
+{
+    if (!isfinite(raw)) {
+        return;
+    }
+
+    // Suppress obvious conversion glitches before they contaminate the rolling
+    // baseline, but do not block legitimate torque/load step changes.
+    if (loadCellSamplerValid && loadCellSamplerCount >= 8) {
+        portENTER_CRITICAL(&loadCellSamplerMux);
+        const float baseline = loadCellSamplerAverageRaw;
+        const uint8_t count = loadCellSamplerCount;
+        portEXIT_CRITICAL(&loadCellSamplerMux);
+        const float allowedJump = max(kLoadCellOutlierMinJumpRaw,
+                                      fabsf(baseline) * kLoadCellOutlierRelativeJump);
+        const float jump = fabsf(raw - baseline);
+        const bool suspiciousZero = (raw == 0.0f && fabsf(baseline) > 100.0f);
+        const bool notEnoughHistory = count < 8;
+        if (!notEnoughHistory && suspiciousZero) {
+            return;
+        }
+
+        if (!notEnoughHistory && jump > allowedJump) {
+            const float direction = (raw >= baseline) ? 1.0f : -1.0f;
+            raw = baseline + direction * allowedJump;
+        }
+    }
+
+    portENTER_CRITICAL(&loadCellSamplerMux);
+    if (loadCellSamplerCount < kLoadCellSamplerWindow) {
+        loadCellSamplerBuffer[loadCellSamplerIndex] = raw;
+        loadCellSamplerSum += raw;
+        ++loadCellSamplerCount;
+    } else {
+        loadCellSamplerSum -= loadCellSamplerBuffer[loadCellSamplerIndex];
+        loadCellSamplerBuffer[loadCellSamplerIndex] = raw;
+        loadCellSamplerSum += raw;
+    }
+
+    ++loadCellSamplerIndex;
+    if (loadCellSamplerIndex >= kLoadCellSamplerWindow) {
+        loadCellSamplerIndex = 0;
+    }
+
+    loadCellSamplerAverageRaw = loadCellSamplerSum / static_cast<float>(loadCellSamplerCount);
+    loadCellSamplerValid = true;
+    portEXIT_CRITICAL(&loadCellSamplerMux);
+}
+
+float getLoadCellSamplerAverageRaw()
+{
+    portENTER_CRITICAL(&loadCellSamplerMux);
+    const bool valid = loadCellSamplerValid;
+    const float avg = loadCellSamplerAverageRaw;
+    portEXIT_CRITICAL(&loadCellSamplerMux);
+
+    return valid ? avg : filteredAdc;
+}
+
+uint8_t getConfiguredLoadRawAverageWindow()
+{
+    const float configured = MetaSense::Settings::loadAvgN;
+    if (!isfinite(configured)) {
+        return kLoadRawAverageWindowDefault;
+    }
+
+    const long rounded = lroundf(configured);
+    if (rounded < 1) {
+        return 1;
+    }
+    if (rounded > kLoadRawAverageWindowMax) {
+        return kLoadRawAverageWindowMax;
+    }
+    return static_cast<uint8_t>(rounded);
+}
+
+uint8_t getConfiguredLoadKgAverageWindow()
+{
+    const float configured = MetaSense::Settings::loadAvgN2;
+    if (!isfinite(configured)) {
+        return kLoadRawAverageWindowDefault;
+    }
+
+    const long rounded = lroundf(configured);
+    if (rounded < 1) {
+        return 1;
+    }
+    if (rounded > kLoadRawAverageWindowMax) {
+        return kLoadRawAverageWindowMax;
+    }
+    return static_cast<uint8_t>(rounded);
+}
+
 void resetLoadRawAverage(float seed)
 {
+    const uint8_t activeWindow = getConfiguredLoadRawAverageWindow();
+    loadRawAverageActiveWindow = activeWindow;
     loadRawAverageCount = 0;
     loadRawAverageIndex = 0;
     loadRawAverageSum = 0.0f;
 
-    for (uint8_t i = 0; i < kLoadRawAverageWindow; ++i) {
+    for (uint8_t i = 0; i < kLoadRawAverageWindowMax; ++i) {
         loadRawAverageBuffer[i] = 0.0f;
     }
 
@@ -127,17 +470,68 @@ void resetLoadRawAverage(float seed)
         loadRawAverageBuffer[0] = seed;
         loadRawAverageSum = seed;
         loadRawAverageCount = 1;
-        loadRawAverageIndex = 1;
+        loadRawAverageIndex = (activeWindow > 1) ? 1 : 0;
     }
 }
 
-float applyLoadRawAverage(float sample)
+void resetLoadKgAverage(float seed)
+{
+    const uint8_t activeWindow = getConfiguredLoadKgAverageWindow();
+    loadKgAverageActiveWindow = activeWindow;
+    loadKgAverageCount = 0;
+    loadKgAverageIndex = 0;
+    loadKgAverageSum = 0.0f;
+    for (uint8_t i = 0; i < kLoadRawAverageWindowMax; ++i) {
+        loadKgAverageBuffer[i] = 0.0f;
+    }
+    if (isfinite(seed)) {
+        loadKgAverageBuffer[0] = seed;
+        loadKgAverageSum = seed;
+        loadKgAverageCount = 1;
+        loadKgAverageIndex = (activeWindow > 1) ? 1 : 0;
+    }
+}
+
+void sortSmallFloatArray(float* values, uint8_t count)
+{
+    for (uint8_t i = 1; i < count; ++i) {
+        const float key = values[i];
+        int8_t j = static_cast<int8_t>(i) - 1;
+        while (j >= 0 && values[j] > key) {
+            values[j + 1] = values[j];
+            --j;
+        }
+        values[j + 1] = key;
+    }
+}
+
+float medianOfArray(float* values, uint8_t count)
+{
+    if (count == 0) {
+        return 0.0f;
+    }
+    sortSmallFloatArray(values, count);
+    const uint8_t mid = count / 2;
+    if ((count & 1U) == 0U) {
+        return 0.5f * (values[mid - 1] + values[mid]);
+    }
+    return values[mid];
+}
+
+float applyLoadRawMovingAverage(float sample)
 {
     if (!isfinite(sample)) {
         return sample;
     }
 
-    if (loadRawAverageCount < kLoadRawAverageWindow) {
+    const uint8_t configuredWindow = getConfiguredLoadRawAverageWindow();
+    if (configuredWindow != loadRawAverageActiveWindow) {
+        resetLoadRawAverage(sample);
+    }
+
+    const uint8_t activeWindow = loadRawAverageActiveWindow;
+
+    if (loadRawAverageCount < activeWindow) {
         loadRawAverageBuffer[loadRawAverageIndex] = sample;
         loadRawAverageSum += sample;
         ++loadRawAverageCount;
@@ -148,11 +542,47 @@ float applyLoadRawAverage(float sample)
     }
 
     ++loadRawAverageIndex;
-    if (loadRawAverageIndex >= kLoadRawAverageWindow) {
+    if (loadRawAverageIndex >= activeWindow) {
         loadRawAverageIndex = 0;
     }
 
     return loadRawAverageSum / static_cast<float>(loadRawAverageCount);
+}
+
+float applyLoadKgMovingAverage(float sample)
+{
+    if (!isfinite(sample)) {
+        return sample;
+    }
+
+    const uint8_t configuredWindow = getConfiguredLoadKgAverageWindow();
+    if (configuredWindow != loadKgAverageActiveWindow) {
+        resetLoadKgAverage(sample);
+    }
+
+    const uint8_t activeWindow = loadKgAverageActiveWindow;
+
+    if (loadKgAverageCount < activeWindow) {
+        loadKgAverageBuffer[loadKgAverageIndex] = sample;
+        loadKgAverageSum += sample;
+        ++loadKgAverageCount;
+    } else {
+        loadKgAverageSum -= loadKgAverageBuffer[loadKgAverageIndex];
+        loadKgAverageBuffer[loadKgAverageIndex] = sample;
+        loadKgAverageSum += sample;
+    }
+
+    ++loadKgAverageIndex;
+    if (loadKgAverageIndex >= activeWindow) {
+        loadKgAverageIndex = 0;
+    }
+
+    return loadKgAverageSum / static_cast<float>(loadKgAverageCount);
+}
+
+float applyLoadRawAverage(float sample)
+{
+    return applyLoadRawMovingAverage(sample);
 }
 
 void resetTachoRawAverage(float seed)
@@ -197,13 +627,98 @@ float applyTachoRawAverage(float sample)
     return tachoRawAverageSum / static_cast<float>(tachoRawAverageCount);
 }
 
+void resetMassflowRawAverage(float seed)
+{
+    massflowRawAverageCount = 0;
+    massflowRawAverageIndex = 0;
+    massflowRawAverageSum = 0.0f;
+
+    for (uint8_t i = 0; i < kAuxRawAverageWindow; ++i) {
+        massflowRawAverageBuffer[i] = 0.0f;
+    }
+
+    if (isfinite(seed)) {
+        massflowRawAverageBuffer[0] = seed;
+        massflowRawAverageSum = seed;
+        massflowRawAverageCount = 1;
+        massflowRawAverageIndex = 1;
+    }
+}
+
+float applyMassflowRawAverage(float sample)
+{
+    if (!isfinite(sample)) {
+        return sample;
+    }
+
+    if (massflowRawAverageCount < kAuxRawAverageWindow) {
+        massflowRawAverageBuffer[massflowRawAverageIndex] = sample;
+        massflowRawAverageSum += sample;
+        ++massflowRawAverageCount;
+    } else {
+        massflowRawAverageSum -= massflowRawAverageBuffer[massflowRawAverageIndex];
+        massflowRawAverageBuffer[massflowRawAverageIndex] = sample;
+        massflowRawAverageSum += sample;
+    }
+
+    ++massflowRawAverageIndex;
+    if (massflowRawAverageIndex >= kAuxRawAverageWindow) {
+        massflowRawAverageIndex = 0;
+    }
+
+    return massflowRawAverageSum / static_cast<float>(massflowRawAverageCount);
+}
+
+void resetLambdaRawAverage(float seed)
+{
+    lambdaRawAverageCount = 0;
+    lambdaRawAverageIndex = 0;
+    lambdaRawAverageSum = 0.0f;
+
+    for (uint8_t i = 0; i < kAuxRawAverageWindow; ++i) {
+        lambdaRawAverageBuffer[i] = 0.0f;
+    }
+
+    if (isfinite(seed)) {
+        lambdaRawAverageBuffer[0] = seed;
+        lambdaRawAverageSum = seed;
+        lambdaRawAverageCount = 1;
+        lambdaRawAverageIndex = 1;
+    }
+}
+
+float applyLambdaRawAverage(float sample)
+{
+    if (!isfinite(sample)) {
+        return sample;
+    }
+
+    if (lambdaRawAverageCount < kAuxRawAverageWindow) {
+        lambdaRawAverageBuffer[lambdaRawAverageIndex] = sample;
+        lambdaRawAverageSum += sample;
+        ++lambdaRawAverageCount;
+    } else {
+        lambdaRawAverageSum -= lambdaRawAverageBuffer[lambdaRawAverageIndex];
+        lambdaRawAverageBuffer[lambdaRawAverageIndex] = sample;
+        lambdaRawAverageSum += sample;
+    }
+
+    ++lambdaRawAverageIndex;
+    if (lambdaRawAverageIndex >= kAuxRawAverageWindow) {
+        lambdaRawAverageIndex = 0;
+    }
+
+    return lambdaRawAverageSum / static_cast<float>(lambdaRawAverageCount);
+}
+
 // ESP32-S3 ADC map provided for this hardware revision.
 constexpr uint8_t kRpmSetpointPin = 1; // ADC1_CH0
 constexpr uint8_t kThrottlePotPin = 2; // ADC1_CH1
 constexpr uint8_t kTachoPin = 3;       // ADC1_CH2
 constexpr uint8_t kKpPotPin = 6;       // ADC1_CH5 (pot3 – runtime Kp, moved from GPIO4 to free CAN TX)
+constexpr uint8_t kMassflowPin = 5;    // ADC1_CH4
+constexpr uint8_t kLambdaPin = 7;      // ADC1_CH6
 constexpr uint8_t kLoadCellPin = 32;   // Load-cell analog input
-// ADC1_CH4 (GPIO 5) is available for future use
 // Drum RPM is derived from tachogen × (1/virtGearRatio)
 
 static float kpPotFilteredAdc = -1.0f;
@@ -245,29 +760,283 @@ float readDrumRpm()
 float readLoadKg()
 {
     if (loadCellNauReady) {
-        if (loadCellNau.available()) {
-            // NAU7802 returns raw signed ADC counts; scaling is applied later
-            // via zero offset + calibration factor in the telemetry path.
-            return static_cast<float>(loadCellNau.read());
-        }
-        // Keep returning last filtered RAW value if no fresh conversion is ready.
-        return filteredAdc;
+        return getLoadCellSamplerAverageRaw();
     }
 
     // Backward-compatible fallback for boards wired without NAU7802.
     return readAdcSafe(kLoadCellPin) * 0.01f;
 }
 
-bool sampleLoadRawStats(float& outAverageRaw, float& outMaxAbsDeviation, uint16_t timeoutMs = 220, uint8_t maxSamples = 24)
+uint16_t getLoadCellSampleRateSpsLocal()
 {
-    float samples[24];
-    uint8_t count = 0;
+    return loadCellCurrentRateSps;
+}
+
+bool readDirectLoadRawSample(float& outRaw, uint16_t waitMs = 0)
+{
     const uint32_t start = millis();
 
-    while ((millis() - start) < timeoutMs && count < maxSamples) {
-        const float raw = readLoadKg();
-        if (isfinite(raw)) {
-            samples[count++] = raw;
+    while (true) {
+        if (loadCellNauReady) {
+            if (loadCellMutex != nullptr) {
+                if (xSemaphoreTake(loadCellMutex, pdMS_TO_TICKS(2)) == pdTRUE) {
+                    const bool i2cLocked = MetaSense::I2cBus::take(pdMS_TO_TICKS(2));
+                    const bool hasSample = loadCellNau.available();
+                    if (hasSample) {
+                        outRaw = static_cast<float>(loadCellNau.read());
+                    }
+                    if (i2cLocked) {
+                        MetaSense::I2cBus::give();
+                    }
+                    xSemaphoreGive(loadCellMutex);
+                    if (hasSample) {
+                        return isfinite(outRaw);
+                    }
+                }
+            } else if (loadCellNau.available()) {
+                outRaw = static_cast<float>(loadCellNau.read());
+                return isfinite(outRaw);
+            }
+        } else {
+            outRaw = readAdcSafe(kLoadCellPin);
+            return isfinite(outRaw);
+        }
+
+        if (waitMs == 0 || (millis() - start) >= waitMs) {
+            return false;
+        }
+
+        delay(2);
+    }
+}
+
+bool readAveragedDirectLoadRawSample(float& outRaw,
+                                     uint8_t burstSamples = kLoadRawBurstSamples,
+                                     uint16_t perSampleWaitMs = 20)
+{
+    float sum = 0.0f;
+    uint8_t count = 0;
+
+    for (uint8_t i = 0; i < burstSamples; ++i) {
+        float raw = 0.0f;
+        if (!readDirectLoadRawSample(raw, perSampleWaitMs)) {
+            continue;
+        }
+        if (!isfinite(raw)) {
+            continue;
+        }
+        sum += raw;
+        count++;
+    }
+
+    if (count == 0) {
+        return false;
+    }
+
+    outRaw = sum / static_cast<float>(count);
+    return true;
+}
+
+bool applyLoadCellNauProfile(NAU7802_Gain gain, NAU7802_SampleRate rate, const char* reason)
+{
+    if (!loadCellNauReady) {
+        return false;
+    }
+
+    const uint16_t targetSps = nauSampleRateToSps(rate);
+    const uint8_t targetGain = nauGainToValue(gain);
+    if (targetSps == 0) {
+        return false;
+    }
+    if (targetGain == 0) {
+        return false;
+    }
+
+    const NauTransitionProfile* profile = findNauTransitionProfile(gain, rate);
+
+    if (loadCellMutex != nullptr) {
+        if (xSemaphoreTake(loadCellMutex, pdMS_TO_TICKS(30)) != pdTRUE) {
+            return false;
+        }
+    }
+
+    const bool i2cLocked = MetaSense::I2cBus::take(pdMS_TO_TICKS(30));
+
+    loadCellNau.setGain(gain);
+    bool rateBitsOk = false;
+    bool gainBitsOk = false;
+    uint8_t discarded = 0;
+
+    bool ctrl1Ok = false;
+    const uint8_t ctrl1 = loadCellNau.readRegister(NAU7802_CTRL1, &ctrl1Ok);
+    if (ctrl1Ok) {
+        gainBitsOk = ((ctrl1 & 0x07) == (static_cast<uint8_t>(gain) & 0x07));
+    }
+
+    loadCellNau.setRate(rate);
+
+    bool ctrl2Ok = false;
+    const uint8_t ctrl2 = loadCellNau.readRegister(NAU7802_CTRL2, &ctrl2Ok);
+    if (ctrl2Ok) {
+        const uint8_t appliedRateBits = static_cast<uint8_t>((ctrl2 >> 4) & 0x07);
+        rateBitsOk = (appliedRateBits == (static_cast<uint8_t>(rate) & 0x07));
+    }
+
+    // Restart the conversion cycle after CRS changes so the digital path
+    // is synchronized to the new decimation settings.
+    bool puOk = false;
+    const uint8_t puCtrl = loadCellNau.readRegister(NAU7802_PU_CTRL, &puOk);
+    if (puOk) {
+        const uint8_t puNoCs = static_cast<uint8_t>(puCtrl & ~NAU7802_PU_CTRL_CS);
+        (void)loadCellNau.writeRegister(NAU7802_PU_CTRL, puNoCs);
+        delay(kNauRateSwitchRestartDelayMs);
+        (void)loadCellNau.writeRegister(NAU7802_PU_CTRL, static_cast<uint8_t>(puNoCs | NAU7802_PU_CTRL_CS));
+    }
+
+    const uint32_t settleMs = (profile != nullptr)
+        ? profile->settleMs
+        : min<uint32_t>(
+            kNauRateSwitchMaxSettleMs,
+            max<uint32_t>(kNauRateSwitchMinSettleMs, (3000UL + targetSps - 1) / targetSps));
+    const uint8_t targetDiscardSamples = (profile != nullptr)
+        ? profile->discardSamples
+        : min<uint8_t>(
+            kNauRateSwitchMaxDiscardSamples,
+            max<uint8_t>(kNauRateSwitchMinDiscardSamples,
+                static_cast<uint8_t>((settleMs * targetSps + 999UL) / 1000UL)));
+    const uint32_t settleDeadline = millis() + settleMs;
+    while (discarded < targetDiscardSamples && static_cast<int32_t>(settleDeadline - millis()) > 0) {
+        if (loadCellNau.available()) {
+            (void)loadCellNau.read();
+            ++discarded;
+        } else {
+            delay(1);
+        }
+    }
+
+    if (loadCellMutex != nullptr) {
+        xSemaphoreGive(loadCellMutex);
+    }
+    if (i2cLocked) {
+        MetaSense::I2cBus::give();
+    }
+
+    loadCellCurrentRateSps = targetSps;
+    loadCellCurrentGainValue = targetGain;
+
+    Serial.printf("[Input] NAU gain x%u rate %u SPS (%s), ctrl1_ok=%d ctrl2_ok=%d discard=%u/%u settle=%lums entry=%d\n",
+                  static_cast<unsigned>(targetGain),
+                  static_cast<unsigned>(targetSps),
+                  reason != nullptr ? reason : "n/a",
+                  gainBitsOk ? 1 : 0,
+                  rateBitsOk ? 1 : 0,
+                  static_cast<unsigned>(discarded),
+                  static_cast<unsigned>(targetDiscardSamples),
+                  static_cast<unsigned long>(settleMs),
+                  profile != nullptr ? 1 : 0);
+
+    return gainBitsOk && rateBitsOk;
+}
+
+void sortFloatArray(float* values, uint8_t count)
+{
+    for (uint8_t i = 1; i < count; ++i) {
+        const float key = values[i];
+        int8_t j = static_cast<int8_t>(i) - 1;
+        while (j >= 0 && values[j] > key) {
+            values[j + 1] = values[j];
+            --j;
+        }
+        values[j + 1] = key;
+    }
+}
+
+bool computeTrimmedStats(const float* samples,
+                         uint8_t count,
+                         float& outAverage,
+                         float& outMaxAbsDeviation)
+{
+    if (count == 0) {
+        return false;
+    }
+
+    float sorted[96];
+    if (count > sizeof(sorted) / sizeof(sorted[0])) {
+        return false;
+    }
+
+    for (uint8_t i = 0; i < count; ++i) {
+        sorted[i] = samples[i];
+    }
+
+    sortFloatArray(sorted, count);
+
+    const uint8_t trimEachSide = (count >= 10) ? max<uint8_t>(1, count / 10) : 0;
+    const uint8_t startIndex = trimEachSide;
+    const uint8_t endIndex = count - trimEachSide;
+    if (startIndex >= endIndex) {
+        return false;
+    }
+
+    float sum = 0.0f;
+    uint8_t usedCount = 0;
+    for (uint8_t i = startIndex; i < endIndex; ++i) {
+        sum += sorted[i];
+        usedCount++;
+    }
+    if (usedCount == 0) {
+        return false;
+    }
+
+    outAverage = sum / static_cast<float>(usedCount);
+
+    float maxDev = 0.0f;
+    for (uint8_t i = startIndex; i < endIndex; ++i) {
+        const float dev = fabsf(sorted[i] - outAverage);
+        if (dev > maxDev) {
+            maxDev = dev;
+        }
+    }
+    outMaxAbsDeviation = maxDev;
+    return true;
+}
+
+bool getLoadCellSamplerStats(float& outAverageRaw, float& outMaxAbsDeviation)
+{
+    float samples[kLoadCellSamplerWindow];
+    uint8_t count = 0;
+
+    portENTER_CRITICAL(&loadCellSamplerMux);
+    count = loadCellSamplerCount;
+    for (uint8_t i = 0; i < count; ++i) {
+        samples[i] = loadCellSamplerBuffer[i];
+    }
+    portEXIT_CRITICAL(&loadCellSamplerMux);
+
+    if (count == 0) {
+        return false;
+    }
+
+    return computeTrimmedStats(samples, count, outAverageRaw, outMaxAbsDeviation);
+}
+
+bool sampleLoadRawStats(float& outAverageRaw, float& outMaxAbsDeviation, uint16_t timeoutMs = 220, uint8_t maxSamples = 24)
+{
+    float samples[kLoadRawStatsMaxSamples];
+    uint8_t count = 0;
+    const uint8_t targetSamples = min<uint8_t>(maxSamples, kLoadRawStatsMaxSamples);
+    const uint32_t start = millis();
+
+    float seedRaw = getLoadCellSamplerAverageRaw();
+    if (!isfinite(seedRaw)) {
+        seedRaw = filteredAdc;
+    }
+    resetLoadRawAverage(seedRaw);
+
+    while ((millis() - start) < timeoutMs && count < targetSamples) {
+        float raw = 0.0f;
+        if (readAveragedDirectLoadRawSample(raw, kLoadRawBurstSamples, 12) && isfinite(raw)) {
+            samples[count++] = applyLoadRawAverage(raw);
         }
         delay(5);
     }
@@ -276,22 +1045,48 @@ bool sampleLoadRawStats(float& outAverageRaw, float& outMaxAbsDeviation, uint16_
         return false;
     }
 
-    float sum = 0.0f;
-    for (uint8_t i = 0; i < count; ++i) {
-        sum += samples[i];
-    }
-    outAverageRaw = sum / static_cast<float>(count);
+    return computeTrimmedStats(samples, count, outAverageRaw, outMaxAbsDeviation);
+}
 
-    float maxDev = 0.0f;
-    for (uint8_t i = 0; i < count; ++i) {
-        const float dev = fabsf(samples[i] - outAverageRaw);
-        if (dev > maxDev) {
-            maxDev = dev;
+void loadCellSamplerTask(void* /*pvParameters*/)
+{
+    for (;;) {
+        const uint32_t startedUs = micros();
+        if (!loadCellExclusiveSampling) {
+            if (loadCellNauReady) {
+                float rawSamples[8];
+                uint8_t rawCount = 0;
+
+                if (loadCellMutex != nullptr && xSemaphoreTake(loadCellMutex, pdMS_TO_TICKS(2)) == pdTRUE) {
+                    while (loadCellNau.available() && rawCount < 8) {
+                        rawSamples[rawCount++] = static_cast<float>(loadCellNau.read());
+                    }
+                    xSemaphoreGive(loadCellMutex);
+                }
+
+                for (uint8_t i = 0; i < rawCount; ++i) {
+                    pushLoadCellSamplerRaw(rawSamples[i]);
+                }
+            } else {
+                const float raw = readAdcSafe(kLoadCellPin) * 0.01f;
+                pushLoadCellSamplerRaw(raw);
+            }
         }
-    }
-    outMaxAbsDeviation = maxDev;
 
-    return true;
+        const uint32_t elapsedUs = micros() - startedUs;
+        loadCellSamplerLastUs = elapsedUs;
+        if (elapsedUs > loadCellSamplerMaxUs) {
+            loadCellSamplerMaxUs = elapsedUs;
+        }
+        if (loadCellSamplerEmaUs == 0) {
+            loadCellSamplerEmaUs = elapsedUs;
+        } else {
+            loadCellSamplerEmaUs = (loadCellSamplerEmaUs * 7U + elapsedUs) / 8U;
+        }
+        ++loadCellSamplerLoops;
+
+        vTaskDelay(pdMS_TO_TICKS(kLoadCellSamplerPeriodMs));
+    }
 }
 
 void tryInitLoadCellNau()
@@ -300,16 +1095,85 @@ void tryInitLoadCellNau()
         return;
     }
 
-    loadCellNauReady = loadCellNau.begin(&Wire);
+    const bool i2cLocked = MetaSense::I2cBus::take(pdMS_TO_TICKS(100));
+    loadCellNauReady = i2cLocked && loadCellNau.begin(&Wire);
+    if (i2cLocked) {
+        MetaSense::I2cBus::give();
+    }
     if (loadCellNauReady) {
-        loadCellNau.setGain(NAU7802_GAIN_128);
-        loadCellNau.setRate(NAU7802_RATE_80SPS);
-        Serial.println("[Input] Load-cell ADC source ready (NAU7802 @ 0x2A)");
-        Serial0.println("[Input] Load-cell ADC source ready (NAU7802 @ 0x2A)");
+        loadCellNauLdoConfigured = false;
+        loadCellNauInternalCalOk = false;
+        loadCellNauInternalCalAttempts = 0;
+        if (!loadCellNau.resetAndPowerUp()) {
+            Serial.println("[Input] Warning: NAU explicit reset/power-up after begin failed");
+        }
+
+        const bool ldoConfigured = loadCellNau.setLDO(kLoadCellDefaultLdo);
+        loadCellNauLdoConfigured = ldoConfigured;
+        if (!ldoConfigured) {
+            Serial.println("[Input] Warning: NAU internal LDO configuration failed");
+        } else {
+            delay(kNauLdoRampDelayMs);
+        }
+
+        if (!applyLoadCellNauProfile(NAU7802_GAIN_128, NAU7802_RATE_80SPS, "init_fixed")) {
+            Serial.println("[Input] Warning: NAU fixed gain/rate verification failed during init");
+        }
+
+        // Flush first conversions after startup/config change before AFE calibration.
+        for (uint8_t i = 0; i < kNauInitFlushReadings; ++i) {
+            uint32_t waitStart = millis();
+            while (!loadCellNau.available() && (millis() - waitStart) < 50U) {
+                delay(1);
+            }
+            if (loadCellNau.available()) {
+                (void)loadCellNau.read();
+            }
+        }
+
+        bool internalCalOk = false;
+        for (uint8_t attempt = 1; attempt <= kNauInternalCalMaxAttempts; ++attempt) {
+            loadCellNauInternalCalAttempts = attempt;
+            internalCalOk = loadCellNau.calibrate(NAU7802_CALMOD_INTERNAL, 1200);
+            if (internalCalOk) {
+                break;
+            }
+            Serial.printf("[Input] NAU internal offset calibration failed (attempt %u/%u)\n",
+                          static_cast<unsigned>(attempt),
+                          static_cast<unsigned>(kNauInternalCalMaxAttempts));
+            if (attempt < kNauInternalCalMaxAttempts) {
+                delay(kNauInternalCalRetryDelayMs);
+            }
+        }
+        loadCellNauInternalCalOk = internalCalOk;
+        if (!internalCalOk) {
+            Serial.println("[Input] Warning: NAU internal AFE calibration failed");
+        }
+
+        Serial.printf("[Input] Load-cell ADC source ready (NAU7802 @ 0x2A, ldo=%d, cal=%d)\n",
+                      ldoConfigured ? 1 : 0,
+                      internalCalOk ? 1 : 0);
+        Serial0.printf("[Input] Load-cell ADC source ready (NAU7802 @ 0x2A, ldo=%d, cal=%d)\n",
+                       ldoConfigured ? 1 : 0,
+                       internalCalOk ? 1 : 0);
     } else {
         Serial.println("[Input] Load-cell ADC source unavailable (NAU7802), using GPIO32 ADC fallback");
         Serial0.println("[Input] Load-cell ADC source unavailable (NAU7802), using GPIO32 ADC fallback");
     }
+}
+
+void setLoadCellStableSampling(bool enable)
+{
+    (void)enable;
+    if (!loadCellNauReady) {
+        return;
+    }
+
+    float seedRaw = getLoadCellSamplerAverageRaw();
+    if (!isfinite(seedRaw)) {
+        seedRaw = filteredAdc;
+    }
+    resetLoadCellSampler(seedRaw);
 }
 
 void updateAmbientInputs(bool forceSample)
@@ -414,16 +1278,19 @@ float readETorque()     { return 0.0f; }
 void updateI2cScanSummary()
 {
     String summary;
-    for (uint8_t addr = 0x08; addr <= 0x77; ++addr) {
-        Wire.beginTransmission(addr);
-        if (Wire.endTransmission() == 0) {
-            if (!summary.isEmpty()) {
-                summary += ",";
+    if (MetaSense::I2cBus::take(pdMS_TO_TICKS(50))) {
+        for (uint8_t addr = 0x08; addr <= 0x77; ++addr) {
+            Wire.beginTransmission(addr);
+            if (Wire.endTransmission() == 0) {
+                if (!summary.isEmpty()) {
+                    summary += ",";
+                }
+                char buf[6];
+                snprintf(buf, sizeof(buf), "0x%02X", addr);
+                summary += buf;
             }
-            char buf[6];
-            snprintf(buf, sizeof(buf), "0x%02X", addr);
-            summary += buf;
         }
+        MetaSense::I2cBus::give();
     }
     i2cScanSummary = summary.isEmpty() ? String("none") : summary;
 }
@@ -471,8 +1338,39 @@ float readThrottlePotPercent()
     return percent;
 }
 
+float readMassflowM3h()
+{
+    const float adc = readAdcSafe(kMassflowPin);
+    float value = (adc / 4095.0f) * kMassflowMaxM3h;
+    if (value < 0.0f) value = 0.0f;
+    if (value > kMassflowMaxM3h) value = kMassflowMaxM3h;
+    return applyMassflowRawAverage(value);
+}
+
+float readLambdaValue()
+{
+    const float adc = readAdcSafe(kLambdaPin);
+    float value = kLambdaMin + (adc / 4095.0f) * (kLambdaMax - kLambdaMin);
+    if (value < kLambdaMin) value = kLambdaMin;
+    if (value > kLambdaMax) value = kLambdaMax;
+    return applyLambdaRawAverage(value);
+}
+
 // Persistent angular velocity for inertia differentiation.
 static float omegaPrev = 0.0f;
+
+// Delta transmission: only send fields that changed to reduce bandwidth
+static MetaSense::Telemetry prevTelemetrySnapshot;
+static bool prevTelemetryInitialized = false;
+static bool prevRpmDeltaError = false;
+static bool prevCanFallbackActive = false;
+static bool prevRecording = false;
+
+// Helper: compare floats with tolerance
+static inline bool floatChanged(float a, float b, float tolerance = 0.01f)
+{
+    return fabs(a - b) > tolerance;
+}
 
 void updateDyno(MetaSense::Telemetry& t, float dtSec)
 {
@@ -509,7 +1407,7 @@ void updateDyno(MetaSense::Telemetry& t, float dtSec)
         // --- Brake / load-cell dyno path (original) ---
         const float armCm = (MetaSense::Settings::armCm > 0.01f) ? MetaSense::Settings::armCm : 0.01f;
         const float rawTorqueNm = (t.loadKg * 9.82f / 100.0f) * armCm;
-        t.torqueNm      = rawTorqueNm - torqueResidualOffsetNm;
+        t.torqueNm      = rawTorqueNm;
         t.brakeTorqueNm = t.torqueNm;
 
         // --- Climate correction: normalise torque/power to standard conditions ---
@@ -546,70 +1444,206 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         return;
     }
 
-    String json;
-    json.reserve(512);
-
-    json = "{";
-    json += "\"type\":\"data\",";
-    json += "\"rpm\":" + String(data.rpm, 0) + ",";
-    json += "\"rpm_error\":" + String(rpmDeltaError ? 1 : 0) + ",";
-    json += "\"can_fallback\":" + String(canFallbackActive ? 1 : 0) + ",";
-    json += "\"rpm_source_active\":\"" + String(activeRpmFromCan ? "leafrpm" : "tachogen") + "\",";
-    json += "\"drum_rpm\":" + String(data.drumRpm, 0) + ",";
-    json += "\"rpm_target\":" + String(data.rpmTarget, 0) + ",";
-    json += "\"kp_source\":\"" + String(MetaSense::Settings::usePot3Kp ? "pot3" : "firmware") + "\",";
-    json += "\"kp_live\":" + String(MetaSense::Settings::usePot3Kp && lastAppliedKp >= 0.0f ? lastAppliedKp : MetaSense::Settings::kp, 4) + ",";
-    json += "\"ki_live\":" + String(MetaSense::Settings::ki, 4) + ",";
-    json += "\"throttle_pct\":" + String(data.throttlePercent, 0) + ",";
-    json += "\"kw\":" + String(data.kw, 2) + ",";
-    json += "\"torque\":" + String(data.torqueNm, 2) + ",";
-    json += "\"brakeTorque\":" + String(data.brakeTorqueNm, 2) + ",";
-    json += "\"load_kg\":" + String(data.loadKg, 1) + ",";
-    json += "\"recording\":" + String(isRecording ? "true" : "false") + ",";
-    json += "\"peakTorque\":" + String(data.peakTorque, 2) + ",";
-    json += "\"peakTorque_RPM\":" + String(data.peakTorque_RPM, 0) + ",";
-    json += "\"air_density\":" + String(data.airDensity, 3) + ",";
-    json += "\"climate_cf\":" + String(data.climateCF, 4) + ",";
-    json += "\"ambient_temp\":" + String(data.ambientC, 1) + ",";
-    json += "\"pressure\":" + String(data.pressureHpa, 1) + ",";
-    json += "\"gear_ratio\":" + String(data.eTorque, 2) + ",";
-    json += "\"e_torque\":" + String(data.eTorque, 2) + ",";
-    json += "\"energy\":" + String(data.energyMJ, 2) + ",";
-    json += "\"rel_humidity\":" + String(data.humidity, 1) + ",";
-    json += "\"ratio_confidence\":" + String(data.humidity / 100.0f, 3) + ",";
-    json += "\"egt_hot\":" + String(data.egtHotC, 1) + ",";
-    json += "\"egt_status\":" + String(data.egtStatus) + ",";
-    json += "\"egt_ready\":" + String(data.egtReady ? 1 : 0) + ",";
-    json += "\"egt_addr\":" + String(data.egtAddress) + ",";
-    json += "\"egt_ack_addr\":" + String(data.egtAckAddress) + ",";
-    json += "\"i2c_scan\":\"" + i2cScanSummary + "\",";
-    json += "\"load_source\":\"" + String(loadCellNauReady ? "nau7802" : "adc32") + "\",";
-    json += "\"nau_ready\":" + String(loadCellNauReady ? 1 : 0) + ",";
-    json += "\"nau_data_ready\":" + String((loadCellNauReady && loadCellNau.available()) ? 1 : 0) + ",";
-    json += "\"heartbeat_ms\":" + String(millis()) + ",";
-    json += "\"dyno_mode\":\"" + String(MetaSense::toString(data.mode)) + "\",";
-    json += "\"vcu_ready\":" + String(data.vcuReady ? 1 : 0) + ",";
-    json += "\"sw_active\":" + String(data.swActive ? 1 : 0) + ",";
-
-    json += "\"mcps\":{";
-    float hot = data.egtHotC;
-    float amb = data.egtAmbientC;
-
-    if (hot > 0 && hot < 1500) {
-        json += "\"7\":{\"hot\":" + String(hot, 1) +
-                ",\"amb\":" + String(amb, 1) + "}";
-    } else {
-        json += "\"7\":{\"hot\":0,\"amb\":0}";
+    // Initialize snapshot on first call
+    if (!prevTelemetryInitialized) {
+        prevTelemetrySnapshot = data;
+        prevTelemetryInitialized = true;
     }
 
+    static uint8_t slowTelemetrySlice = 0;
+    const uint32_t nowMs = millis();
+    const uint8_t slowSliceNow = slowTelemetrySlice;
+    slowTelemetrySlice = static_cast<uint8_t>((slowTelemetrySlice + 1U) % kWebSocketSlowTelemetrySlices);
+
+#if METASENSE_STREAM_DIAGNOSTICS
+    uint16_t wsClients = 0;
+    uint16_t wsSentNow = 0;
+    uint16_t wsSkipBacklogNow = 0;
+    uint16_t wsSkipFullNow = 0;
+    uint16_t wsSkipNoSendNow = 0;
+#endif
+
+    String json;
+    json.reserve(420);
+
+    json = "{\"type\":\"data\",";
+
+    // Keep a lightweight heartbeat for UI time alignment.
+    json += "\"heartbeat_ms\":" + String(nowMs) + ",";
+
+    // Optional stream diagnostics payload (primarily for tuning/debug sessions).
+    // Include on every fast frame for real-time monitoring, not just slow cadence.
+#if METASENSE_STREAM_DIAGNOSTICS
+        json += "\"ws_clients\":" + String(wsock.count()) + ",";
+        json += "\"ws_sent_total\":" + String(wsSentTotal) + ",";
+        json += "\"ws_skip_backlog_total\":" + String(wsSkipBacklogTotal) + ",";
+        json += "\"ws_skip_full_total\":" + String(wsSkipFullTotal) + ",";
+        json += "\"ws_skip_nosend_total\":" + String(wsSkipNoSendTotal) + ",";
+#if METASENSE_JSON_DELAY_COUNTERS
+        json += "\"ws_json_last_len\":" + String(wsJsonLastLen) + ",";
+        json += "\"ws_json_max_len\":" + String(wsJsonMaxLen) + ",";
+        json += "\"ws_json_over_reserve_total\":" + String(wsJsonOverReserveTotal) + ",";
+#endif
+#endif
+
+    // Fast telemetry fields (20 Hz)
+    if (floatChanged(data.rpm, prevTelemetrySnapshot.rpm, 1.0f)) {
+        json += "\"rpm\":" + String(data.rpm, 0) + ",";
+    }
+    if (rpmDeltaError != prevRpmDeltaError) {
+        json += "\"rpm_error\":" + String(rpmDeltaError ? 1 : 0) + ",";
+        prevRpmDeltaError = rpmDeltaError;
+    }
+    if (canFallbackActive != prevCanFallbackActive) {
+        json += "\"can_fallback\":" + String(canFallbackActive ? 1 : 0) + ",";
+        prevCanFallbackActive = canFallbackActive;
+    }
+    String rpmSourceStr = String(activeRpmFromCan ? "leafrpm" : "tachogen");
+    json += "\"rpm_source_active\":\"" + rpmSourceStr + "\",";
+    if (floatChanged(data.drumRpm, prevTelemetrySnapshot.drumRpm, 1.0f)) {
+        json += "\"drum_rpm\":" + String(data.drumRpm, 0) + ",";
+    }
+    if (floatChanged(data.rpmTarget, prevTelemetrySnapshot.rpmTarget, 1.0f)) {
+        json += "\"rpm_target\":" + String(data.rpmTarget, 0) + ",";
+    }
+    if (floatChanged(data.kw, prevTelemetrySnapshot.kw, 0.05f)) {
+        json += "\"kw\":" + String(data.kw, 2) + ",";
+    }
+    if (floatChanged(data.peakKW, prevTelemetrySnapshot.peakKW, 0.05f)) {
+        json += "\"peakKW\":" + String(data.peakKW, 2) + ",";
+    }
+    if (floatChanged(data.peakKW_RPM, prevTelemetrySnapshot.peakKW_RPM, 5.0f)) {
+        json += "\"peakKW_RPM\":" + String(data.peakKW_RPM, 0) + ",";
+    }
+
+    // Always send torque family and load for smooth gauges/graphs
+    json += "\"torque\":" + String(data.torqueNm, 2) + ",";
+    json += "\"brakeTorque\":" + String(data.brakeTorqueNm, 2) + ",";
+    json += "\"e_torque\":" + String(data.eTorque, 2) + ",";
+    json += "\"load_kg\":" + String(data.loadKg, 1) + ",";
+
+    if (floatChanged(data.throttlePercent, prevTelemetrySnapshot.throttlePercent, 0.1f)) {
+        json += "\"throttle_pct\":" + String(data.throttlePercent, 0) + ",";
+    }
+    if (floatChanged(data.peakTorque, prevTelemetrySnapshot.peakTorque, 0.5f)) {
+        json += "\"peakTorque\":" + String(data.peakTorque, 2) + ",";
+    }
+    if (floatChanged(data.peakTorque_RPM, prevTelemetrySnapshot.peakTorque_RPM, 5.0f)) {
+        json += "\"peakTorque_RPM\":" + String(data.peakTorque_RPM, 0) + ",";
+    }
+
+    json += "\"recording\":" + String(isRecording ? 1 : 0) + ",";
+
+    // Slow telemetry fields are sent as evenly sized micro-chunks
+    // (one field per fast frame) to minimize bursty UI workload.
+    switch (slowSliceNow) {
+        case 0:
+            json += "\"air_density\":" + String(data.airDensity, 3) + ",";
+            break;
+        case 1:
+            json += "\"climate_cf\":" + String(data.climateCF, 4) + ",";
+            break;
+        case 2:
+            json += "\"ambient_temp\":" + String(data.ambientC, 1) + ",";
+            break;
+        case 3:
+            json += "\"pressure\":" + String(data.pressureHpa, 1) + ",";
+            break;
+        case 4:
+            json += "\"egt_hot\":" + String(data.egtHotC, 1) + ",";
+            break;
+        case 5:
+            json += "\"rel_humidity\":" + String(data.humidity, 1) + ",";
+            break;
+        case 6:
+            json += "\"energy\":" + String(data.energyMJ, 2) + ",";
+            break;
+        case 7:
+            json += "\"lambda\":" + String(data.lambdaValue, 3) + ",";
+            break;
+        case 8:
+            json += "\"massflow_m3h\":" + String(data.massflowM3h, 1) + ",";
+            break;
+        case 9:
+            json += "\"energy_active\":" + String(MetaSense::DynoStateMachine::isEnergyMeasuring() ? 1 : 0) + ",";
+            break;
+        case 10:
+            json += "\"egt_status\":" + String(data.egtStatus) + ",";
+            break;
+        case 11:
+            json += "\"egt_ready\":" + String(data.egtReady ? 1 : 0) + ",";
+            break;
+        case 12:
+            json += "\"dyno_mode\":\"" + String(MetaSense::toString(data.mode)) + "\",";
+            break;
+        case 13:
+            json += "\"vcu_ready\":" + String(data.vcuReady ? 1 : 0) + ",";
+            break;
+        case 14:
+        default:
+            json += "\"sw_active\":" + String(data.swActive ? 1 : 0) + ",";
+            break;
+    }
+
+    // Remove trailing comma and close JSON
+    if (json.endsWith(",")) {
+        json.remove(json.length() - 1);
+    }
     json += "}";
-    json += "}";
+
+#if METASENSE_JSON_DELAY_COUNTERS
+    // Measure JSON payload size when delay counters enabled
+    const uint16_t builtLen = static_cast<uint16_t>(json.length());
+    wsJsonLastLen = builtLen;
+    if (builtLen > wsJsonMaxLen) {
+        wsJsonMaxLen = builtLen;
+    }
+    if (builtLen > 420) {  // kWebSocketJsonReserve hardcoded for measurement
+        ++wsJsonOverReserveTotal;
+    }
+#endif
+
+    // Update snapshot for next comparison
+    prevTelemetrySnapshot = data;
+
     for (auto& client : wsock.getClients()) {
-        if (!client.canSend() || client.queueIsFull()) {
+#if METASENSE_STREAM_DIAGNOSTICS
+        ++wsClients;
+#endif
+        // Keep telemetry fresh: drop if queue has anything pending (stale frames)
+        // With 50ms publish rate, this maintains tight latency while reducing WiFi saturation
+        if (!client.canSend()) {
+#if METASENSE_STREAM_DIAGNOSTICS
+            ++wsSkipNoSendNow;
+            ++wsSkipNoSendTotal;
+#endif
+            continue;
+        }
+        if (client.queueIsFull()) {
+#if METASENSE_STREAM_DIAGNOSTICS
+            ++wsSkipFullNow;
+            ++wsSkipFullTotal;
+#endif
+            continue;
+        }
+        if (client.queueLen() > 0) {
+#if METASENSE_STREAM_DIAGNOSTICS
+            ++wsSkipBacklogNow;
+            ++wsSkipBacklogTotal;
+#endif
             continue;
         }
         client.text(json);
+#if METASENSE_STREAM_DIAGNOSTICS
+        ++wsSentNow;
+        ++wsSentTotal;
+#endif
     }
+
+#if METASENSE_STREAM_DIAGNOSTICS
+    (void)wsClients;
+    (void)wsSentNow;
+#endif
 }
 
 void publishTelemetry()
@@ -642,13 +1676,115 @@ void notifyRunComplete(const MetaSense::Telemetry& data)
     String json;
     json.reserve(192);
     json = "{\"type\":\"run_complete\"";
-    json += ",\"peakKW\":" + String(data.kw, 2);
-    json += ",\"peakKW_RPM\":" + String(data.maxRpm, 0);
+    json += ",\"peakKW\":" + String(data.peakKW, 2);
+    json += ",\"peakKW_RPM\":" + String(data.peakKW_RPM, 0);
     json += ",\"peakTorque\":" + String(data.peakTorque, 2);
     json += ",\"peakTorque_RPM\":" + String(data.peakTorque_RPM, 0);
     json += ",\"peakEGT\":" + String(data.egtHotC, 1);
     json += "}";
     MetaSense::WebSocketServer::socket().textAll(json);
+}
+
+void sendCalibrationInfo(const String& msg)
+{
+    MetaSense::WebSocketServer::socket().textAll("{\"type\":\"info\",\"msg\":\"" + msg + "\"}");
+}
+
+void calibrationTask(void* /*pvParameters*/)
+{
+    for (;;) {
+        bool shouldRun = false;
+        bool shouldTare = false;
+        float knownWeightKg = 0.0f;
+
+        portENTER_CRITICAL(&calibMux);
+        if (!calibBusy && tareRequestPending) {
+            calibBusy = true;
+            tareRequestPending = false;
+            shouldRun = true;
+            shouldTare = true;
+        } else if (calibRequestPending && !calibBusy) {
+            calibBusy = true;
+            calibRequestPending = false;
+            knownWeightKg = calibKnownWeightKg;
+            shouldRun = true;
+        }
+        portEXIT_CRITICAL(&calibMux);
+
+        if (shouldRun) {
+            if (shouldTare) {
+                sendCalibrationInfo("Tare started...");
+                MetaSense::Input::tare();
+                MetaSense::RunStorage::saveCalibration();
+                sendCalibrationInfo("Tare applied (zero=" + String(zeroOffset, 2) + ")");
+            } else {
+                loadCellExclusiveSampling = true;
+                setLoadCellStableSampling(true);
+                sendCalibrationInfo("Calibrating... collecting samples for 5 seconds (tare first!)");
+                vTaskDelay(pdMS_TO_TICKS(kCalibrationSettlingMs));
+
+                float seedRaw = getLoadCellSamplerAverageRaw();
+                if (!isfinite(seedRaw)) {
+                    seedRaw = filteredAdc;
+                }
+                resetLoadRawAverage(seedRaw);
+                resetLoadKgAverage(0.0f);
+
+                float acceptedSamples[96];
+                int validCount = 0;
+                uint8_t acceptedCount = 0;
+                const uint32_t startTime = millis();
+
+                while ((millis() - startTime) < kCalibrationDurationMs) {
+                    float rawSample = 0.0f;
+                    if (readAveragedDirectLoadRawSample(rawSample, kLoadRawBurstSamples, 12)) {
+                        const float smoothedRaw = applyLoadRawAverage(rawSample);
+                        const float current = smoothedRaw - zeroOffset;
+                        if (isfinite(current)) {
+                            if (validCount >= kCalibrationSkipFirstSamples && acceptedCount < 96) {
+                                acceptedSamples[acceptedCount++] = current;
+                            }
+                            ++validCount;
+                        }
+                    }
+                    vTaskDelay(pdMS_TO_TICKS(kCalibrationSamplePeriodMs));
+                }
+
+                if (acceptedCount == 0) {
+                    sendCalibrationInfo("Calibration failed. No valid samples captured.");
+                } else {
+                    float avgRaw = 0.0f;
+                    float maxDev = 0.0f;
+                    const bool haveStats = computeTrimmedStats(acceptedSamples,
+                                                               acceptedCount,
+                                                               avgRaw,
+                                                               maxDev);
+                    if (!haveStats || !isfinite(avgRaw)) {
+                        sendCalibrationInfo("Calibration failed. Invalid raw average.");
+                    } else if (fabsf(avgRaw) < 1e-6f) {
+                        sendCalibrationInfo("Calibration skipped: dummy-zero condition (factor unchanged).");
+                    } else {
+                        const float factor = knownWeightKg / avgRaw;
+                        if (!isfinite(factor) || fabsf(factor) < 1e-12f) {
+                            sendCalibrationInfo("Calibration failed. Invalid factor.");
+                        } else {
+                            MetaSense::Input::setCalibrationFactor(factor);
+                            sendCalibrationInfo("Calibration done! New factor: " + String(factor, 6));
+                        }
+                    }
+                }
+
+                loadCellExclusiveSampling = false;
+                setLoadCellStableSampling(false);
+            }
+
+            portENTER_CRITICAL(&calibMux);
+            calibBusy = false;
+            portEXIT_CRITICAL(&calibMux);
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(kCalibrationSamplePeriodMs));
+    }
 }
 
 } // anonymous namespace
@@ -658,41 +1794,45 @@ namespace MetaSense::Input { // EXTERNAL SCOPE
 
 void tareMainGui()
 {
-    tare();
+    (void)requestTare();
+}
 
-    float avgRaw = 0.0f;
-    float maxDev = 0.0f;
-    if (sampleLoadRawStats(avgRaw, maxDev)) {
-        float netRaw = avgRaw - zeroOffset;
-        if (fabsf(netRaw) < zeroDeadbandRaw) {
-            netRaw = 0.0f;
-        }
-
-        const float residualLoadKg = netRaw * calibrationFactor;
-        const float armCm = (MetaSense::Settings::armCm > 0.01f) ? MetaSense::Settings::armCm : 0.01f;
-        torqueResidualOffsetNm = (residualLoadKg * 9.82f / 100.0f) * armCm;
-    } else {
-        torqueResidualOffsetNm = 0.0f;
+bool requestTare()
+{
+    bool accepted = false;
+    portENTER_CRITICAL(&calibMux);
+    if (!calibBusy && !calibRequestPending && !tareRequestPending) {
+        tareRequestPending = true;
+        accepted = true;
     }
+    portEXIT_CRITICAL(&calibMux);
+    return accepted;
 }
 
 void tare()
 {
     float avgRaw = 0.0f;
     float maxDev = 0.0f;
-    if (sampleLoadRawStats(avgRaw, maxDev)) {
+    setLoadCellStableSampling(true);
+    if (sampleLoadRawStats(avgRaw, maxDev, 1000, 48)) {
         zeroOffset = avgRaw;
-        zeroDeadbandRaw = max(2.0f, maxDev * 3.0f);
+        // Bound deadband to avoid tare under unstable noise from muting torque output.
+        zeroDeadbandRaw = min(kTareDeadbandMaxRaw, max(0.0f, maxDev * 3.0f));
         filteredAdc = avgRaw;
+        resetLoadCellSampler(avgRaw);
         resetLoadRawAverage(avgRaw);
+        resetLoadKgAverage(0.0f);
         loadKgFilt = 0.0f;
     } else {
-        zeroOffset = filteredAdc;
-        zeroDeadbandRaw = 2.0f;
+        zeroOffset = getLoadCellSamplerAverageRaw();
+        filteredAdc = zeroOffset;
+        zeroDeadbandRaw = 0.0f;
+        resetLoadCellSampler(filteredAdc);
         resetLoadRawAverage(filteredAdc);
+        resetLoadKgAverage(0.0f);
         loadKgFilt = 0.0f;
     }
-
+    setLoadCellStableSampling(false);
     // Force immediate zero output on the load-cell torque path after tare.
     torqueFilt = 0.0f;
     tele.loadKg = 0.0f;
@@ -706,20 +1846,61 @@ void setCalibrationFactor(float factor)
     MetaSense::RunStorage::saveCalibration();
 }
 
+uint16_t getLoadCellSampleRateSps()
+{
+    return getLoadCellSampleRateSpsLocal();
+}
+
+bool applyLoadCellSettingsProfile()
+{
+    if (!loadCellNauReady) {
+        return false;
+    }
+
+    const bool prevExclusive = loadCellExclusiveSampling;
+    loadCellExclusiveSampling = true;
+    const bool ok = applyLoadCellNauProfile(currentRuntimeLoadCellGain(),
+                                            currentRuntimeLoadCellRate(),
+                                            "settings_apply");
+    loadCellExclusiveSampling = prevExclusive;
+
+    float seedRaw = getLoadCellSamplerAverageRaw();
+    if (!isfinite(seedRaw)) {
+        seedRaw = filteredAdc;
+    }
+    resetLoadCellSampler(seedRaw);
+    return ok;
+}
+
 bool calibrateWithKnownWeight(float knownWeightKg, float& outFactor)
 {
     if (!(knownWeightKg > 0.0f) || !isfinite(knownWeightKg)) {
         return false;
     }
 
-    float avgRaw = filteredAdc;
+    float avgRaw = 0.0f;
     float maxDev = 0.0f;
-    (void)sampleLoadRawStats(avgRaw, maxDev);
+    loadCellExclusiveSampling = true;
+    setLoadCellStableSampling(true);
+    delay(150);
+    if (!sampleLoadRawStats(avgRaw, maxDev, 1000, 32)) {
+        loadCellExclusiveSampling = false;
+        setLoadCellStableSampling(false);
+        return false;
+    }
+    loadCellExclusiveSampling = false;
+    setLoadCellStableSampling(false);
 
     // Calibration uses current averaged raw sensor counts relative to tare offset.
     const float netRaw = avgRaw - zeroOffset;
-    if (!isfinite(netRaw) || fabsf(netRaw) < 1e-6f) {
+    if (!isfinite(netRaw)) {
         return false;
+    }
+
+    if (fabsf(netRaw) < 1e-6f) {
+        // Dummy-zero condition: keep current factor and report success to caller.
+        outFactor = getCalibrationFactor();
+        return true;
     }
 
     const float factor = knownWeightKg / netRaw;
@@ -730,6 +1911,23 @@ bool calibrateWithKnownWeight(float knownWeightKg, float& outFactor)
     setCalibrationFactor(factor);
     outFactor = factor;
     return true;
+}
+
+bool requestCalibrationWithKnownWeight(float knownWeightKg)
+{
+    if (!(knownWeightKg > 0.0f) || !isfinite(knownWeightKg)) {
+        return false;
+    }
+
+    bool accepted = false;
+    portENTER_CRITICAL(&calibMux);
+    if (!calibBusy && !calibRequestPending) {
+        calibKnownWeightKg = knownWeightKg;
+        calibRequestPending = true;
+        accepted = true;
+    }
+    portEXIT_CRITICAL(&calibMux);
+    return accepted;
 }
 
 float getCalibrationFactor()
@@ -752,9 +1950,36 @@ float torqueNm()
     return tele.torqueNm;
 }
 
+float currentKpLive()
+{
+    return (MetaSense::Settings::usePot3Kp && lastAppliedKp >= 0.0f)
+        ? lastAppliedKp
+        : MetaSense::Settings::kp;
+}
+
 bool isVcuReady()
 {
     return tele.vcuReady;
+}
+
+void getLoadCellInitStatus(bool& ldoConfigured, bool& internalCalOk, uint8_t& internalCalAttempts)
+{
+    ldoConfigured = loadCellNauLdoConfigured;
+    internalCalOk = loadCellNauInternalCalOk;
+    internalCalAttempts = loadCellNauInternalCalAttempts;
+}
+
+void getLoadCellSamplerRuntime(uint32_t& lastUs, uint32_t& maxUs, uint32_t& emaUs, uint32_t& loops)
+{
+    lastUs = loadCellSamplerLastUs;
+    maxUs = loadCellSamplerMaxUs;
+    emaUs = loadCellSamplerEmaUs;
+    loops = loadCellSamplerLoops;
+}
+
+void resetLoadCellSamplerMaxRuntime()
+{
+    loadCellSamplerMaxUs = 0;
 }
 
 void updateCanRpm(float rpm)
@@ -777,12 +2002,14 @@ void updateCanRpm(float rpm)
 void begin()
 {
     tele = MetaSense::Telemetry();
-    torqueResidualOffsetNm = 0.0f;
     zeroOffset = 0.0f;
     calibrationFactor = 0.01f;
     filteredAdc = 0.0f;
     resetLoadRawAverage(filteredAdc);
+    resetLoadKgAverage(0.0f);
     resetTachoRawAverage(0.0f);
+    resetMassflowRawAverage(0.0f);
+    resetLambdaRawAverage(1.0f);
     {
         float storedZero = 0.0f;
         float storedFactor = 0.01f;
@@ -790,7 +2017,9 @@ void begin()
             if (isfinite(storedZero)) {
                 zeroOffset = storedZero;
                 filteredAdc = storedZero;
+                resetLoadCellSampler(filteredAdc);
                 resetLoadRawAverage(filteredAdc);
+                resetLoadKgAverage(0.0f);
             }
             if (isfinite(storedFactor) && storedFactor > 0.0f) {
                 calibrationFactor = storedFactor;
@@ -799,6 +2028,10 @@ void begin()
     }
     kpPotFilteredAdc = -1.0f;
     lastAppliedKp = -1.0f;
+    if (loadCellMutex == nullptr) {
+        loadCellMutex = xSemaphoreCreateMutex();
+    }
+    resetLoadCellSampler(filteredAdc);
     MetaSense::ControlTask::configurePI(MetaSense::Settings::kp,
                                         MetaSense::Settings::ki,
                                         TORQUE_MIN,
@@ -808,9 +2041,16 @@ void begin()
     }
 
     // Digital inputs
-    pinMode(MetaSense::Globals::kRampSwitchPin, INPUT_PULLUP);  // SW switch – active LOW
-    pinMode(MetaSense::Globals::kRbPlusInputPin, INPUT_PULLUP); // VCU ready – active LOW
-    prevSwState = (digitalRead(MetaSense::Globals::kRampSwitchPin) == LOW);
+    pinMode(MetaSense::Globals::kRampSwitchPin, INPUT_PULLDOWN);  // SW switch – active HIGH
+    pinMode(MetaSense::Globals::kRbPlusInputPin, INPUT_PULLDOWN); // VCU ready – active HIGH
+    prevSwState = (digitalRead(MetaSense::Globals::kRampSwitchPin) == HIGH);
+    const int vcuRbPlusLevel = digitalRead(MetaSense::Globals::kRbPlusInputPin);
+    Serial.printf("[Input] VCU mode: %s (RB+=%d)\n",
+                  MetaSense::Globals::kVcuSwitch ? "GPIO" : "FORCED_READY",
+                  vcuRbPlusLevel);
+    Serial0.printf("[Input] VCU mode: %s (RB+=%d)\n",
+                   MetaSense::Globals::kVcuSwitch ? "GPIO" : "FORCED_READY",
+                   vcuRbPlusLevel);
 
     // Bring relay/control outputs to a known-safe state before probing I2C sensors.
     MetaSense::HardwareOutputStateMachine::begin();
@@ -838,13 +2078,23 @@ void begin()
     }
 
     if (!kNauOnlyI2cInitMode) {
-        egtDigitalReady = egtDigital.begin();
+        delay(kMcp9600BootSettleDelayMs);
+        egtDigitalReady = false;
+        for (uint8_t attempt = 1; attempt <= 3; ++attempt) {
+            egtDigitalReady = egtDigital.begin();
+            if (egtDigitalReady) {
+                break;
+            }
+            if (attempt < 3) {
+                delay(kMcp9600BootRetryDelayMs);
+            }
+        }
         if (egtDigitalReady) {
             Serial.println("[Input] EGT digital source ready (MCP9600)");
             Serial0.println("[Input] EGT digital source ready (MCP9600)");
         } else {
-            Serial.println("[Input] EGT digital source unavailable");
-            Serial0.println("[Input] EGT digital source unavailable");
+            Serial.println("[Input] EGT digital source unavailable after 3 boot attempts");
+            Serial0.println("[Input] EGT digital source unavailable after 3 boot attempts");
         }
     } else {
         egtDigitalReady = false;
@@ -854,11 +2104,41 @@ void begin()
 
     tryInitLoadCellNau();
 
+    if (loadCellSamplerTaskHandle == nullptr) {
+        BaseType_t samplerCreated = xTaskCreatePinnedToCore(
+            loadCellSamplerTask,
+            "loadCellSampler",
+            4096,
+            nullptr,
+            2,
+            &loadCellSamplerTaskHandle,
+            0);
+        if (samplerCreated != pdPASS) {
+            Serial.println("[Input] Failed to start load-cell sampler task");
+            Serial0.println("[Input] Failed to start load-cell sampler task");
+        }
+    }
+
     updateI2cScanSummary();
     Serial.printf("[Input] I2C devices: %s\n", i2cScanSummary.c_str());
     Serial0.printf("[Input] I2C devices: %s\n", i2cScanSummary.c_str());
 
     updateAmbientInputs(true);
+
+    if (calibrationTaskHandle == nullptr) {
+        BaseType_t created = xTaskCreatePinnedToCore(
+            calibrationTask,
+            "calibrationTask",
+            4096,
+            nullptr,
+            1,
+            &calibrationTaskHandle,
+            0);
+        if (created != pdPASS) {
+            Serial.println("[Input] Failed to start calibration task");
+            Serial0.println("[Input] Failed to start calibration task");
+        }
+    }
 }
 
 void startRecording()
@@ -867,6 +2147,8 @@ void startRecording()
 
     tele.peakTorque     = 0.0f;
     tele.peakTorque_RPM = 0.0f;
+    tele.peakKW         = 0.0f;
+    tele.peakKW_RPM     = 0.0f;
 
     tele.maxRpm         = 0.0f;
     tele.maxTorqueNm    = 0.0f;
@@ -891,11 +2173,13 @@ void loop()
 
     if (!loadCellNauReady && (now - lastLoadCellNauRetryMs) >= kLoadCellNauRetryPeriodMs) {
         lastLoadCellNauRetryMs = now;
-        tryInitLoadCellNau();
-        updateI2cScanSummary();
+        if (!loadCellExclusiveSampling) {
+            tryInitLoadCellNau();
+            updateI2cScanSummary();
+        }
     }
 
-    if (!egtDigital.isReady() && (now - lastEgtRetryMs) >= 10000) {
+    if (!loadCellExclusiveSampling && !egtDigital.isReady() && (now - lastEgtRetryMs) >= 10000) {
         lastEgtRetryMs = now;
         egtDigitalReady = egtDigital.begin();
     }
@@ -904,31 +2188,27 @@ void loop()
         applyRuntimeKpFromPot(false);
     }
 
-    // --- VCU ready (RB+, GPIO 36, active LOW) ---
-    tele.vcuReady = true;
-    if (!tele.vcuReady) {
-        // Global VCU interlock: dyno cannot run unless VCU/RB+ ready is asserted.
-        if (MetaSense::DynoStateMachine::isAutoRunActive()) {
-            MetaSense::DynoStateMachine::setAutoMode(false);
-            MetaSense::DynoStateMachine::setPanelAuto(false);
-            MetaSense::DynoStateMachine::abortAutoRun();
-        }
-        if (MetaSense::DynoStateMachine::isRecording()) {
-            MetaSense::DynoStateMachine::stopRecording();
-        }
-        MetaSense::Settings::setRpmTarget(0.0f);
+    // --- VCU ready watchdog (RB+, GPIO 36, active HIGH) ---
+    // In GPIO mode, VCU_ready is a FAULT condition if missing.
+    // Trigger ESP restart to enforce safe state. In forced mode, always ready.
+    tele.vcuReady = MetaSense::Globals::kVcuSwitch
+        ? (digitalRead(MetaSense::Globals::kRbPlusInputPin) == HIGH)
+        : true;
+    if (MetaSense::Globals::kVcuSwitch && !tele.vcuReady) {
+        // VCU fault: GPIO mode active but RB+ signal lost. Restart immediately.
+        esp_restart();
     }
 
-    // --- SW switch recording toggle (GPIO 35, active LOW, debounced) ---
+    // --- SW switch recording toggle (GPIO 35, active HIGH, debounced) ---
     {
-        const bool swNow = (digitalRead(MetaSense::Globals::kRampSwitchPin) == LOW);
+        const bool swNow = (digitalRead(MetaSense::Globals::kRampSwitchPin) == HIGH);
         if (swNow != prevSwState) {
             if ((now - swDebounceMs) >= kSwDebounceThresholdMs) {
                 swDebounceMs = now;
                 prevSwState = swNow;
                 tele.swActive = swNow;
-                if (swNow && tele.vcuReady) {
-                    // Rising edge + VCU ready: toggle recording
+                if (swNow) {
+                    // Rising edge: toggle recording
                     if (!MetaSense::DynoStateMachine::isRecording()) {
                         MetaSense::DynoStateMachine::startRecording();
                     } else {
@@ -943,6 +2223,10 @@ void loop()
     }
 
     float alpha = MetaSense::Settings::filterAlpha;
+    if (!isfinite(alpha)) {
+        alpha = 0.2f;
+    }
+    alpha = constrain(alpha, 0.01f, 1.0f);
 
     // RPM source: Leaf CAN is primary, tachogen on GPIO 3 is the active fallback.
     tachoRpm = readTachoRpm();
@@ -965,7 +2249,21 @@ void loop()
     // other sensors
     float drumRaw = readDrumRpm();
     float loadRaw = readLoadKg();
+    MetaSense::RunStorage::appendFsLiveProbeSample(static_cast<uint64_t>(esp_timer_get_time()), loadRaw);
+    const bool captureActive = MetaSense::RunStorage::rawCaptureActive();
+    const uint64_t nowUs = captureActive ? static_cast<uint64_t>(esp_timer_get_time()) : 0ULL;
+    const uint64_t lastUs = lastRawCaptureAppendUs;
+    const bool shouldAppendCapture = captureActive && (nowUs > (lastUs + 250000ULL));
+    const float captureRawZeroed = loadRaw - zeroOffset;
     loadRaw = applyLoadRawAverage(loadRaw);
+    const float captureFilteredZeroed = loadRaw - zeroOffset;
+    if (shouldAppendCapture) {
+        MetaSense::RunStorage::appendRawCaptureSample(nowUs,
+                                                      captureRawZeroed,
+                                                      captureFilteredZeroed,
+                                                      loadCellNauReady ? "loop_guard" : "loop_fallback");
+        lastRawCaptureAppendUs = nowUs;
+    }
 
     drumRpmFilt = lpFilter(drumRpmFilt, drumRaw, alpha);
     filteredAdc = loadRaw;
@@ -976,29 +2274,38 @@ void loop()
         netRaw = 0.0f;
     }
     const float loadKgRaw = netRaw * calibrationFactor;
-    loadKgFilt = lpFilter(loadKgFilt, loadKgRaw, alpha);
+    if (MetaSense::Settings::loadFilterMode == kLoadFilterModeTwoStageMovingAverage) {
+        loadKgFilt = applyLoadKgMovingAverage(loadKgRaw);
+    } else {
+        loadKgFilt = lpFilter(loadKgFilt, loadKgRaw, alpha);
+    }
     tele.loadKg  = loadKgFilt;
 
-    updateAmbientInputs(false);
-    tele.egtReady    = egtDigital.isReady();
-    tele.egtStatus   = egtDigital.status();
-    tele.egtAddress  = egtDigital.address();
-    tele.egtAckAddress = egtDigital.ackAddress();
-    tele.egtHotC     = readEgtHotC();
-    tele.egtAmbientC = readEgtAmbientC();
-    tele.ambientC    = readAmbientC();
-    tele.pressureHpa = readPressureHpa();
-    tele.airDensity  = readAirDensity();
-    tele.humidity    = readHumidity();
+    if (!loadCellExclusiveSampling) {
+        updateAmbientInputs(false);
+        tele.egtReady    = egtDigital.isReady();
+        tele.egtStatus   = egtDigital.status();
+        tele.egtAddress  = egtDigital.address();
+        tele.egtAckAddress = egtDigital.ackAddress();
+        tele.egtHotC     = readEgtHotC();
+        tele.egtAmbientC = readEgtAmbientC();
+        tele.ambientC    = readAmbientC();
+        tele.pressureHpa = readPressureHpa();
+        tele.airDensity  = readAirDensity();
+        tele.humidity    = readHumidity();
+    }
+    tele.massflowM3h = readMassflowM3h();
+    tele.lambdaValue = readLambdaValue();
+
+    const uint64_t captureNowUs = static_cast<uint64_t>(esp_timer_get_time());
+    MetaSense::RunStorage::tickRawCapture(captureNowUs);
+    MetaSense::RunStorage::tickFsLiveProbe(captureNowUs);
 
     const float manualRpmTarget = readRpmSetpointPot();
     MetaSense::DynoStateMachine::setManualRpmTarget(manualRpmTarget);
     MetaSense::DynoStateMachine::update();
 
-    if (!tele.vcuReady) {
-        tele.rpmTarget = 0.0f;
-        MetaSense::Settings::setRpmTarget(0.0f);
-    } else if (MetaSense::DynoStateMachine::isAutoRunActive()) {
+    if (MetaSense::DynoStateMachine::isAutoRunActive()) {
         // In autorun, preserve target provided by state machine path.
         tele.rpmTarget = MetaSense::Settings::getRpmTarget();
     } else {
@@ -1016,9 +2323,8 @@ void loop()
 
     updateDyno(tele, dtSec);
 
-    // Estimate engine-side torque from dyno torque using configured ratio.
-    const float ratio = (MetaSense::Settings::virtGearRatio > 0.0f) ? MetaSense::Settings::virtGearRatio : 1.0f;
-    tele.eTorque = tele.torqueNm * ratio;
+    // Mirror the live torque gauge so the Acc. Energy panel stays in sync.
+    tele.eTorque = tele.torqueNm;
 
     bool safe = checkSafety(tele);
     if (!safe) {
@@ -1038,7 +2344,7 @@ void loop()
     const bool torqueLimitExceeded = fabsf(tele.torqueNm) > maxAllowedTorque;
     const bool throttleSafetyCut = rpmLimitExceeded || torqueLimitExceeded;
 
-    const float primaryBrakeSignedPercent = tele.vcuReady ? (torqueCmd / TORQUE_MAX) * 100.0f : 0.0f;
+    const float primaryBrakeSignedPercent = (torqueCmd / TORQUE_MAX) * 100.0f;
     // POT2 on AD1 (GPIO2, 0-3.3V) is the engine throttle setpoint source.
     // Map directly to GPIO45 PWM as 0-100% servo output.
     const float engineThrottlePercent = throttleSafetyCut ? 0.0f : readThrottlePotPercent();

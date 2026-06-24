@@ -1,4 +1,5 @@
 #include <ESPAsyncWebServer.h>
+#include <map>
 
 #include "CommandRouter.h"
 
@@ -8,6 +9,7 @@ namespace {
 // Lower limit means connections are closed earlier rather than
 // building a large backlog that stalls the browser.
 AsyncWebSocket ws("/ws");
+std::map<uint32_t, String> rxBuffers;
 
 } // anonymous namespace
 
@@ -29,22 +31,38 @@ void begin(AsyncWebServer& server)
                   size_t len) {
         (void)socket;
 
+        if (client == nullptr) {
+            return;
+        }
+
+        if (type == WS_EVT_DISCONNECT) {
+            rxBuffers.erase(client->id());
+            return;
+        }
+
         if (type != WS_EVT_DATA) {
             return;
         }
 
         AwsFrameInfo* info = static_cast<AwsFrameInfo*>(arg);
-        if (info == nullptr || !info->final || info->index != 0 || info->len != len || info->opcode != WS_TEXT) {
+        if (info == nullptr || info->opcode != WS_TEXT) {
             return;
         }
 
-        String msg;
-        msg.reserve(len);
+        String& msg = rxBuffers[client->id()];
+        if (info->index == 0) {
+            msg = "";
+            msg.reserve(info->len);
+        }
+
         for (size_t i = 0; i < len; ++i) {
             msg += static_cast<char>(data[i]);
         }
 
-        MetaSense::CommandRouter::handleWebSocketMessage(client, msg);
+        if (info->final) {
+            MetaSense::CommandRouter::handleWebSocketMessage(client, msg);
+            rxBuffers.erase(client->id());
+        }
     });
 
     server.addHandler(&ws);

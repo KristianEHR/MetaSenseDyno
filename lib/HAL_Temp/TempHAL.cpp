@@ -3,6 +3,8 @@
 #include <Arduino.h>
 #include <Wire.h>
 
+#include "I2cBusLock.h"
+
 namespace {
 
 constexpr uint8_t kPreferredAddress = MCP9600_I2CADDR_DEFAULT;
@@ -23,6 +25,8 @@ constexpr uint8_t kDeviceConfigInitValue = 0x80;
 constexpr uint8_t kDeviceConfigRunValue = 0x40;
 constexpr uint8_t kBootInitPasses = 4;
 constexpr uint16_t kBootRetryDelayMs = 120;
+constexpr uint32_t kI2cLockTimeoutMs = 50;
+constexpr uint8_t kMaxConsecutiveReadFailures = 8;
 
 bool isFiniteTemp(float value)
 {
@@ -33,9 +37,15 @@ bool isFiniteTemp(float value)
 
 bool TempHAL::readRegister(uint8_t address, uint8_t reg, uint8_t* data, size_t len) const
 {
+    const bool i2cLocked = MetaSense::I2cBus::take(pdMS_TO_TICKS(kI2cLockTimeoutMs));
+    if (!i2cLocked) {
+        return false;
+    }
+
     Wire.beginTransmission(address);
     Wire.write(reg);
     if (Wire.endTransmission(true) != 0) {
+        MetaSense::I2cBus::give();
         return false;
     }
 
@@ -44,25 +54,36 @@ bool TempHAL::readRegister(uint8_t address, uint8_t reg, uint8_t* data, size_t l
         while (Wire.available()) {
             (void)Wire.read();
         }
+        MetaSense::I2cBus::give();
         return false;
     }
 
     for (size_t i = 0; i < len; ++i) {
         if (!Wire.available()) {
+            MetaSense::I2cBus::give();
             return false;
         }
         data[i] = static_cast<uint8_t>(Wire.read());
     }
+
+    MetaSense::I2cBus::give();
 
     return true;
 }
 
 bool TempHAL::writeRegister8(uint8_t address, uint8_t reg, uint8_t value) const
 {
+    const bool i2cLocked = MetaSense::I2cBus::take(pdMS_TO_TICKS(kI2cLockTimeoutMs));
+    if (!i2cLocked) {
+        return false;
+    }
+
     Wire.beginTransmission(address);
     Wire.write(reg);
     Wire.write(value);
-    return Wire.endTransmission(true) == 0;
+    const bool ok = Wire.endTransmission(true) == 0;
+    MetaSense::I2cBus::give();
+    return ok;
 }
 
 bool TempHAL::readRegister16(uint8_t address, uint8_t reg, int16_t& value) const
@@ -128,12 +149,20 @@ bool TempHAL::begin()
     ready = false;
     activeAddress = 0;
     lastAckAddress = 0;
+    consecutiveReadFailures = 0;
     uint8_t retriesUsed = 0;
 
     for (uint8_t pass = 0; pass < kBootInitPasses; ++pass) {
         for (uint8_t address : kProbeAddresses) {
+            const bool i2cLocked = MetaSense::I2cBus::take(pdMS_TO_TICKS(100));
+            if (!i2cLocked) {
+                continue;
+            }
+
             Wire.beginTransmission(address);
-            if (Wire.endTransmission() != 0) {
+            const bool ack = (Wire.endTransmission() == 0);
+            MetaSense::I2cBus::give();
+            if (!ack) {
                 continue;
             }
 
@@ -144,6 +173,7 @@ bool TempHAL::begin()
             if (configureSensor(address)) {
                 ready = true;
                 activeAddress = address;
+                consecutiveReadFailures = 0;
                 retriesUsed = pass;
                 if (retriesUsed > 0) {
                     Serial.printf("[TempHAL] MCP9600 boot retries used: %u\n", static_cast<unsigned>(retriesUsed));
@@ -176,15 +206,27 @@ float TempHAL::readHotC()
 
     int16_t raw = 0;
     if (!readRegister16(activeAddress, MCP9600_HOTJUNCTION, raw)) {
-        ready = false;
+        if (consecutiveReadFailures < 255) {
+            ++consecutiveReadFailures;
+        }
+        if (consecutiveReadFailures >= kMaxConsecutiveReadFailures) {
+            ready = false;
+        }
         return NAN;
     }
 
     const float value = static_cast<float>(raw) * 0.0625f;
     if (!isFiniteTemp(value)) {
-        ready = false;
+        if (consecutiveReadFailures < 255) {
+            ++consecutiveReadFailures;
+        }
+        if (consecutiveReadFailures >= kMaxConsecutiveReadFailures) {
+            ready = false;
+        }
         return NAN;
     }
+
+    consecutiveReadFailures = 0;
 
     return value;
 }
@@ -197,15 +239,27 @@ float TempHAL::readAmbientC()
 
     int16_t raw = 0;
     if (!readRegister16(activeAddress, MCP9600_COLDJUNCTION, raw)) {
-        ready = false;
+        if (consecutiveReadFailures < 255) {
+            ++consecutiveReadFailures;
+        }
+        if (consecutiveReadFailures >= kMaxConsecutiveReadFailures) {
+            ready = false;
+        }
         return NAN;
     }
 
     const float value = static_cast<float>(raw) * 0.0625f;
     if (!isFiniteTemp(value)) {
-        ready = false;
+        if (consecutiveReadFailures < 255) {
+            ++consecutiveReadFailures;
+        }
+        if (consecutiveReadFailures >= kMaxConsecutiveReadFailures) {
+            ready = false;
+        }
         return NAN;
     }
+
+    consecutiveReadFailures = 0;
 
     return value;
 }

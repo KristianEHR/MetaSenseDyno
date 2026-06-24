@@ -10,6 +10,11 @@ constexpr float kDefaultRpmStart = 1500.0f;
 constexpr float kDefaultRpmEnd = 5500.0f;
 
 constexpr float kDefaultFilterAlpha = 0.2f;
+constexpr float kDefaultLoadAvgN = 5.0f;
+constexpr float kDefaultLoadAvgN2 = 5.0f;
+constexpr uint8_t kDefaultLoadFilterMode = 1;
+constexpr uint16_t kDefaultLoadCellGain = 128;
+constexpr uint16_t kDefaultLoadCellRateSps = 80;
 constexpr float kDefaultKp = 0.073f;
 constexpr float kDefaultKi = 0.524f;
 constexpr float kLegacyDefaultKp = 0.02f;
@@ -47,6 +52,11 @@ float rpmEndLocal = kDefaultRpmEnd;
 namespace MetaSense::Settings {
 
 float filterAlpha = kDefaultFilterAlpha;
+float loadAvgN = kDefaultLoadAvgN;
+float loadAvgN2 = kDefaultLoadAvgN2;
+uint8_t loadFilterMode = kDefaultLoadFilterMode;
+uint16_t loadCellGain = kDefaultLoadCellGain;
+uint16_t loadCellRateSps = kDefaultLoadCellRateSps;
 // Conservative baseline for 100 ms control loop cadence.
 float kp = kDefaultKp;
 float ki = kDefaultKi;
@@ -111,6 +121,11 @@ void setInertiaMode(bool enabled)
 void resetToDefaults()
 {
     filterAlpha = kDefaultFilterAlpha;
+    loadAvgN = kDefaultLoadAvgN;
+    loadAvgN2 = kDefaultLoadAvgN2;
+    loadFilterMode = kDefaultLoadFilterMode;
+    loadCellGain = kDefaultLoadCellGain;
+    loadCellRateSps = kDefaultLoadCellRateSps;
     kp = kDefaultKp;
     ki = kDefaultKi;
     usePot3Kp = kDefaultUsePot3Kp;
@@ -155,6 +170,11 @@ void loadFromStorage()
     }
 
     filterAlpha = prefs.getFloat("filterAlpha", filterAlpha);
+    loadAvgN = prefs.getFloat("loadAvgN", loadAvgN);
+    loadAvgN2 = prefs.getFloat("loadAvgN2", loadAvgN2);
+    loadFilterMode = prefs.getUChar("lcFMode", loadFilterMode);
+    loadCellGain = static_cast<uint16_t>(prefs.getUShort("lcGain", loadCellGain));
+    loadCellRateSps = static_cast<uint16_t>(prefs.getUShort("lcRate", loadCellRateSps));
     kp = prefs.getFloat("kp", kp);
     ki = prefs.getFloat("ki", ki);
     usePot3Kp = prefs.getBool("pot3kp", usePot3Kp);
@@ -207,6 +227,27 @@ void loadFromStorage()
     if (virtGearRatio <= 0.0f) {
         virtGearRatio = kDefaultVirtGearRatio;
     }
+    if (loadAvgN < 1.0f) {
+        loadAvgN = 1.0f;
+    } else if (loadAvgN > 48.0f) {
+        loadAvgN = 48.0f;
+    }
+    if (loadAvgN2 < 1.0f) {
+        loadAvgN2 = 1.0f;
+    } else if (loadAvgN2 > 48.0f) {
+        loadAvgN2 = 48.0f;
+    }
+    if (loadFilterMode > 1) {
+        loadFilterMode = kDefaultLoadFilterMode;
+    }
+    if (!(loadCellGain == 1 || loadCellGain == 2 || loadCellGain == 4 || loadCellGain == 8 ||
+          loadCellGain == 16 || loadCellGain == 32 || loadCellGain == 64 || loadCellGain == 128)) {
+        loadCellGain = kDefaultLoadCellGain;
+    }
+    if (!(loadCellRateSps == 10 || loadCellRateSps == 20 || loadCellRateSps == 40 ||
+          loadCellRateSps == 80 || loadCellRateSps == 320)) {
+        loadCellRateSps = kDefaultLoadCellRateSps;
+    }
 
     recomputeInertia();
 }
@@ -221,6 +262,11 @@ void saveToStorage()
     prefs.putBool(kSettingsInitKey, true);
 
     prefs.putFloat("filterAlpha", filterAlpha);
+    prefs.putFloat("loadAvgN", loadAvgN);
+    prefs.putFloat("loadAvgN2", loadAvgN2);
+    prefs.putUChar("lcFMode", loadFilterMode);
+    prefs.putUShort("lcGain", loadCellGain);
+    prefs.putUShort("lcRate", loadCellRateSps);
     prefs.putFloat("kp", kp);
     prefs.putFloat("ki", ki);
     prefs.putBool("pot3kp", usePot3Kp);

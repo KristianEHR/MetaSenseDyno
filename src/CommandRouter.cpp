@@ -24,14 +24,20 @@ void sendStatus(const String& msg);
 void sendInfo(const String& msg);
 }
 
+namespace MetaSense::RunStorage {
+bool startRawCapture(uint32_t durationMs, float baselineKg, float testLoadKg, String& outFilePath);
+}
+
 namespace MetaSense::Input {
 void tareMainGui();
 void tare();
 void setCalibrationFactor(float factor);
 bool calibrateWithKnownWeight(float knownWeightKg, float& outFactor);
+bool requestCalibrationWithKnownWeight(float knownWeightKg);
 float getCalibrationFactor();
 float getZeroOffset();
 bool isVcuReady();
+bool applyLoadCellSettingsProfile();
 }
 
 namespace MetaSense::ControlTask {
@@ -46,6 +52,7 @@ String currentCustomer;
 String currentUnit;
 String currentComments;
 constexpr const char* kFactoryProfilePath = "/factory_profile.json";
+constexpr float kDefaultCalibrationKnownWeightKg = 3.404f;
 
 bool parseCalibrationFactorCommand(const String& cmd, float& factor)
 {
@@ -103,6 +110,11 @@ String buildProfilePayload(bool includeTypeEnvelope)
     json += ",\"pulsesPerRev\":" + String(MetaSense::Settings::pulsesPerRev, 2);
     json += ",\"pulsesPerRevDrum\":" + String(MetaSense::Settings::pulsesPerRevDrum, 2);
     json += ",\"rpmFilter\":" + String(MetaSense::Settings::filterAlpha, 3);
+    json += ",\"loadAvgN\":" + String(MetaSense::Settings::loadAvgN, 0);
+    json += ",\"loadAvgN2\":" + String(MetaSense::Settings::loadAvgN2, 0);
+    json += ",\"loadFilterMode\":\"" + String(MetaSense::Settings::loadFilterMode == 1 ? "two_stage_ma" : "moving_avg") + "\"";
+    json += ",\"loadCellGain\":" + String(MetaSense::Settings::loadCellGain);
+    json += ",\"loadCellRateSps\":" + String(MetaSense::Settings::loadCellRateSps);
     json += ",\"mode\":" + String(MetaSense::Settings::inertiaMode ? "\"inertia\"" : "\"brake\"");
     json += ",\"virtGearRatio\":" + String(MetaSense::Settings::virtGearRatio, 3);
     json += ",\"drumMass\":" + String(MetaSense::Settings::drumMassKg, 2);
@@ -166,6 +178,48 @@ bool applyProfilePayload(const String& payload)
     if (!profile["pulsesPerRev"].isNull()) MetaSense::Settings::pulsesPerRev = profile["pulsesPerRev"].as<float>();
     if (!profile["pulsesPerRevDrum"].isNull()) MetaSense::Settings::pulsesPerRevDrum = profile["pulsesPerRevDrum"].as<float>();
     if (!profile["rpmFilter"].isNull()) MetaSense::Settings::filterAlpha = profile["rpmFilter"].as<float>();
+    if (!profile["loadAvgN"].isNull()) {
+        const float n = profile["loadAvgN"].as<float>();
+        if (n < 1.0f) {
+            MetaSense::Settings::loadAvgN = 1.0f;
+        } else if (n > 48.0f) {
+            MetaSense::Settings::loadAvgN = 48.0f;
+        } else {
+            MetaSense::Settings::loadAvgN = n;
+        }
+    }
+    if (!profile["loadAvgN2"].isNull()) {
+        const float n = profile["loadAvgN2"].as<float>();
+        if (n < 1.0f) {
+            MetaSense::Settings::loadAvgN2 = 1.0f;
+        } else if (n > 48.0f) {
+            MetaSense::Settings::loadAvgN2 = 48.0f;
+        } else {
+            MetaSense::Settings::loadAvgN2 = n;
+        }
+    }
+    if (!profile["loadFilterMode"].isNull()) {
+        const String mode = profile["loadFilterMode"].as<String>();
+        if (mode.length() > 0) {
+            MetaSense::Settings::loadFilterMode =
+                (mode == "two_stage_ma" || mode == "b") ? 1 : 0;
+        } else {
+            const int modeInt = profile["loadFilterMode"].as<int>();
+            MetaSense::Settings::loadFilterMode = (modeInt == 1) ? 1 : 0;
+        }
+    }
+    if (!profile["loadCellGain"].isNull()) {
+        const uint16_t gain = static_cast<uint16_t>(profile["loadCellGain"].as<int>());
+        if (gain == 1 || gain == 2 || gain == 4 || gain == 8 || gain == 16 || gain == 32 || gain == 64 || gain == 128) {
+            MetaSense::Settings::loadCellGain = gain;
+        }
+    }
+    if (!profile["loadCellRateSps"].isNull()) {
+        const uint16_t rate = static_cast<uint16_t>(profile["loadCellRateSps"].as<int>());
+        if (rate == 10 || rate == 20 || rate == 40 || rate == 80 || rate == 320) {
+            MetaSense::Settings::loadCellRateSps = rate;
+        }
+    }
     if (!profile["drivetrainEff"].isNull()) MetaSense::Settings::drivetrainEff = profile["drivetrainEff"].as<float>();
     if (!profile["kpSource"].isNull()) {
         const String kpSource = profile["kpSource"].as<String>();
@@ -276,6 +330,11 @@ void sendSettingsSnapshot()
     json += ",\"motorModeMaxRpm\":" + String(MetaSense::Settings::motorModeMaxRpm, 0);
     json += ",\"pulsesPerRev\":" + String(MetaSense::Settings::pulsesPerRev, 2);
     json += ",\"rpmFilter\":" + String(MetaSense::Settings::filterAlpha, 3);
+    json += ",\"loadAvgN\":" + String(MetaSense::Settings::loadAvgN, 0);
+    json += ",\"loadAvgN2\":" + String(MetaSense::Settings::loadAvgN2, 0);
+    json += ",\"loadFilterMode\":\"" + String(MetaSense::Settings::loadFilterMode == 1 ? "two_stage_ma" : "moving_avg") + "\"";
+    json += ",\"loadCellGain\":" + String(MetaSense::Settings::loadCellGain);
+    json += ",\"loadCellRateSps\":" + String(MetaSense::Settings::loadCellRateSps);
     json += ",\"mode\":" + String(MetaSense::Settings::inertiaMode ? "\"inertia\"" : "\"brake\"");
     json += ",\"virtGearRatio\":" + String(MetaSense::Settings::virtGearRatio, 3);
     json += ",\"drumMass\":" + String(MetaSense::Settings::drumMassKg, 2);
@@ -348,16 +407,30 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
     String cmd = "";
     float value = 0.0f;
 
+    // Fast-path large run payloads to avoid unnecessary uppercase copies
+    // and JSON probe parsing on SAVE_RUN_DATA messages.
+    String rawMsg = msg;
+    rawMsg.trim();
+    if (rawMsg.startsWith("SAVE_RUN_DATA:")) {
+        const String payload = rawMsg.substring(14);
+        if (MetaSense::RunStorage::saveRun(payload)) {
+            MetaSense::WebSocketServer::sendStatus("Run saved");
+        } else {
+            MetaSense::WebSocketServer::sendInfo("Run save failed");
+        }
+        return;
+    }
+
     #pragma GCC diagnostic push
 #   pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     StaticJsonDocument<256> doc;
     #pragma GCC diagnostic pop
 
-    if (!deserializeJson(doc, msg)) {
+    if (!deserializeJson(doc, rawMsg)) {
         cmd = String((const char*)(doc["cmd"] | ""));
         value = doc["value"] | 0.0f;
     } else {
-        cmd = msg;
+        cmd = rawMsg;
         cmd.trim();
     }
 
@@ -399,16 +472,18 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
         MetaSense::WebSocketServer::sendStatus("Torque feed-forward updated");
     }
     else if (cmdUpper == "TARE") {
-        MetaSense::Input::tareMainGui();
-        calibrationZero = MetaSense::Input::getZeroOffset();
-        MetaSense::RunStorage::saveCalibration();
-        MetaSense::WebSocketServer::sendStatus("Main tare applied (zero=" + String(calibrationZero, 2) + ")");
+        if (MetaSense::Input::requestTare()) {
+            MetaSense::WebSocketServer::sendStatus("Tare requested");
+        } else {
+            MetaSense::WebSocketServer::sendInfo("Tare/calibration already in progress");
+        }
     }
     else if (cmdUpper == "CALIBRATE_ZERO") {
-        MetaSense::Input::tare();
-        calibrationZero = MetaSense::Input::getZeroOffset();
-        MetaSense::RunStorage::saveCalibration();
-        MetaSense::WebSocketServer::sendStatus("Tare applied (zero=" + String(calibrationZero, 2) + ")");
+        if (MetaSense::Input::requestTare()) {
+            MetaSense::WebSocketServer::sendStatus("Tare requested");
+        } else {
+            MetaSense::WebSocketServer::sendInfo("Tare/calibration already in progress");
+        }
     }
     else if (isAutoRunCommand) {
         if (!MetaSense::Input::isVcuReady()) {
@@ -455,20 +530,12 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
         }
         MetaSense::DynoStateMachine::stopRecording();
         MetaSense::WebSocketServer::sendStatus(autoWasActive ? "Auto run stopped" : "Manual recording stopped");
-
-        // GUI waits for this event to finalize report modal after manual stop.
-        MetaSense::WebSocketServer::socket().textAll(
-            "{\"type\":\"run_complete\",\"peakKW\":0,\"peakKW_RPM\":0,\"peakTorque\":0,\"peakTorque_RPM\":0,\"peakEGT\":0}");
     }
     else if (cmdUpper == "CANCEL_AUTO_RUN") {
         MetaSense::DynoStateMachine::setAutoMode(false);
         MetaSense::DynoStateMachine::setPanelAuto(false);
         MetaSense::DynoStateMachine::abortAutoRun();
         MetaSense::WebSocketServer::sendStatus("Auto run cancelled");
-
-        // Mirror manual-stop behavior so GUI can finalize and enable reporting.
-        MetaSense::WebSocketServer::socket().textAll(
-            "{\"type\":\"run_complete\",\"peakKW\":0,\"peakKW_RPM\":0,\"peakTorque\":0,\"peakTorque_RPM\":0,\"peakEGT\":0}");
     }
     else if (cmdUpper.startsWith("SET_CUSTOMER:") || cmdUpper.startsWith("SET CUSTOMER:")) {
         const int sep = cmd.indexOf(':');
@@ -511,21 +578,18 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
         MetaSense::WebSocketServer::sendStatus("Calibration factor updated");
     }
     else if (cmdUpper.startsWith("CALIBRATE:")) {
-        float knownWeightKg = 0.0f;
+        float knownWeightKg = kDefaultCalibrationKnownWeightKg;
         if (!parseKnownWeightCommand(cmd, knownWeightKg)) {
-            MetaSense::WebSocketServer::sendInfo("Invalid calibration weight");
+            knownWeightKg = kDefaultCalibrationKnownWeightKg;
+            MetaSense::WebSocketServer::sendInfo("Calibration weight defaulted to 3.404 kg");
+        }
+
+        if (!MetaSense::Input::requestCalibrationWithKnownWeight(knownWeightKg)) {
+            MetaSense::WebSocketServer::sendInfo("Calibration busy or load cell unavailable");
             return;
         }
 
-        float newFactor = 0.0f;
-        if (!MetaSense::Input::calibrateWithKnownWeight(knownWeightKg, newFactor)) {
-            MetaSense::WebSocketServer::sendInfo("Calibration failed (tare first, then apply known load)");
-            return;
-        }
-
-        calibrationFactor = newFactor;
-        MetaSense::RunStorage::saveCalibration();
-        MetaSense::WebSocketServer::sendStatus("Calibration factor updated (factor=" + String(newFactor, 6) + ")");
+        MetaSense::WebSocketServer::sendStatus("Calibration queued");
     }
     else if (cmdUpper == "GET_CALIBRATION") {
         calibrationZero = MetaSense::Input::getZeroOffset();
@@ -604,6 +668,15 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
         String list = MetaSense::RunStorage::listRuns();
         MetaSense::WebSocketServer::socket().textAll("{\"type\":\"runs\",\"data\":" + list + "}");
     }
+    else if (cmdUpper == "START_RAW_CAPTURE") {
+        String filePath;
+        if (!MetaSense::RunStorage::startRawCapture(20000, 0.0f, 3.404f, filePath)) {
+            MetaSense::WebSocketServer::sendInfo("Raw capture already active or could not start");
+            return;
+        }
+
+        MetaSense::WebSocketServer::sendStatus("Raw capture started for 20 s: " + filePath);
+    }
     else if (cmdUpper.startsWith("GET_RUN_DATA:")) {
         String filename = cmd.substring(13);
         filename.trim();
@@ -643,9 +716,41 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
         const String key = kv.substring(0, eq);
         const String val = kv.substring(eq + 1);
         const float fval = val.toFloat();
+        bool applyLoadCellProfile = false;
 
         if (key == "rpmFilter") {
             MetaSense::Settings::filterAlpha = fval;
+        } else if (key == "loadAvgN") {
+            if (fval < 1.0f) {
+                MetaSense::Settings::loadAvgN = 1.0f;
+            } else if (fval > 48.0f) {
+                MetaSense::Settings::loadAvgN = 48.0f;
+            } else {
+                MetaSense::Settings::loadAvgN = fval;
+            }
+        } else if (key == "loadAvgN2") {
+            if (fval < 1.0f) {
+                MetaSense::Settings::loadAvgN2 = 1.0f;
+            } else if (fval > 48.0f) {
+                MetaSense::Settings::loadAvgN2 = 48.0f;
+            } else {
+                MetaSense::Settings::loadAvgN2 = fval;
+            }
+        } else if (key == "loadFilterMode") {
+            MetaSense::Settings::loadFilterMode =
+                (val == "two_stage_ma" || val == "b" || val == "1") ? 1 : 0;
+        } else if (key == "loadCellGain") {
+            const uint16_t gain = static_cast<uint16_t>(val.toInt());
+            if (gain == 1 || gain == 2 || gain == 4 || gain == 8 || gain == 16 || gain == 32 || gain == 64 || gain == 128) {
+                MetaSense::Settings::loadCellGain = gain;
+                applyLoadCellProfile = true;
+            }
+        } else if (key == "loadCellRateSps") {
+            const uint16_t rate = static_cast<uint16_t>(val.toInt());
+            if (rate == 10 || rate == 20 || rate == 40 || rate == 80 || rate == 320) {
+                MetaSense::Settings::loadCellRateSps = rate;
+                applyLoadCellProfile = true;
+            }
         } else if (key == "maxRPM") {
             MetaSense::Settings::maxRPM = (fval > 0.0f) ? fval : MetaSense::Settings::maxRPM;
         } else if (key == "maxHP") {
@@ -729,6 +834,12 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
             // Pass-through for display-only keys (maxRPM, maxHP, armCm, etc.)
         }
         MetaSense::Settings::saveToStorage();
+        if (applyLoadCellProfile) {
+            const bool applied = MetaSense::Input::applyLoadCellSettingsProfile();
+            if (!applied) {
+                MetaSense::WebSocketServer::sendInfo("Load-cell profile saved but NAU apply failed (will apply on next init)");
+            }
+        }
         sendSettingsSnapshot();
         MetaSense::WebSocketServer::sendStatus(key + " saved");
     }

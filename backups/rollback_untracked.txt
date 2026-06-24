@@ -1,0 +1,7 @@
+backups/rollback_base.txt
+backups/rollback_before_step1.patch
+backups/rollback_status.txt
+backups/rollback_untracked.txt
+data/captures.html
+include/I2cBusLock.h
+src/I2cBusLock.cpp

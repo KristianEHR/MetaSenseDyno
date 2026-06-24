@@ -595,6 +595,19 @@
   white-space: nowrap;
 }
 
+.stream-metrics {
+  position: fixed;
+  bottom: 66px;
+  right: 20px;
+  font-size: 13px;
+  color: #aee7ff;
+  background: rgba(0,0,0,0.6);
+  padding: 6px 10px;
+  border-radius: 8px;
+  z-index: 99;
+  white-space: nowrap;
+}
+
 .fallback-badge {
   display: none;
   margin-left: 8px;
@@ -634,6 +647,7 @@
       <button id="autoRunButton">Auto Run (F8)</button>
       <button id="manualRunButton">Manual Run (F12)</button>
       <a href="/settings"><button>⚙ SETTINGS</button></a>
+      <a href="/captures"><button>🧪 Capture Test</button></a>
       <a href="/trend.html" target="_blank"><button>📊 Trends</button></a>
     </div>
   </div>
@@ -652,6 +666,8 @@
     📊 RPM Source: <span id="rpmSourceValue">LEAF CAN RPM</span>
     <span id="canFallbackBadge" class="fallback-badge">CAN FALLBACK</span>
   </div>
+
+  <div id="streamMetrics" class="stream-metrics" style="display:none;">Lag: -- ms | Backlog drops: --</div>
 
   <!-- BMP280 Data Box - Center Left -->
 
@@ -680,7 +696,7 @@
           <line id="hpNeedle" x1="190" y1="190" x2="190" y2="66" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
           <path id="hpTraceArc" d="" fill="none" stroke="#000000" stroke-width="8" stroke-linecap="round"/>
           <!-- Power Text -->
-          <text id="hpText" x="190" y="255" text-anchor="middle" fill="#00ffff" font-size="52" font-weight="bold">0.00</text>
+          <text id="hpText" x="190" y="255" text-anchor="middle" fill="#00ffff" font-size="52" font-weight="bold">0.0</text>
           <text x="190" y="285" text-anchor="middle" fill="#fff" font-size="16">POWER [kW]</text>
         </svg>
         <div class="peak-label" id="hpPeak"></div>
@@ -762,7 +778,7 @@
           <line id="torqueNeedle" x1="190" y1="190" x2="190" y2="66" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
           <path id="torqueTraceArc" d="" fill="none" stroke="#000000" stroke-width="8" stroke-linecap="round"/>
           <!-- Torque Text -->
-          <text id="torqueText" x="190" y="255" text-anchor="middle" fill="#00ffff" font-size="52" font-weight="bold">0.00</text>
+          <text id="torqueText" x="190" y="255" text-anchor="middle" fill="#00ffff" font-size="52" font-weight="bold">0.0</text>
           <text x="190" y="285" text-anchor="middle" fill="#fff" font-size="16">TORQUE [Nm]</text>
         </svg>
         <div class="peak-label" id="torquePeak"></div>
@@ -789,7 +805,7 @@
       <div class="gear-box" style="position: static; transform: none; margin-top: 12px; width: var(--side-gauge-size);">
         <div class="title">⚡ Acc. Energy</div>
         <div class="reading">E_torque: <span id="gearRatioValue">---</span> Nm</div>
-        <div class="reading">Energy:  <span id="EnergyValue">---</span> MJ</div>
+        <div class="reading">Energy:  <span id="EnergyValue">---</span> GJ <span id="EnergyStateBadge" style="margin-left:8px; padding:2px 6px; border-radius:999px; background:#333; color:#bbb; font-size:12px;">idle</span></div>
         <button id="resetEnergyButton">⟳ Reset Energy</button>
       </div>
     </div>
@@ -811,6 +827,10 @@
           <button id="savePdfModalButton" style="display:none;">💾 SAVE PDF</button>
         </div>
         <div class="peak-right" id="finalPeakTorque"></div>
+      </div>
+      <div id="supplementaryMetricsRow" style="display:flex; justify-content:center; gap:18px; margin-top:8px; font-size:14px; color:#cfd8dc; font-family:'Courier New',monospace;">
+        <div style="padding:6px 10px; border:1px solid #4d4d4d; border-radius:8px; background:#1b1b1b;">Lambda: <span id="lambdaRunValue">1.000</span></div>
+        <div style="padding:6px 10px; border:1px solid #4d4d4d; border-radius:8px; background:#1b1b1b;">Massflow: <span id="massflowRunValue">0.0</span> m3/h</div>
       </div>
       <div id="modalPiRow" style="display:none; text-align:center; font-size:15px; color:#00ffaa; font-family:'Courier New',monospace; font-weight:700; margin: 8px 0 0 0; letter-spacing:1px;">
         PI TRIM &mdash; Src: <span id="modalPiSource">Firmware</span> &nbsp;|&nbsp; Kp: <span id="modalPiKp">---</span> &nbsp;|&nbsp; Ki: <span id="modalPiKi">---</span>
@@ -893,7 +913,6 @@
   </div>
 
   <script>
-    // ============== GLOBAL VARIABLES ==============
     const fullDash = 376.99;
     let maxVals = { rpm: 16000, hp: 15, torque: 15, armCm: 20 };
     let currentRunData = [];
@@ -924,36 +943,101 @@
     const autoButtonIdleLabel = "Auto Run (F8)";
     const autoButtonActiveLabel = "🔴 Auto Run ACTIVE (F8 to cancel)";
 	
-	// smoothed dynorun variables for run history log
+  // Run summary values used for history export.
 	let currentPeakHP = 0;
 	let currentPeakHP_RPM = 0;
 	let currentPeakTorque = 0;
 	let currentPeakTorque_RPM = 0;
 	let currentPeakEGT = 0;
+  let currentMassflow = 0;
+  let currentLambda = 1.0;
     
-    // EGT Tracking for PDF
+    // EGT tracking for PDF.
     let peakEGT = 0;
     let peakEGTRPM = 0;
     let finalEGT = 0;
     let finalAmbient = 0;
     let energy = 0;
-    // BMP280 Data
+    // Ambient sensor values for display/PDF.
     let currentAirDensity = 1.204;
     let currentAmbientTemp = 20.0;
     let currentPressure = 1013.25;
     let currentClimateCF = 1.0;
     
-    // Needle Gauge Variables
+    // Gauge geometry.
     const needleMinAngle = -200;
     const needleMaxAngle = 70;
     
-    // Chart Objects
+    // Chart handle.
     let modalDynoChart = null;
+    // Keep UI updates bounded so stale websocket frames do not create visible lag.
+    const kUiMinDataFrameMs = 33;
+    const kUiSlowPanelMinFrameMs = 200;
+    const kRunChartMinUpdateMs = 120;
+    let lastUiDataFrameMs = 0;
+    let lastUiSlowPanelFrameMs = 0;
+    let lastRunChartUpdateMs = 0;
+    let streamLagMinOffsetMs = null;
+    let streamLagMs = 0;
+    let streamFastLagMinOffsetMs = null;
+    let streamFastLagMs = 0;
+    let streamBacklogDrops = 0;
+    let streamFullDrops = 0;
+    let streamNoSendDrops = 0;
+    let streamJsonLastLen = 0;
+    let streamJsonMaxLen = 0;
+    let streamJsonOverReserveTotal = 0;
+    let streamMetricsEnabled = false;
+    let lastHeartbeatMs = null;
+    let lastRecordingState = false;
+    let runLogActive = false;
+    let runLogSessionId = 0;
 
-    // ============== TORQUE TOGGLE ==============
-    let showEngineTorque = true;   // Default: Show Engine Torque
+    let showEngineTorque = true;
+    const kDebugStreamLogs = false;
 
-    // ============== UTILITY FUNCTIONS ==============
+    // Cache for delta telemetry: retain previous values when fields are missing from sparse updates
+    let cachedTelemetry = {
+      rpm: 0,
+      rpm_error: false,
+      drum_rpm: 0,
+      kw: 0,
+      peakKW: 0,
+      peakKW_RPM: 0,
+      torque: 0,
+      brakeTorque: 0,
+      load_kg: 0,
+      throttle_pct: 0,
+      peakTorque: 0,
+      peakTorque_RPM: 0,
+      e_torque: null,
+      energy: 0,
+      energy_active: false,
+      rel_humidity: 0,
+      ratio_confidence: 0,
+      rpm_target: 0,
+      can_fallback: false,
+      rpm_source_active: "tachogen",
+      kp_source: "firmware",
+      kp_live: NaN,
+      ki_live: NaN,
+      egt_hot: 0,
+      egt_status: 0,
+      egt_ready: false,
+      pressure: 1013.25,
+      ambient_temp: 20.0,
+      air_density: 1.204,
+      climate_cf: 1.0,
+      dyno_mode: "idle",
+      vcu_ready: false,
+      sw_active: false,
+      load_raw: 0,
+      nau_ready: false,
+      recording: false,
+      lambda: 1.0,
+      massflow_m3h: 0
+    };
+
     function showToast(message, durationMs = 2200) {
       const existing = document.getElementById("toast");
       if (existing) existing.remove();
@@ -1357,6 +1441,30 @@
       }
       return { min: 0, max: 16000, stepSize: 500 };
     }
+
+    function computeSupplementaryStats() {
+      const validLambda = currentRunData
+        .map(p => Number(p.lambda))
+        .filter(v => Number.isFinite(v));
+      const validMassflow = currentRunData
+        .map(p => Number(p.massflow))
+        .filter(v => Number.isFinite(v));
+
+      const summarize = (values) => {
+        if (values.length === 0) {
+          return { min: 0, max: 0, avg: 0 };
+        }
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const avg = values.reduce((a, b) => a + b, 0) / values.length;
+        return { min, max, avg };
+      };
+
+      return {
+        lambda: summarize(validLambda),
+        massflow: summarize(validMassflow)
+      };
+    }
     
     function updateModalXAxis() {
       if (!modalDynoChart) return;
@@ -1376,14 +1484,30 @@
       if (currentRunData.length === 0) {
         modalDynoChart.data.datasets[0].data = [];
         modalDynoChart.data.datasets[1].data = [];
+        modalDynoChart.data.datasets[2].data = [];
+        modalDynoChart.data.datasets[3].data = [];
       } else if (isTime) {
         modalDynoChart.data.datasets[0].data = currentRunData.map(p => ({x: p.time, y: p.hp}));
         modalDynoChart.data.datasets[1].data = currentRunData.map(p => ({x: p.time, y: p.torque}));
+        modalDynoChart.data.datasets[2].data = currentRunData.map(p => ({x: p.time, y: p.massflow}));
+        modalDynoChart.data.datasets[3].data = currentRunData.map(p => ({x: p.time, y: p.lambda}));
       } else {
         modalDynoChart.data.datasets[0].data = currentRunData.map(p => ({x: p.rpm, y: p.hp}));
         modalDynoChart.data.datasets[1].data = currentRunData.map(p => ({x: p.rpm, y: p.torque}));
+        modalDynoChart.data.datasets[2].data = currentRunData.map(p => ({x: p.rpm, y: p.massflow}));
+        modalDynoChart.data.datasets[3].data = currentRunData.map(p => ({x: p.rpm, y: p.lambda}));
       }
       modalDynoChart.update('none');
+    }
+
+    function requestRunChartUpdate(force = false) {
+      if (!modalDynoChart) return;
+      const nowUiMs = performance.now();
+      if (!force && (nowUiMs - lastRunChartUpdateMs) < kRunChartMinUpdateMs) {
+        return;
+      }
+      lastRunChartUpdateMs = nowUiMs;
+      updateModalXAxis();
     }
 
     function computeRelativeRunTimeSec(msg) {
@@ -1398,10 +1522,147 @@
 
       return runStartTime ? ((performance.now() - runStartTime) / 1000.0) : 0.0;
     }
+
+    function startSecondaryRunLogger(trigger, telemetry, msg) {
+      runLogSessionId += 1;
+      runLogActive = true;
+      currentRunData = [];
+      runStartTime = performance.now();
+
+      const heartbeatMs = Number(msg && msg.heartbeat_ms);
+      runStartHeartbeatMs = Number.isFinite(heartbeatMs) ? heartbeatMs : null;
+
+      if (Number.isFinite(Number(telemetry && telemetry.peakKW))) currentPeakHP = Number(telemetry.peakKW);
+      if (Number.isFinite(Number(telemetry && telemetry.peakKW_RPM))) currentPeakHP_RPM = Number(telemetry.peakKW_RPM);
+      if (Number.isFinite(Number(telemetry && telemetry.peakTorque))) currentPeakTorque = Number(telemetry.peakTorque);
+      if (Number.isFinite(Number(telemetry && telemetry.peakTorque_RPM))) currentPeakTorque_RPM = Number(telemetry.peakTorque_RPM);
+
+      if (kDebugStreamLogs) {
+        console.log("🧾 Secondary logger start", trigger, "session", runLogSessionId);
+      }
+    }
+
+    function appendSecondaryRunPoint(telemetry, msg, displayRPM, currentKW) {
+      if (!runLogActive) return;
+
+      const relativeTime = computeRelativeRunTimeSec(msg);
+      const engineTorque = Number.isFinite(Number(telemetry.torque)) ? Number(telemetry.torque) : 0;
+      const brakeTorque = Number.isFinite(Number(telemetry.brakeTorque))
+        ? Number(telemetry.brakeTorque)
+        : engineTorque;
+
+      currentRunData.push({
+        rpm: Number.isFinite(Number(displayRPM)) ? Number(displayRPM) : 0,
+        time: Number(relativeTime.toFixed(2)),
+        hp: Number.isFinite(Number(currentKW)) ? Number(currentKW) : 0,
+        torque: engineTorque,
+        brakeTorque,
+        massflow: Number.isFinite(Number(currentMassflow)) ? Number(currentMassflow) : 0,
+        lambda: Number.isFinite(Number(currentLambda)) ? Number(currentLambda) : 1.0
+      });
+    }
+
+    function commitSecondaryRunLogger(reason, peakEgtValue) {
+      runLogActive = false;
+
+      if (kDebugStreamLogs) {
+        console.log("🧾 Secondary logger commit", reason, "points", currentRunData.length);
+      }
+    }
     
     function clearPeaks() {
       document.getElementById("hpPeak").innerText = "";
       document.getElementById("torquePeak").innerText = "";
+    }
+
+    function updateStreamMetrics(msg) {
+      const metricsEl = document.getElementById("streamMetrics");
+      if (!metricsEl) return;
+
+      if (!streamMetricsEnabled) {
+        const hasDiagFields =
+          msg.ws_clients !== undefined ||
+          msg.ws_sent_total !== undefined ||
+          msg.ws_skip_backlog_total !== undefined ||
+          msg.ws_skip_full_total !== undefined ||
+          msg.ws_skip_nosend_total !== undefined;
+        if (!hasDiagFields) {
+          return;
+        }
+        streamMetricsEnabled = true;
+        metricsEl.style.display = "block";
+      }
+
+      const isSlowFrame =
+        msg.air_density !== undefined ||
+        msg.climate_cf !== undefined ||
+        msg.ambient_temp !== undefined ||
+        msg.pressure !== undefined ||
+        msg.egt_hot !== undefined ||
+        msg.rel_humidity !== undefined ||
+        msg.energy !== undefined ||
+        msg.lambda !== undefined ||
+        msg.massflow_m3h !== undefined ||
+        msg.energy_active !== undefined ||
+        msg.egt_status !== undefined ||
+        msg.egt_ready !== undefined ||
+        msg.dyno_mode !== undefined ||
+        msg.vcu_ready !== undefined ||
+        msg.sw_active !== undefined;
+
+      const heartbeatMs = Number(msg && msg.heartbeat_ms);
+      if (Number.isFinite(heartbeatMs)) {
+        if (lastHeartbeatMs !== null && heartbeatMs + 2000 < lastHeartbeatMs) {
+          streamLagMinOffsetMs = null;
+          streamFastLagMinOffsetMs = null;
+        }
+        lastHeartbeatMs = heartbeatMs;
+
+        const offsetMs = Date.now() - heartbeatMs;
+        if (streamLagMinOffsetMs === null || offsetMs < streamLagMinOffsetMs) {
+          streamLagMinOffsetMs = offsetMs;
+        }
+        streamLagMs = Math.max(0, offsetMs - streamLagMinOffsetMs);
+
+        if (!isSlowFrame) {
+          if (streamFastLagMinOffsetMs === null || offsetMs < streamFastLagMinOffsetMs) {
+            streamFastLagMinOffsetMs = offsetMs;
+          }
+          streamFastLagMs = Math.max(0, offsetMs - streamFastLagMinOffsetMs);
+        }
+      }
+
+      if (msg.ws_skip_backlog_total !== undefined) {
+        const v = Number(msg.ws_skip_backlog_total);
+        if (Number.isFinite(v) && v >= 0) streamBacklogDrops = Math.round(v);
+      }
+      if (msg.ws_skip_full_total !== undefined) {
+        const v = Number(msg.ws_skip_full_total);
+        if (Number.isFinite(v) && v >= 0) streamFullDrops = Math.round(v);
+      }
+      if (msg.ws_skip_nosend_total !== undefined) {
+        const v = Number(msg.ws_skip_nosend_total);
+        if (Number.isFinite(v) && v >= 0) streamNoSendDrops = Math.round(v);
+      }
+      if (msg.ws_json_last_len !== undefined) {
+        const v = Number(msg.ws_json_last_len);
+        if (Number.isFinite(v) && v >= 0) streamJsonLastLen = Math.round(v);
+      }
+      if (msg.ws_json_max_len !== undefined) {
+        const v = Number(msg.ws_json_max_len);
+        if (Number.isFinite(v) && v >= 0) streamJsonMaxLen = Math.round(v);
+      }
+      if (msg.ws_json_over_reserve_total !== undefined) {
+        const v = Number(msg.ws_json_over_reserve_total);
+        if (Number.isFinite(v) && v >= 0) streamJsonOverReserveTotal = Math.round(v);
+      }
+
+      let metricsStr = `Lag fast: ${Math.round(streamFastLagMs)} ms | Lag all: ${Math.round(streamLagMs)} ms | Backlog drops: ${streamBacklogDrops} | Full: ${streamFullDrops} | NoSend: ${streamNoSendDrops}`;
+      // Conditionally append JSON sizing metrics if they're being sent
+      if (streamJsonLastLen > 0 || streamJsonMaxLen > 0 || streamJsonOverReserveTotal > 0) {
+        metricsStr += ` | JSON last/max: ${streamJsonLastLen}/${streamJsonMaxLen} | Over reserve: ${streamJsonOverReserveTotal}`;
+      }
+      metricsEl.textContent = metricsStr;
     }
 
     function setAutoReportPreference(enabled) {
@@ -1474,7 +1735,6 @@
       showToast("Run stopped");
     }
 
-    // ============== TORQUE TOGGLE LOGIC ==============
     document.getElementById('torqueMode').addEventListener('change', function() {
       showEngineTorque = this.checked;
       const label = document.getElementById('torqueModeLabel');
@@ -1483,7 +1743,6 @@
       }
     });
 
-    // ============== PDF GENERATION ==============
     function generatePDF() {
       if (currentRunData.length === 0) {
         showToast("No data to save!");
@@ -1519,34 +1778,54 @@
         pdf.line(20, 25, pageWidth - 20, 25);
         y += 5;
 
+        // Right-side stats block — all 4 key metrics, uniform 10 pt, anchored top-right
+        const supplementaryStats = computeSupplementaryStats();
+        const statsX = pageWidth - 20;
+        let rightY = y;
+        pdf.setFont("ariel", "normal");
+        pdf.setFontSize(10);
+        const _peakHPRaw = (document.getElementById("finalPeakHP").textContent || "").replace(/[^\w\s\.\-\@\:]/g, '').trim();
+        const _peakTQRaw = (document.getElementById("finalPeakTorque").textContent || "").replace(/[^\w\s\.\-\@\:]/g, '').trim();
+        pdf.setTextColor(0, 0, 255);
+        if (_peakHPRaw) { pdf.text(_peakHPRaw, statsX, rightY, { align: "right" }); rightY += 5; }
+        pdf.setTextColor(0, 128, 0);
+        if (_peakTQRaw) { pdf.text(_peakTQRaw, statsX, rightY, { align: "right" }); rightY += 5; }
+        pdf.setTextColor(255, 85, 255);
+        pdf.text(
+          "Lambda min/avg/max: " + supplementaryStats.lambda.min.toFixed(3) + " / " +
+          supplementaryStats.lambda.avg.toFixed(3) + " / " + supplementaryStats.lambda.max.toFixed(3),
+          statsX, rightY, { align: "right" }
+        );
+        rightY += 5;
+        pdf.setTextColor(255, 153, 0);
+        pdf.text(
+          "Massflow [m3/h] min/avg/max: " + supplementaryStats.massflow.min.toFixed(1) + " / " +
+          supplementaryStats.massflow.avg.toFixed(1) + " / " + supplementaryStats.massflow.max.toFixed(1),
+          statsX, rightY, { align: "right" }
+        );
+        pdf.setTextColor(0, 0, 0);
+
         pdf.setFontSize(18);
         pdf.setFont("ariel", "bold");
 
-        if (currentCustomer) {
-          pdf.text("Customer: " + currentCustomer, 20, y);
-		  pdf.setTextColor(0, 0, 255);
-          const peakHPText = document.getElementById("finalPeakHP").textContent || "";
-          const cleanPeakHP = peakHPText.replace(/[^\w\s\.\-\@\:]/g, '');
-          if (cleanPeakHP.trim()) pdf.text(cleanPeakHP, pageWidth - 30, y, { align: "right" });
-          y += 7;
-        }
+        // Keep a fixed metadata block height so manual and auto reports
+        // always use the same PDF layout geometry.
+        const customerText = currentCustomer && currentCustomer.trim().length ? currentCustomer : "-";
+        const unitText = currentUnit && currentUnit.trim().length ? currentUnit : "-";
+        const notesText = currentComments && currentComments.trim().length ? currentComments : "-";
 
-        if (currentUnit) {
-		  pdf.setTextColor(0, 0, 0);
-          pdf.text("Engine: " + currentUnit, 20, y);
-		  pdf.setTextColor(0, 128, 0);
-          const peakTorqueText = document.getElementById("finalPeakTorque").textContent || "";
-          const cleanPeakTorque = peakTorqueText.replace(/[^\w\s\.\-\@\:]/g, '');
-          if (cleanPeakTorque.trim()) pdf.text(cleanPeakTorque, pageWidth - 30, y, { align: "right" });
-          y += 7;
-        }
+        pdf.setTextColor(0, 0, 0);
+        pdf.text("Customer: " + customerText, 20, y);
+        y += 7;
 
-        if (currentComments) {
-          pdf.setFontSize(10);
-          pdf.setFont("ariel", "normal");
-          pdf.text("Notes: " + currentComments, 20, y);
-          y += 7;
-        }
+        pdf.setTextColor(0, 0, 0);
+        pdf.text("Engine: " + unitText, 20, y);
+        y += 7;
+
+        pdf.setFontSize(10);
+        pdf.setFont("ariel", "normal");
+        pdf.text("Notes: " + notesText, 20, y);
+        y += 7;
         pdf.setFontSize(10);
         pdf.setFont("ariel", "bold");
         pdf.setTextColor(255, 0, 0);
@@ -1581,18 +1860,18 @@
           return Number.isFinite(x) && x >= minX && x <= maxX;
         });
 
-        const graphWidth = pageWidth - 40;
-        const graphHeight = 125;
+        const graphWidth = pageWidth - 75;
+        const graphHeight = 100;
         const graphX = 20;
         const graphY = y;
 
-        pdf.setDrawColor(0);
-        pdf.setLineWidth(0.5);
+        pdf.setDrawColor(160, 160, 160);
+        pdf.setLineWidth(0.3);
         pdf.rect(graphX, graphY, graphWidth, graphHeight);
 
         pdf.setFontSize(8);
-        pdf.setDrawColor(100);
-        pdf.setLineWidth(0.2);
+        pdf.setDrawColor(180, 180, 180);
+        pdf.setLineWidth(0.15);
 
         for (let x = minX; x <= maxX; x += xStep) {
           const xPos = graphX + ((x - minX) / rangeX) * graphWidth;
@@ -1607,8 +1886,8 @@
           pdf.text(yVal.toFixed(0), graphX - 5, yPos + 2, { align: "right", fontSize: 10 });
         }
 
-        pdf.setFontSize(12);
-        pdf.text(isTime ? "Time (s)" : "RPM", pageWidth / 2, graphY + graphHeight + 15, { align: "center" });
+        pdf.setFontSize(9);
+        pdf.text(isTime ? "Time (s)" : "RPM", pageWidth / 2, graphY + graphHeight + 13, { align: "center" });
         pdf.text("Power / Torque", graphX - 12, graphY + graphHeight / 2, { align: "center", angle: 90 });
 
         pdf.setDrawColor(0, 0, 255);
@@ -1631,11 +1910,85 @@
           pdf.line(x1, y1, x2, y2);
         }
 
-        pdf.setFontSize(12);
+        const massflowValues = pointsForGraph
+          .map(p => Number(p.massflow))
+          .filter(v => Number.isFinite(v));
+        const lambdaValues = pointsForGraph
+          .map(p => Number(p.lambda))
+          .filter(v => Number.isFinite(v));
+
+        const massflowMin = 0;
+        const massflowMax = Math.max(10, niceCeil(Math.max(0, ...massflowValues)));
+        const massflowRange = Math.max(1, massflowMax - massflowMin);
+        const massflowMid = (massflowMin + massflowMax) / 2;
+
+        const lambdaMin = 0.50;
+        const lambdaMax = 1.50;
+        const lambdaRange = lambdaMax - lambdaMin;
+        const lambdaMid = (lambdaMin + lambdaMax) / 2;
+
+        // Secondary Y-axis coordinates for supplementary channels (outside chart area on right).
+        const massflowAxisX = graphX + graphWidth + 5;
+        const lambdaAxisX = graphX + graphWidth + 31;
+
+        pdf.setFontSize(10);
+        pdf.setTextColor(255, 153, 0);
+        pdf.text("Mass[m3/h]", massflowAxisX + 2, graphY - 2, { align: "left" });
+        pdf.setTextColor(255, 85, 255);
+        pdf.text("Lambda", lambdaAxisX + 2, graphY - 2, { align: "left" });
+
+        for (let yVal = minY; yVal <= maxY; yVal += yStep) {
+          const yPos = graphY + graphHeight - ((yVal - minY) / rangeY) * graphHeight;
+          const gridFraction = (yVal - minY) / rangeY;
+          const massflowValue = massflowMin + gridFraction * massflowRange;
+          const lambdaValue = lambdaMin + gridFraction * lambdaRange;
+
+          pdf.setDrawColor(160, 160, 160);
+          pdf.setLineWidth(0.2);
+          pdf.line(massflowAxisX, yPos, massflowAxisX, yPos);
+          pdf.line(massflowAxisX - 2.5, yPos, massflowAxisX + 2.5, yPos);
+          pdf.line(lambdaAxisX, yPos, lambdaAxisX, yPos);
+          pdf.line(lambdaAxisX - 2.5, yPos, lambdaAxisX + 2.5, yPos);
+
+          pdf.setTextColor(255, 153, 0);
+          pdf.text(massflowValue.toFixed(0), massflowAxisX + 2, yPos + 2, { align: "left" });
+          pdf.setTextColor(255, 85, 255);
+          pdf.text(lambdaValue.toFixed(2), lambdaAxisX + 2, yPos + 2, { align: "left" });
+        }
+
+        pdf.setDrawColor(255, 153, 0);
+        pdf.setLineWidth(0.45);
+        for (let i = 0; i < pointsForGraph.length - 1; i++) {
+          const x1 = graphX + ((isTime ? pointsForGraph[i].time : pointsForGraph[i].rpm) - minX) / rangeX * graphWidth;
+          const y1 = graphY + graphHeight - ((Number(pointsForGraph[i].massflow || 0) - massflowMin) / massflowRange) * graphHeight;
+          const x2 = graphX + ((isTime ? pointsForGraph[i + 1].time : pointsForGraph[i + 1].rpm) - minX) / rangeX * graphWidth;
+          const y2 = graphY + graphHeight - ((Number(pointsForGraph[i + 1].massflow || 0) - massflowMin) / massflowRange) * graphHeight;
+          pdf.line(x1, y1, x2, y2);
+        }
+
+        pdf.setDrawColor(255, 85, 255);
+        pdf.setLineWidth(0.45);
+        for (let i = 0; i < pointsForGraph.length - 1; i++) {
+          const x1 = graphX + ((isTime ? pointsForGraph[i].time : pointsForGraph[i].rpm) - minX) / rangeX * graphWidth;
+          const y1 = graphY + graphHeight - ((Number(pointsForGraph[i].lambda || 1.0) - lambdaMin) / lambdaRange) * graphHeight;
+          const x2 = graphX + ((isTime ? pointsForGraph[i + 1].time : pointsForGraph[i + 1].rpm) - minX) / rangeX * graphWidth;
+          const y2 = graphY + graphHeight - ((Number(pointsForGraph[i + 1].lambda || 1.0) - lambdaMin) / lambdaRange) * graphHeight;
+          pdf.line(x1, y1, x2, y2);
+        }
+
+        // Single-line legend immediately below the X-axis label, same font/size as axis.
+        const legendY = graphY + graphHeight + 20;
+        pdf.setFontSize(9);
+        pdf.setFont("ariel", "normal");
         pdf.setTextColor(0, 0, 255);
-        pdf.text("Power[kW]", pageWidth - 50, graphY + 15);
+        pdf.text("\u2014 Power[kW]", graphX, legendY);
         pdf.setTextColor(0, 128, 0);
-        pdf.text("Torque[Nm]", pageWidth - 50, graphY + 30);
+        pdf.text("\u2014 Torque[Nm]", graphX + 50, legendY);
+        pdf.setTextColor(255, 153, 0);
+        pdf.text(`\u2014 Massflow[m3/h] 0-${massflowMax.toFixed(0)}`, graphX + 105, legendY);
+        pdf.setTextColor(255, 85, 255);
+        pdf.text("\u2014 Lambda 0.50-1.50", graphX + 205, legendY);
+        pdf.setTextColor(0, 0, 0);
 
         const filename = `MetaSense_${(currentCustomer || "run").replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.pdf`;
         pdf.save(filename);
@@ -1646,7 +1999,6 @@
       }
     }
 
-    // ============== WEBSOCKET CONNECTION ==============
     function connectWS() {
       ws = new WebSocket("ws://" + location.hostname + "/ws");
       
@@ -1659,6 +2011,9 @@
       ws.onmessage = function(evt) {
         try {
           const msg = JSON.parse(evt.data);
+          if (kDebugStreamLogs) {
+            console.log("📨 WebSocket msg:", msg.type, "Fields:", Object.keys(msg).sort().join(", "));
+          }
           
           if (msg.type === "settings") {
             maxVals = { rpm: msg.maxRPM, hp: msg.maxHP, torque: msg.maxTorque, armCm: msg.armCm };
@@ -1683,14 +2038,82 @@
           }
           
           if (msg.type === "data") {
+            const nowUiMs = performance.now();
+            if ((nowUiMs - lastUiDataFrameMs) < kUiMinDataFrameMs) {
+              return;
+            }
+            lastUiDataFrameMs = nowUiMs;
+            const shouldUpdateSlowPanel = (nowUiMs - lastUiSlowPanelFrameMs) >= kUiSlowPanelMinFrameMs;
+            if (shouldUpdateSlowPanel) {
+              lastUiSlowPanelFrameMs = nowUiMs;
+            }
+            updateStreamMetrics(msg);
+
+            // Merge sparse delta update into cache to retain previous values
+            if (msg.rpm !== undefined) cachedTelemetry.rpm = msg.rpm;
+            if (msg.rpm_error !== undefined) cachedTelemetry.rpm_error = Number(msg.rpm_error) === 1;
+            if (msg.drum_rpm !== undefined) cachedTelemetry.drum_rpm = msg.drum_rpm;
+            if (msg.kw !== undefined) cachedTelemetry.kw = msg.kw;
+            if (msg.peakKW !== undefined) cachedTelemetry.peakKW = msg.peakKW;
+            if (msg.peakKW_RPM !== undefined) cachedTelemetry.peakKW_RPM = msg.peakKW_RPM;
+            if (msg.torque !== undefined) cachedTelemetry.torque = msg.torque;
+            if (msg.brakeTorque !== undefined) cachedTelemetry.brakeTorque = msg.brakeTorque;
+            if (msg.load_kg !== undefined) cachedTelemetry.load_kg = msg.load_kg;
+            if (msg.throttle_pct !== undefined) cachedTelemetry.throttle_pct = msg.throttle_pct;
+            if (msg.peakTorque !== undefined) cachedTelemetry.peakTorque = msg.peakTorque;
+            if (msg.peakTorque_RPM !== undefined) cachedTelemetry.peakTorque_RPM = msg.peakTorque_RPM;
+            if (msg.e_torque !== undefined) cachedTelemetry.e_torque = msg.e_torque;
+            if (msg.gear_ratio !== undefined) cachedTelemetry.e_torque = msg.gear_ratio;
+            if (msg.energy !== undefined) cachedTelemetry.energy = msg.energy;
+            if (msg.energy_active !== undefined) cachedTelemetry.energy_active = Number(msg.energy_active) === 1;
+            if (msg.rel_humidity !== undefined) cachedTelemetry.rel_humidity = msg.rel_humidity;
+            if (msg.ratio_confidence !== undefined) cachedTelemetry.ratio_confidence = msg.ratio_confidence;
+            if (msg.rpm_target !== undefined) cachedTelemetry.rpm_target = msg.rpm_target;
+            if (msg.can_fallback !== undefined) cachedTelemetry.can_fallback = Number(msg.can_fallback) === 1;
+            if (msg.rpm_source_active !== undefined) cachedTelemetry.rpm_source_active = msg.rpm_source_active;
+            if (msg.kp_source !== undefined) cachedTelemetry.kp_source = msg.kp_source;
+            if (msg.kp_live !== undefined) cachedTelemetry.kp_live = msg.kp_live;
+            if (msg.ki_live !== undefined) cachedTelemetry.ki_live = msg.ki_live;
+            if (msg.egt_hot !== undefined) cachedTelemetry.egt_hot = msg.egt_hot;
+            if (msg.egt_status !== undefined) cachedTelemetry.egt_status = msg.egt_status;
+            if (msg.egt_ready !== undefined) cachedTelemetry.egt_ready = Number(msg.egt_ready) === 1;
+            if (msg.pressure !== undefined) cachedTelemetry.pressure = msg.pressure;
+            if (msg.ambient_temp !== undefined) cachedTelemetry.ambient_temp = msg.ambient_temp;
+            if (msg.air_density !== undefined) cachedTelemetry.air_density = msg.air_density;
+            if (msg.climate_cf !== undefined) cachedTelemetry.climate_cf = msg.climate_cf;
+            if (msg.dyno_mode !== undefined) cachedTelemetry.dyno_mode = msg.dyno_mode;
+            if (msg.vcu_ready !== undefined) cachedTelemetry.vcu_ready = Number(msg.vcu_ready) === 1;
+            if (msg.sw_active !== undefined) cachedTelemetry.sw_active = Number(msg.sw_active) === 1;
+            if (msg.load_raw !== undefined) cachedTelemetry.load_raw = msg.load_raw;
+            if (msg.nau_ready !== undefined) cachedTelemetry.nau_ready = Number(msg.nau_ready) === 1;
+            if (msg.recording !== undefined) cachedTelemetry.recording = Number(msg.recording) === 1;
+            if (msg.lambda !== undefined) cachedTelemetry.lambda = msg.lambda;
+            if (msg.massflow_m3h !== undefined) cachedTelemetry.massflow_m3h = msg.massflow_m3h;
+
+            // Create a merged view with cached data + new msg for backward compatibility
+            const telemetry = Object.assign({}, cachedTelemetry, msg);
+            const recordingNow = Boolean(telemetry.recording);
+            const recordingStarted = !lastRecordingState && recordingNow;
+            const recordingEnded = lastRecordingState && !recordingNow;
+            lastRecordingState = recordingNow;
+
+            if (recordingStarted) {
+              startSecondaryRunLogger("recording_edge_start", telemetry, msg);
+            } else if (recordingNow && !runLogActive) {
+              startSecondaryRunLogger("recording_sync_start", telemetry, msg);
+            }
+            if (kDebugStreamLogs) {
+              console.log("📊 Cache+MSG merged. recording:", telemetry.recording, "egt_hot:", telemetry.egt_hot, "air_density:", telemetry.air_density, "drum_rpm:", telemetry.drum_rpm, "brakeTorque:", telemetry.brakeTorque);
+            }
+
             if (typeof msg.kp_source === "string") {
               setKpSourceUi(msg.kp_source);
             }
-            updateRunPiPanel(msg);
-            let displayRPM = msg.rpm || 0;
-            const canFallback = Number(msg.can_fallback) === 1;
-            const activeRpmSource = (typeof msg.rpm_source_active === "string" && msg.rpm_source_active.length > 0)
-              ? msg.rpm_source_active
+            updateRunPiPanel(telemetry);
+            let displayRPM = telemetry.rpm || 0;
+            const canFallback = telemetry.can_fallback;
+            const activeRpmSource = (typeof telemetry.rpm_source_active === "string" && telemetry.rpm_source_active.length > 0)
+              ? telemetry.rpm_source_active
               : ((currentRpmSource === "leafrpm" && !canFallback) ? "leafrpm" : "tachogen");
             const rpmSourceValue = document.getElementById("rpmSourceValue");
             const canFallbackBadge = document.getElementById("canFallbackBadge");
@@ -1707,41 +2130,54 @@
             }
             lastActiveRpmSource = activeRpmSource;
             lastCanFallback = canFallback;
-            const currentKW = Number.isFinite(Number(msg.kw)) ? Number(msg.kw) : 0;
-            const peakKW = Number.isFinite(Number(msg.peakKW)) ? Number(msg.peakKW) : currentKW;
-            const peakKWRPM = Number.isFinite(Number(msg.peakKW_RPM)) ? Number(msg.peakKW_RPM) : Math.round(displayRPM);
-            const peakTorque = Number.isFinite(Number(msg.peakTorque)) ? Number(msg.peakTorque) : 0;
-            const peakTorqueRPM = Number.isFinite(Number(msg.peakTorque_RPM)) ? Number(msg.peakTorque_RPM) : Math.round(displayRPM);
-            const peakEGTValue = Number.isFinite(Number(msg.peakEGT)) ? Number(msg.peakEGT) : 0;
+            const currentKW = Number.isFinite(Number(telemetry.kw)) ? Number(telemetry.kw) : 0;
+            const peakKW = Number.isFinite(Number(telemetry.peakKW)) ? Number(telemetry.peakKW) : currentKW;
+            const peakKWRPM = Number.isFinite(Number(telemetry.peakKW_RPM)) ? Number(telemetry.peakKW_RPM) : Math.round(displayRPM);
+            const peakTorque = Number.isFinite(Number(telemetry.peakTorque)) ? Number(telemetry.peakTorque) : 0;
+            const peakTorqueRPM = Number.isFinite(Number(telemetry.peakTorque_RPM)) ? Number(telemetry.peakTorque_RPM) : Math.round(displayRPM);
+            const peakEGTValue = Number.isFinite(Number(telemetry.peakEGT)) ? Number(telemetry.peakEGT) : 0;
             
             // Update gear ratio display
-            const eTorque = Number.isFinite(Number(msg.e_torque)) ? Number(msg.e_torque) :
-              (Number.isFinite(Number(msg.gear_ratio)) ? Number(msg.gear_ratio) : null);
+            const eTorque = Number.isFinite(Number(telemetry.e_torque)) ? Number(telemetry.e_torque) : null;
             if (eTorque !== null) {
               document.getElementById("gearRatioValue").textContent = eTorque.toFixed(2);
             }
             // Update Energy display
-            if (msg.energy !== undefined) {
-              document.getElementById("EnergyValue").textContent = msg.energy.toFixed(2);
-            }
-            if (msg.rel_humidity !== undefined || msg.ratio_confidence !== undefined) {
-              let confidencePercent = 0;
-              if (msg.rel_humidity !== undefined) {
-                confidencePercent = Number(msg.rel_humidity);
-              } else {
-                const rawConfidence = Number(msg.ratio_confidence);
-                // Backward compatibility: some firmware sends 0..1, older sends 0..100.
-                confidencePercent = rawConfidence <= 1.0 ? (rawConfidence * 100.0) : rawConfidence;
+            if (shouldUpdateSlowPanel) {
+              if (telemetry.energy !== undefined) {
+                const energyValue = Number(telemetry.energy);
+                if (Number.isFinite(energyValue)) {
+                  energy = energyValue;
+                  const energyEl = document.getElementById("EnergyValue");
+                  if (energyEl) energyEl.textContent = (energyValue / 1000.0).toFixed(4);
+                }
               }
-              if (!Number.isFinite(confidencePercent)) confidencePercent = 0;
-              if (confidencePercent < 0) confidencePercent = 0;
-              if (confidencePercent > 100) confidencePercent = 100;
-              document.getElementById("ratioConfidence").textContent = confidencePercent.toFixed(2);
-              // Color code confidence
-              let confidenceElem = document.getElementById("ratioConfidence");
-              if (confidencePercent > 80) confidenceElem.style.color = "#88ff88";
-              else if (confidencePercent > 50) confidenceElem.style.color = "#ffaa44";
-              else confidenceElem.style.color = "#ff8888";
+              const energyStateBadge = document.getElementById("EnergyStateBadge");
+              if (energyStateBadge) {
+                const energyActive = Boolean(telemetry.energy_active);
+                energyStateBadge.textContent = energyActive ? "active" : "idle";
+                energyStateBadge.style.background = energyActive ? "#0b3" : "#333";
+                energyStateBadge.style.color = energyActive ? "#001a0e" : "#bbb";
+              }
+              if (telemetry.rel_humidity !== undefined || telemetry.ratio_confidence !== undefined) {
+                let confidencePercent = 0;
+                if (telemetry.rel_humidity !== undefined) {
+                  confidencePercent = Number(telemetry.rel_humidity);
+                } else {
+                  const rawConfidence = Number(telemetry.ratio_confidence);
+                  // Backward compatibility: some firmware sends 0..1, older sends 0..100.
+                  confidencePercent = rawConfidence <= 1.0 ? (rawConfidence * 100.0) : rawConfidence;
+                }
+                if (!Number.isFinite(confidencePercent)) confidencePercent = 0;
+                if (confidencePercent < 0) confidencePercent = 0;
+                if (confidencePercent > 100) confidencePercent = 100;
+                document.getElementById("ratioConfidence").textContent = confidencePercent.toFixed(2);
+                // Color code confidence
+                let confidenceElem = document.getElementById("ratioConfidence");
+                if (confidencePercent > 80) confidenceElem.style.color = "#88ff88";
+                else if (confidencePercent > 50) confidenceElem.style.color = "#ffaa44";
+                else confidenceElem.style.color = "#ff8888";
+              }
             }
             
             // Update ratio indicator next to torque toggle
@@ -1752,19 +2188,19 @@
             }
             
             updateNeedleGauge(displayRPM);
-            updateGauge("hp", currentKW, maxVals.hp, "hpText", 2);
+            updateGauge("hp", currentKW, maxVals.hp, "hpText", 1);
 
-            if (msg.rpm_target !== undefined) {
-              document.getElementById("rpmSetpointDisplay").textContent = Math.round(msg.rpm_target);
+            if (telemetry.rpm_target !== undefined) {
+              document.getElementById("rpmSetpointDisplay").textContent = Math.round(telemetry.rpm_target);
             }
             
-            // === TORQUE WITH TOGGLE ===drumRpmDisplay
-            const engineTorque = Number.isFinite(Number(msg.torque)) ? Number(msg.torque) :
-              (Number.isFinite(Number(msg.brakeTorque)) ? Number(msg.brakeTorque) : 0);
-            const brakeTorque = Number.isFinite(Number(msg.brakeTorque)) ? Number(msg.brakeTorque) :
-              (Number.isFinite(Number(msg.torque)) ? Number(msg.torque) : 0);
+            // Torque gauge source follows the active mode toggle.
+            const engineTorque = Number.isFinite(Number(telemetry.torque)) ? Number(telemetry.torque) :
+              (Number.isFinite(Number(telemetry.brakeTorque)) ? Number(telemetry.brakeTorque) : 0);
+            const brakeTorque = Number.isFinite(Number(telemetry.brakeTorque)) ? Number(telemetry.brakeTorque) :
+              (Number.isFinite(Number(telemetry.torque)) ? Number(telemetry.torque) : 0);
             const torqueValue = showEngineTorque ? engineTorque : brakeTorque;
-            updateGauge("torque", torqueValue, maxVals.torque, "torqueText", 2);
+            updateGauge("torque", torqueValue, maxVals.torque, "torqueText", 1);
             
             // Update custom SVG torque gauge fill
             const maxTorque = 25.0;
@@ -1775,37 +2211,56 @@
                 torqueFill.setAttribute('stroke-dashoffset', offset);
               }
 
-            if (msg.load_kg !== undefined) {
-              document.getElementById("loadKgDisplay").textContent = Number(msg.load_kg).toFixed(1);
+            if (telemetry.load_kg !== undefined) {
+              document.getElementById("loadKgDisplay").textContent = Number(telemetry.load_kg).toFixed(1);
             }
             
-            if (msg.throttle_pct !== undefined) {
-              document.getElementById("drumRpmDisplay").textContent = Math.round(msg.throttle_pct);
-            } else if (msg.drum_rpm !== undefined) {
+            if (telemetry.throttle_pct !== undefined) {
+              document.getElementById("drumRpmDisplay").textContent = Math.round(telemetry.throttle_pct);
+            } else if (telemetry.drum_rpm !== undefined) {
               // Backward-compatible fallback for older firmware payloads.
-              document.getElementById("drumRpmDisplay").textContent = Math.round(msg.drum_rpm);
+              document.getElementById("drumRpmDisplay").textContent = Math.round(telemetry.drum_rpm);
             }
             
-            // Update BMP280 data
-            if (msg.air_density !== undefined) {
-              currentAirDensity = msg.air_density;
-              currentAmbientTemp = msg.ambient_temp;
-              currentPressure = msg.pressure;
-              if (msg.climate_cf !== undefined) currentClimateCF = Number(msg.climate_cf);
-              updateBMP280Display();
+            if (shouldUpdateSlowPanel) {
+              // Update BMP280 data
+              if (telemetry.air_density !== undefined) {
+                currentAirDensity = telemetry.air_density;
+                currentAmbientTemp = telemetry.ambient_temp;
+                currentPressure = telemetry.pressure;
+                if (telemetry.climate_cf !== undefined) currentClimateCF = Number(telemetry.climate_cf);
+                updateBMP280Display();
+              }
+
+              if (telemetry.massflow_m3h !== undefined) {
+                const massflow = Number(telemetry.massflow_m3h);
+                if (Number.isFinite(massflow)) {
+                  currentMassflow = massflow;
+                  const massflowEl = document.getElementById("massflowRunValue");
+                  if (massflowEl) massflowEl.textContent = massflow.toFixed(1);
+                }
+              }
+              if (telemetry.lambda !== undefined) {
+                const lambdaValue = Number(telemetry.lambda);
+                if (Number.isFinite(lambdaValue)) {
+                  currentLambda = lambdaValue;
+                  const lambdaEl = document.getElementById("lambdaRunValue");
+                  if (lambdaEl) lambdaEl.textContent = lambdaValue.toFixed(3);
+                }
+              }
             }
             
-            document.getElementById("hpPeak").innerHTML = msg.recording || peakKW > 0 ? 
-              `🏆 Peak: ${peakKW.toFixed(2)} kW @ ${Math.round(peakKWRPM)} RPM` : "";
-            document.getElementById("torquePeak").innerHTML = msg.recording || peakTorque > 0 ? 
-              `🏆 Peak: ${peakTorque.toFixed(2)} Nm @ ${Math.round(peakTorqueRPM)} RPM` : "";
+            document.getElementById("hpPeak").innerHTML = telemetry.recording || peakKW > 0 ? 
+              `🏆 Peak: ${peakKW.toFixed(1)} kW @ ${Math.round(peakKWRPM)} RPM` : "";
+            document.getElementById("torquePeak").innerHTML = telemetry.recording || peakTorque > 0 ? 
+              `🏆 Peak: ${peakTorque.toFixed(1)} Nm @ ${Math.round(peakTorqueRPM)} RPM` : "";
             
             // EGT Handling
-            const egtHot = Number.isFinite(Number(msg.egt_hot)) ? Number(msg.egt_hot) :
-              (msg.mcps && msg.mcps["7"] && Number.isFinite(Number(msg.mcps["7"].hot)) ? Number(msg.mcps["7"].hot) : null);
+            const egtHot = Number.isFinite(Number(telemetry.egt_hot)) ? Number(telemetry.egt_hot) :
+              (telemetry.mcps && telemetry.mcps["7"] && Number.isFinite(Number(telemetry.mcps["7"].hot)) ? Number(telemetry.mcps["7"].hot) : null);
             {
-              const egtReady = Number(msg.egt_ready) === 1;
-              const egtStatus = Number.isFinite(Number(msg.egt_status)) ? Number(msg.egt_status) : 0;
+              const egtReady = Number(telemetry.egt_ready) === 1;
+              const egtStatus = Number.isFinite(Number(telemetry.egt_status)) ? Number(telemetry.egt_status) : 0;
               const egtAddrRaw = Number(msg.egt_addr);
               const egtAckAddrRaw = Number(msg.egt_ack_addr);
               const i2cScan = (typeof msg.i2c_scan === "string" && msg.i2c_scan.length > 0) ? msg.i2c_scan : "?";
@@ -1826,24 +2281,31 @@
 
             }
             if (egtHot !== null) {
-                document.getElementById("egtValue").textContent = Math.round(egtHot);
+                if (shouldUpdateSlowPanel) {
+                  document.getElementById("egtValue").textContent = Math.round(egtHot);
+                }
                 if (egtHot > peakEGT) {
                   peakEGT = egtHot;
                   peakEGTRPM = Math.round(displayRPM);
                 }
                 finalEGT = egtHot;
-				energy = msg.energy;
             }
             
-              if (msg.recording) {
+              if (telemetry.recording) {
     // Store current peaks
     currentPeakHP = peakKW;
     currentPeakHP_RPM = peakKWRPM;
     currentPeakTorque = peakTorque;
     currentPeakTorque_RPM = peakTorqueRPM;
     currentPeakEGT = peakEGTValue;
+    if (kDebugStreamLogs) {
+      console.log("🎬 Recording active, suppressDynoModalReopen:", suppressDynoModalReopen);
+    }
 
             if (!suppressDynoModalReopen) {
+          if (kDebugStreamLogs) {
+            console.log("🚪 Showing dynoModal");
+          }
           document.getElementById("dynoModal").style.display = "block";
             }
     if (reportReadyActive) {
@@ -1861,44 +2323,30 @@
       document.getElementById("savePdfModalButton").style.display = "none";
     }
     
-    const relativeTime = computeRelativeRunTimeSec(msg);
-    currentRunData.push({
-        rpm: displayRPM,
-      time: Number(relativeTime.toFixed(2)),
-      hp: currentKW,
-        torque: msg.torque || 0
-    });
+    appendSecondaryRunPoint(telemetry, msg, displayRPM, currentKW);
     
-    document.getElementById("finalPeakHP").textContent = `🏆 Power max: ${peakKW.toFixed(2)} kW @ ${Math.round(peakKWRPM)} RPM`;
-    document.getElementById("finalPeakTorque").textContent = `🏆 Torque max: ${peakTorque.toFixed(2)} Nm @ ${Math.round(peakTorqueRPM)} RPM`;
-    updateModalXAxis();
+    document.getElementById("finalPeakHP").textContent = `🏆 Power max: ${peakKW.toFixed(1)} kW @ ${Math.round(peakKWRPM)} RPM`;
+    document.getElementById("finalPeakTorque").textContent = `🏆 Torque max: ${peakTorque.toFixed(1)} Nm @ ${Math.round(peakTorqueRPM)} RPM`;
+    requestRunChartUpdate(false);
 }
             if (!msg.recording) {
               runStartHeartbeatMs = null;
               suppressDynoModalReopen = false;
             }
+
+            if (recordingEnded) {
+              commitSecondaryRunLogger("recording_edge_stop", currentPeakEGT);
+            }
           } 
 else if (msg.type === "run_complete") {
+  if (Number.isFinite(Number(msg.peakKW))) currentPeakHP = Number(msg.peakKW);
+  if (Number.isFinite(Number(msg.peakKW_RPM))) currentPeakHP_RPM = Number(msg.peakKW_RPM);
+  if (Number.isFinite(Number(msg.peakTorque))) currentPeakTorque = Number(msg.peakTorque);
+  if (Number.isFinite(Number(msg.peakTorque_RPM))) currentPeakTorque_RPM = Number(msg.peakTorque_RPM);
+  document.getElementById("finalPeakHP").textContent = `🏆 Power max: ${Number(currentPeakHP).toFixed(1)} kW @ ${Math.round(currentPeakHP_RPM)} RPM`;
+  document.getElementById("finalPeakTorque").textContent = `🏆 Torque max: ${Number(currentPeakTorque).toFixed(1)} Nm @ ${Math.round(currentPeakTorque_RPM)} RPM`;
   showReportSelection();
-    updateModalXAxis();
-    
-    // Send the smoothed run data to ESP32 for storage - use stored peaks
-    if (currentRunData.length > 0 && ws) {
-        const runData = {
-            customer: currentCustomer,
-            unit: currentUnit,
-            comments: currentComments,
-            points: currentRunData.map(p => ({r: p.rpm, h: p.hp, t: p.torque})),
-            peaks: {
-                hp: currentPeakHP,
-                hp_rpm: currentPeakHP_RPM,
-                torque: currentPeakTorque,
-                torque_rpm: currentPeakTorque_RPM,
-                egt: msg.peakEGT || 0
-            }
-        };
-        ws.send("SAVE_RUN_DATA:" + JSON.stringify(runData));
-    }
+    requestRunChartUpdate(true);
 }
 else if (msg.type === "info" || msg.type === "status") {
   const lowMsg = (msg.msg || "").toLowerCase();
@@ -1926,14 +2374,13 @@ else if (msg.type === "info" || msg.type === "status") {
       };
     }
     
-    // ============== INITIALIZATION ==============
     function init() {
       createTicks();
       createHPTicks();
       createTorqueTicks();
       updateNeedleGauge(0);
-      updateGauge("hp", 0, maxVals.hp, "hpText", 2);
-      updateGauge("torque", 0, maxVals.torque, "torqueText", 2);
+      updateGauge("hp", 0, maxVals.hp, "hpText", 1);
+      updateGauge("torque", 0, maxVals.torque, "torqueText", 1);
       updateBMP280Display();
       
       const ctx = document.getElementById('modalDynoChart').getContext('2d');
@@ -1941,8 +2388,10 @@ else if (msg.type === "info" || msg.type === "status") {
         type: 'line',
         data: {
           datasets: [
-            { label: 'Power [kW]', data: [], borderColor: '#0088ff', borderWidth: 3, tension: 0.0, pointRadius: 0 },
-            { label: 'Torque [Nm]', data: [], borderColor: '#00ff00', borderWidth: 3, tension: 0.0, pointRadius: 0 }
+            { label: 'Power [kW]', data: [], borderColor: '#0088ff', borderWidth: 3, tension: 0.0, pointRadius: 0, yAxisID: 'y' },
+            { label: 'Torque [Nm]', data: [], borderColor: '#00ff00', borderWidth: 3, tension: 0.0, pointRadius: 0, yAxisID: 'y' },
+            { label: 'Massflow [m3/h]', data: [], borderColor: '#ff9900', borderWidth: 2, tension: 0.0, pointRadius: 0, yAxisID: 'yMass' },
+            { label: 'Lambda', data: [], borderColor: '#ff55ff', borderWidth: 2, tension: 0.0, pointRadius: 0, yAxisID: 'yLambda' }
           ]
         },
         options: {
@@ -1951,7 +2400,9 @@ else if (msg.type === "info" || msg.type === "status") {
           maintainAspectRatio: false,
           scales: {
             x: { type: 'linear', title: { display: true, text: 'RPM', color: '#cccccc', font: { size: 16 } }, ticks: { color: '#aaaaaa', font: { size: 10 } }, grid: { color: '#444' } },
-            y: { title: { display: true, text: 'kW / Nm', color: '#cccccc', font: { size: 16 } }, ticks: { color: '#aaaaaa' }, grid: { color: '#444' } }
+            y: { title: { display: true, text: 'kW / Nm', color: '#cccccc', font: { size: 16 } }, ticks: { color: '#aaaaaa' }, grid: { color: '#444' } },
+            yMass: { position: 'right', title: { display: true, text: 'm3/h', color: '#ffbb66', font: { size: 12 } }, ticks: { color: '#ffbb66' }, grid: { drawOnChartArea: false } },
+            yLambda: { position: 'left', title: { display: true, text: 'Lambda', color: '#ff88ff', font: { size: 12 } }, ticks: { color: '#ff88ff' }, min: 0.5, max: 1.5, grid: { drawOnChartArea: false } }
           },
           plugins: { legend: { labels: { color: '#cccccc', font: { size: 14 } } } }
         }
@@ -1960,11 +2411,14 @@ else if (msg.type === "info" || msg.type === "status") {
       connectWS();
     }
     
-    // ============== EVENT LISTENERS ==============
     document.getElementById("tareButton").onclick = function() {
-      clearPeaks();
-      if (ws) ws.send("TARE");
-      showToast("Tare sent & peaks cleared");
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        clearPeaks();
+        ws.send("TARE");
+        showToast("Tare requested & peaks cleared");
+      } else {
+        showToast("Not connected. Tare not sent.");
+      }
     };
     
     document.getElementById("autoRunButton").onclick = function() {
@@ -1997,6 +2451,7 @@ else if (msg.type === "info" || msg.type === "status") {
         document.getElementById("autoRunButton").innerHTML = autoButtonActiveLabel;
         runStartTime = performance.now();
         runStartHeartbeatMs = null;
+        runLogActive = false;
         currentRunData = [];
         peakEGT = 0;
         finalEGT = 0;
@@ -2038,6 +2493,7 @@ else if (msg.type === "info" || msg.type === "status") {
       
       runStartTime = performance.now();
       runStartHeartbeatMs = null;
+      runLogActive = false;
       currentRunData = [];
       peakEGT = 0;
       finalEGT = 0;
@@ -2052,7 +2508,7 @@ else if (msg.type === "info" || msg.type === "status") {
     document.getElementById("resetEnergyButton").onclick = function() {
       energy = 0;
       const energyEl = document.getElementById("EnergyValue");
-      if (energyEl) energyEl.textContent = "0.00";
+      if (energyEl) energyEl.textContent = "0";
       showToast("Accumulated energy reset");
     };
     
@@ -2089,7 +2545,7 @@ else if (msg.type === "info" || msg.type === "status") {
           xAxisChoice = radio.value;
         }
         if (document.getElementById('dynoModal').style.display === 'block') {
-          updateModalXAxis();
+          requestRunChartUpdate(true);
         }
       });
     });

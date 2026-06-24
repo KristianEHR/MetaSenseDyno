@@ -217,11 +217,11 @@ void update(float engineThrottlePercent, float setPoint, float rpm, float primar
     const OutputState prevState = state;
     OutputState candidateState = state;
 
-    if (setPoint <= 100.0f && rpm <= 100.0f) {
+    if (setPoint <= 200.0f && rpm <= 200.0f) {
         candidateState = OutputState::START;
-    } else if (setPoint >= 200.0f && setPoint <= 2000.0f) {
+    } else if (setPoint >= 200.0f && setPoint <= 1500.0f) {
         candidateState = OutputState::MOTOR;
-    } else if (setPoint > 2000.0f && rpm >= setPoint) {
+    } else if (setPoint > 1500.0f && rpm >= setPoint) {
         candidateState = OutputState::DYNO;
     } else if (rpm < 200.0f) {
         candidateState = OutputState::START;

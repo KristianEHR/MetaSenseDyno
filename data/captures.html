@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MetaSense Capture Browser</title>
+  <link rel="icon" href="/favicon.png" type="image/x-icon">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Courier New', monospace;
+      background: linear-gradient(180deg, #2f2f2f 0%, #1f1f1f 100%);
+      color: #ddd;
+    }
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(48,48,48,0.96);
+      border-bottom: 1px solid #666;
+      padding: 18px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      letter-spacing: 2px;
+      color: #f0f0f0;
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    button, a.btn {
+      appearance: none;
+      border: 1px solid #777;
+      background: #404040;
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 10px;
+      cursor: pointer;
+      text-decoration: none;
+      font: inherit;
+      font-size: 14px;
+    }
+    button:hover, a.btn:hover { background: #505050; }
+    .wrap {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 24px;
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 20px;
+    }
+    .panel {
+      background: #333;
+      border: 1px solid #666;
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    }
+    .panel h2 {
+      margin: 0 0 12px 0;
+      font-size: 20px;
+      color: #e5e5e5;
+    }
+    .meta {
+      color: #9b9b9b;
+      font-size: 13px;
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: calc(100vh - 180px);
+      overflow: auto;
+      padding-right: 4px;
+    }
+    .item {
+      background: #262626;
+      border: 1px solid #555;
+      border-left: 4px solid #88ff88;
+      border-radius: 14px;
+      padding: 14px;
+    }
+    .item-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .fname { font-weight: bold; color: #f0f0f0; }
+    .quality {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(136,255,136,0.12);
+      border: 1px solid rgba(136,255,136,0.4);
+      color: #a8ffb0;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px 12px;
+      font-size: 13px;
+      color: #c9c9c9;
+      margin-bottom: 10px;
+    }
+    .stats strong { color: #88ff88; }
+    .row-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #1d1d1d;
+      border: 1px solid #555;
+      border-radius: 14px;
+      padding: 16px;
+      margin: 0;
+      min-height: 420px;
+      max-height: calc(100vh - 200px);
+      overflow: auto;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .empty {
+      color: #888;
+      padding: 18px 8px;
+    }
+    @media (max-width: 980px) {
+      .wrap { grid-template-columns: 1fr; }
+      .list { max-height: none; }
+      pre { max-height: 460px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div>
+      <h1>RAW CAPTURE BROWSER</h1>
+      <div class="meta">20-second captures with timestamps, raw values, and an inclusive quality report.</div>
+    </div>
+    <div class="actions">
+      <button id="startCaptureBtn" onclick="startCapture()">START 20s CAPTURE</button>
+      <button onclick="loadCaptures()">REFRESH</button>
+      <a class="btn" href="/settings">SETTINGS</a>
+      <a class="btn" href="/">DASHBOARD</a>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="panel">
+      <h2>Captures</h2>
+      <div class="meta" id="captureState">Capture state: unknown</div>
+      <div class="meta" id="captureAction">Action: none yet</div>
+      <div id="captureList" class="list"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Selected Report</h2>
+      <div class="meta" id="selectedMeta">Select a capture to inspect its JSON report.</div>
+      <pre id="reportView">{}</pre>
+    </div>
+  </div>
+
+  <script>
+    const captureList = document.getElementById('captureList');
+    const reportView = document.getElementById('reportView');
+    const selectedMeta = document.getElementById('selectedMeta');
+    const captureState = document.getElementById('captureState');
+    const captureAction = document.getElementById('captureAction');
+    const startCaptureBtn = document.getElementById('startCaptureBtn');
+    let startCaptureInFlight = false;
+    let selectedFilename = '';
+    let lastListSignature = '';
+
+    function fmt(value, digits = 2) {
+      const num = Number(value);
+      return Number.isFinite(num) ? num.toFixed(digits) : 'n/a';
+    }
+
+    function fallback(value, defaultValue) {
+      return (value === undefined || value === null) ? defaultValue : value;
+    }
+
+    function qualityClass(label) {
+      const map = {
+        excellent: 'Excellent',
+        good: 'Good',
+        fair: 'Fair',
+        poor: 'Poor',
+        unusable: 'Unusable'
+      };
+      return map[String(label || '').toLowerCase()] || 'Unknown';
+    }
+
+    function buildItem(item) {
+      const div = document.createElement('div');
+      div.className = 'item';
+      div.innerHTML = `
+        <div class="item-top">
+          <div class="fname">${item.filename || 'capture.csv'}</div>
+          <div class="quality">${qualityClass(item.qualityLabel)} • ${fmt(item.qualityScore, 1)} / 100</div>
+        </div>
+        <div class="stats">
+          <div><strong>Samples</strong> ${fallback(item.sampleCount, 0)}</div>
+          <div><strong>Duration</strong> ${(Number(item.durationMs || 0) / 1000).toFixed(1)} s</div>
+          <div><strong>Rate</strong> ${fmt(item.sampleRate, 1)} SPS</div>
+          <div><strong>Approx SNR</strong> ${fmt(item.approxSnrDb, 2)} dB</div>
+          <div><strong>Gaps</strong> ${fallback(item.gapCount, 0)}</div>
+          <div><strong>Drift</strong> ${fmt(item.driftPerMinRaw, 6)} raw/min</div>
+          <div><strong>Baseline</strong> ${fmt(item.baselineKg, 3)} kg</div>
+          <div><strong>Test load</strong> ${fmt(item.testLoadKg, 3)} kg</div>
+        </div>
+        <div class="row-actions">
+          <a class="btn" href="/api/captures/file?name=${encodeURIComponent(item.filename)}" download>DOWNLOAD CSV</a>
+          <a class="btn" href="/api/captures/report?name=${encodeURIComponent(item.filename)}" target="_blank">OPEN JSON</a>
+          <button data-filename="${item.filename}">VIEW REPORT</button>
+        </div>
+      `;
+
+      div.querySelector('button').addEventListener('click', () => showReport(item));
+      return div;
+    }
+
+    function showReport(item) {
+      selectedFilename = item.filename || '';
+      selectedMeta.textContent = `${item.filename} • ${qualityClass(item.qualityLabel)} • ${fmt(item.qualityScore, 1)} / 100`;
+      fetch(`/api/captures/report?name=${encodeURIComponent(item.filename)}`)
+        .then(resp => resp.text())
+        .then(text => {
+          try {
+            const parsed = JSON.parse(text);
+            reportView.textContent = JSON.stringify(parsed, null, 2);
+          } catch (error) {
+            reportView.textContent = text || '{}';
+          }
+        })
+        .catch(error => {
+          reportView.textContent = JSON.stringify({ error: String(error) }, null, 2);
+        });
+    }
+
+    function loadCaptures() {
+      fetch('/api/captures/list')
+        .then(resp => resp.json())
+        .then(items => {
+          const list = Array.isArray(items) ? items : [];
+          const signature = JSON.stringify(list.map(item => [
+            item.filename,
+            item.sampleCount,
+            item.durationMs,
+            item.qualityScore,
+            item.qualityLabel
+          ]));
+
+          if (signature === lastListSignature) {
+            return;
+          }
+          lastListSignature = signature;
+
+          const previousScrollTop = captureList.scrollTop;
+          const previousSelected = selectedFilename;
+          const displayList = [...list].reverse();
+          captureList.innerHTML = '';
+          if (!list.length) {
+            captureList.innerHTML = '<div class="empty">No captures found yet. Start a 20-second raw capture first.</div>';
+            selectedFilename = '';
+            selectedMeta.textContent = 'Select a capture to inspect its JSON report.';
+            reportView.textContent = '{}';
+            return;
+          }
+
+          displayList.forEach(item => captureList.appendChild(buildItem(item)));
+          captureList.scrollTop = previousScrollTop;
+
+          let selectedItem = null;
+          if (previousSelected) {
+            selectedItem = list.find(item => item.filename === previousSelected) || null;
+          }
+          if (!selectedItem) {
+            selectedItem = displayList[0];
+          }
+
+          showReport(selectedItem);
+        })
+        .catch(error => {
+          captureList.innerHTML = '<div class="empty">Failed to load capture list.</div>';
+          reportView.textContent = JSON.stringify({ error: String(error) }, null, 2);
+        });
+    }
+
+    function loadCaptureState() {
+      fetch('/api/captures/state')
+        .then(resp => resp.json())
+        .then(state => {
+          const active = !!state.active;
+          captureState.textContent = `Capture state: ${active ? 'ACTIVE (logging now)' : 'idle'}`;
+          startCaptureBtn.disabled = active;
+          startCaptureBtn.textContent = active ? 'CAPTURE ACTIVE...' : 'START 20s CAPTURE';
+          startCaptureBtn.style.opacity = active ? '0.65' : '1';
+          startCaptureBtn.style.cursor = active ? 'wait' : 'pointer';
+        })
+        .catch(() => {
+          captureState.textContent = 'Capture state: unavailable';
+        });
+    }
+
+    function startCapture() {
+      if (startCaptureInFlight) {
+        return;
+      }
+      startCaptureInFlight = true;
+      startCaptureBtn.disabled = true;
+      startCaptureBtn.textContent = 'STARTING...';
+
+      fetch('/api/captures/start', { method: 'POST' })
+        .then(resp => {
+          if (!resp.ok) throw new Error(`start failed (${resp.status})`);
+          return resp.json();
+        })
+        .then(result => {
+          const ok = !!result.ok;
+          captureAction.textContent = ok
+            ? `Action: started (${result.file || 'capture file pending'})`
+            : `Action: ${result.msg || 'start failed'}`;
+          loadCaptureState();
+          setTimeout(loadCaptures, 800);
+        })
+        .catch(error => {
+          captureAction.textContent = `Action: start failed (${String(error)})`;
+        })
+        .finally(() => {
+          startCaptureInFlight = false;
+          setTimeout(loadCaptureState, 300);
+        });
+    }
+
+    loadCaptureState();
+    captureList.innerHTML = '<div class="empty">Loading...</div>';
+    loadCaptures();
+    setInterval(loadCaptureState, 1500);
+    setInterval(loadCaptures, 8000);
+  </script>
+</body>
+</html>

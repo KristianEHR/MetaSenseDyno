@@ -15,6 +15,25 @@
 #include <time.h>
 
 #include "globals.h"
+#include "I2cBusLock.h"
+
+// Enable/disable runtime task instrumentation (set to 0 to disable)
+#define ENABLE_RUNTIME_INSTRUMENTATION 0
+
+// VCU ready source switch:
+// 1 = use GPIO RB+ input (normal operation)
+// 0 = force VCU ready true (bench testing without VCU)
+#if !defined(VCU_switch) && defined(VCU_set)
+#define VCU_switch VCU_set
+#endif
+
+#ifndef VCU_switch
+#define VCU_switch 0
+#endif
+
+namespace MetaSense::Globals {
+const bool kVcuSwitch = (VCU_switch != 0);
+}
 
 const char* ssid     = "5djnmv47";
 const char* password = "Niser0201";
@@ -31,14 +50,51 @@ TaskHandle_t modbusTaskHandle = nullptr;
 
 constexpr const char* kOtaHostname = "dyno-controller";
 constexpr const char* kOtaPassword = "metasense";
-constexpr uint32_t kI2cClockHz = 25000;
+constexpr uint32_t kI2cClockHz = 50000;
 constexpr uint16_t kI2cTimeoutMs = 50;
-constexpr uint32_t kControlPeriodMs = 100;
+constexpr uint32_t kControlPeriodMs = 25;
 constexpr uint32_t kModbusPeriodMs = 50;
 constexpr uint32_t kHeartbeatPeriodMs = 10000;
 constexpr UBaseType_t kControlTaskPriority = 5;
 constexpr UBaseType_t kNetworkTaskPriority = 3;
 constexpr UBaseType_t kModbusTaskPriority = 1;
+
+struct TaskRuntimeStats {
+    volatile uint32_t lastUs = 0;
+    volatile uint32_t maxUs = 0;
+    volatile uint32_t emaUs = 0;
+    volatile uint32_t loops = 0;
+    volatile uint32_t overruns = 0;
+};
+
+TaskRuntimeStats controlTaskStats;
+TaskRuntimeStats networkTaskStats;
+TaskRuntimeStats modbusTaskStats;
+
+void recordTaskRuntime(TaskRuntimeStats& stats, uint32_t elapsedUs, uint32_t periodUs)
+{
+    stats.lastUs = elapsedUs;
+    if (elapsedUs > stats.maxUs) {
+        stats.maxUs = elapsedUs;
+    }
+    if (stats.emaUs == 0) {
+        stats.emaUs = elapsedUs;
+    } else {
+        stats.emaUs = (stats.emaUs * 7U + elapsedUs) / 8U;
+    }
+    ++stats.loops;
+    if (elapsedUs > periodUs) {
+        ++stats.overruns;
+    }
+}
+
+void resetMaxStats()
+{
+    controlTaskStats.maxUs = 0;
+    networkTaskStats.maxUs = 0;
+    modbusTaskStats.maxUs = 0;
+    MetaSense::Input::resetLoadCellSamplerMaxRuntime();
+}
 
 bool wifiCredentialsConfigured();
 
@@ -51,14 +107,17 @@ uint32_t heartbeatTimestamp()
 void scanI2cBus()
 {
     uint8_t found = 0;
-    for (uint8_t addr = 0x08; addr <= 0x77; ++addr) {
-        Wire.beginTransmission(addr);
-        const uint8_t err = Wire.endTransmission();
-        if (err == 0) {
-            ++found;
-            Serial.printf("[BOOT] I2C device found @ 0x%02X\n", addr);
-            Serial0.printf("[BOOT] I2C device found @ 0x%02X\n", addr);
+    if (MetaSense::I2cBus::take(pdMS_TO_TICKS(50))) {
+        for (uint8_t addr = 0x08; addr <= 0x77; ++addr) {
+            Wire.beginTransmission(addr);
+            const uint8_t err = Wire.endTransmission();
+            if (err == 0) {
+                ++found;
+                Serial.printf("[BOOT] I2C device found @ 0x%02X\n", addr);
+                Serial0.printf("[BOOT] I2C device found @ 0x%02X\n", addr);
+            }
         }
+        MetaSense::I2cBus::give();
     }
 
     if (found == 0) {
@@ -127,6 +186,9 @@ void setupWebServer()
     webServer.on("/settings", HTTP_GET, [](AsyncWebServerRequest* request) {
         request->send(LittleFS, "/settings.html", "text/html");
     });
+    webServer.on("/captures", HTTP_GET, [](AsyncWebServerRequest* request) {
+        request->send(LittleFS, "/captures.html", "text/html");
+    });
     webServer.on("/trend", HTTP_GET, [](AsyncWebServerRequest* request) {
         request->send(LittleFS, "/trend.html", "text/html");
     });
@@ -135,6 +197,205 @@ void setupWebServer()
     });
     webServer.on("/update_fs", HTTP_GET, [](AsyncWebServerRequest* request) {
         request->send(LittleFS, "/update_fs.html", "text/html");
+    });
+
+    auto sendJsonNoCache = [](AsyncWebServerRequest* request, int code, const String& body) {
+        AsyncWebServerResponse* response = request->beginResponse(code, "application/json", body);
+        response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+        response->addHeader("Pragma", "no-cache");
+        response->addHeader("Expires", "0");
+        request->send(response);
+    };
+
+    webServer.on("/api/fs/selftest", HTTP_GET, [sendJsonNoCache](AsyncWebServerRequest* request) {
+        const String path = "/fs_selftest.csv";
+        const String expected = "timestamp_us,source,raw_value,filtered_value\n1000,selftest,1.234,1.200\n2000,selftest,2.345,2.300\n";
+
+        File writer = LittleFS.open(path, "w");
+        if (!writer) {
+            sendJsonNoCache(request, 500, "{\"ok\":false,\"msg\":\"open-write-failed\"}");
+            return;
+        }
+        writer.print(expected);
+        writer.close();
+
+        File reader = LittleFS.open(path, "r");
+        if (!reader) {
+            sendJsonNoCache(request, 500, "{\"ok\":false,\"msg\":\"open-read-failed\"}");
+            return;
+        }
+        const String text = reader.readString();
+        reader.close();
+
+        Serial.println("[FS-SELFTEST] Readback follows:");
+        Serial.print(text);
+        Serial0.println("[FS-SELFTEST] Readback follows:");
+        Serial0.print(text);
+
+        if (text != expected) {
+            sendJsonNoCache(request, 500, "{\"ok\":false,\"msg\":\"readback-mismatch\"}");
+            return;
+        }
+
+        String body = "{\"ok\":true,\"path\":\"" + path + "\",\"bytes\":" + String(text.length()) + ",\"text\":\"";
+        for (size_t i = 0; i < text.length(); ++i) {
+            const char c = text[i];
+            if (c == '\\') body += "\\\\";
+            else if (c == '"') body += "\\\"";
+            else if (c == '\n') body += "\\n";
+            else if (c == '\r') body += "\\r";
+            else body += c;
+        }
+        body += "\"}";
+        sendJsonNoCache(request, 200, body);
+    });
+
+    auto startFsProbeHandler = [sendJsonNoCache](AsyncWebServerRequest* request) {
+        uint32_t durationMs = 10000;
+        if (request->hasParam("duration_ms")) {
+            const uint32_t requested = static_cast<uint32_t>(request->getParam("duration_ms")->value().toInt());
+            if (requested > 0) {
+                durationMs = requested;
+            }
+        }
+
+        String filePath;
+        if (!MetaSense::RunStorage::startFsLiveProbe(durationMs, filePath)) {
+            sendJsonNoCache(request, 409, "{\"ok\":false,\"msg\":\"probe already active or start failed\"}");
+            return;
+        }
+
+        sendJsonNoCache(request,
+                        200,
+                        "{\"ok\":true,\"msg\":\"probe started\",\"file\":\"" + filePath + "\",\"durationMs\":" + String(durationMs) + "}");
+    };
+    webServer.on("/api/fs/probe/start", HTTP_GET, startFsProbeHandler);
+    webServer.on("/api/fs/probe/start", HTTP_POST, startFsProbeHandler);
+
+    webServer.on("/api/fs/probe/state", HTTP_GET, [sendJsonNoCache](AsyncWebServerRequest* request) {
+        sendJsonNoCache(request, 200, MetaSense::RunStorage::fsLiveProbeStateJson());
+    });
+
+    webServer.on("/api/fs/probe/read", HTTP_GET, [](AsyncWebServerRequest* request) {
+        const String text = MetaSense::RunStorage::fsLiveProbeReadText();
+        if (text.isEmpty()) {
+            request->send(404, "text/plain", "no probe file available");
+            return;
+        }
+        AsyncWebServerResponse* response = request->beginResponse(200, "text/plain", text);
+        response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+        response->addHeader("Pragma", "no-cache");
+        response->addHeader("Expires", "0");
+        request->send(response);
+    });
+
+    webServer.on("/api/fs/probe/verify", HTTP_GET, [sendJsonNoCache](AsyncWebServerRequest* request) {
+        sendJsonNoCache(request, 200, MetaSense::RunStorage::fsLiveProbeVerifyJson());
+    });
+
+    webServer.on("/api/captures/list", HTTP_GET, [](AsyncWebServerRequest* request) {
+        AsyncWebServerResponse* response = request->beginResponse(200,
+                                                                  "application/json",
+                                                                  MetaSense::RunStorage::listRawCaptures());
+        response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+        response->addHeader("Pragma", "no-cache");
+        response->addHeader("Expires", "0");
+        request->send(response);
+    });
+
+    webServer.on("/api/captures/file", HTTP_GET, [](AsyncWebServerRequest* request) {
+        if (!request->hasParam("name")) {
+            request->send(400, "text/plain", "missing name");
+            return;
+        }
+
+        String name = request->getParam("name")->value();
+        if (name.indexOf('/') >= 0 || name.indexOf("..") >= 0) {
+            request->send(400, "text/plain", "invalid name");
+            return;
+        }
+
+        if (!name.endsWith(".csv")) {
+            name += ".csv";
+        }
+
+        String path = String("/captures/") + name;
+        if (!LittleFS.exists(path)) {
+            path = String("/") + name;
+            if (!LittleFS.exists(path)) {
+                request->send(404, "text/plain", "capture not found");
+                return;
+            }
+        }
+
+        request->send(LittleFS, path, "text/csv");
+    });
+
+    webServer.on("/api/captures/report", HTTP_GET, [](AsyncWebServerRequest* request) {
+        if (!request->hasParam("name")) {
+            AsyncWebServerResponse* response = request->beginResponse(400, "application/json", "{}");
+            response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+            response->addHeader("Pragma", "no-cache");
+            response->addHeader("Expires", "0");
+            request->send(response);
+            return;
+        }
+
+        String name = request->getParam("name")->value();
+        AsyncWebServerResponse* response = request->beginResponse(200,
+                                                                  "application/json",
+                                                                  MetaSense::RunStorage::loadRawCaptureReport(name));
+        response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+        response->addHeader("Pragma", "no-cache");
+        response->addHeader("Expires", "0");
+        request->send(response);
+    });
+
+    auto startCaptureHandler = [](AsyncWebServerRequest* request) {
+        String filePath;
+        if (!MetaSense::RunStorage::startRawCapture(20000, 0.0f, 3.404f, filePath)) {
+            AsyncWebServerResponse* response = request->beginResponse(409,
+                                                                      "application/json",
+                                                                      "{\"ok\":false,\"msg\":\"Capture already active or start failed\"}");
+            response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+            response->addHeader("Pragma", "no-cache");
+            response->addHeader("Expires", "0");
+            request->send(response);
+            return;
+        }
+
+        AsyncWebServerResponse* response = request->beginResponse(200,
+                                                                  "application/json",
+                                                                  "{\"ok\":true,\"msg\":\"Capture started\",\"file\":\"" + filePath + "\"}");
+        response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+        response->addHeader("Pragma", "no-cache");
+        response->addHeader("Expires", "0");
+        request->send(response);
+    };
+    webServer.on("/api/captures/start", HTTP_POST, startCaptureHandler);
+
+    webServer.on("/api/captures/state", HTTP_GET, [](AsyncWebServerRequest* request) {
+        AsyncWebServerResponse* response = request->beginResponse(200,
+                                                                  "application/json",
+                                                                  MetaSense::RunStorage::rawCaptureStateJson());
+        response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+        response->addHeader("Pragma", "no-cache");
+        response->addHeader("Expires", "0");
+        request->send(response);
+    });
+
+    webServer.on("/api/captures/verify", HTTP_GET, [](AsyncWebServerRequest* request) {
+        String name;
+        if (request->hasParam("name")) {
+            name = request->getParam("name")->value();
+        }
+        AsyncWebServerResponse* response = request->beginResponse(200,
+                                                                  "application/json",
+                                                                  MetaSense::RunStorage::verifyRawCaptureCsv(name));
+        response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+        response->addHeader("Pragma", "no-cache");
+        response->addHeader("Expires", "0");
+        request->send(response);
     });
 
     webServer.serveStatic("/", LittleFS, "/");
@@ -260,7 +521,13 @@ void controlTaskEntry(void* /*parameter*/)
     TickType_t lastWake = xTaskGetTickCount();
 
     for (;;) {
+        const uint32_t startedUs = micros();
         MetaSense::ControlTask::loop();
+#if ENABLE_RUNTIME_INSTRUMENTATION
+        recordTaskRuntime(controlTaskStats,
+                          micros() - startedUs,
+                          kControlPeriodMs * 1000U);
+#endif
         vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(kControlPeriodMs));
     }
 }
@@ -270,7 +537,13 @@ void modbusTaskEntry(void* /*parameter*/)
     TickType_t lastWake = xTaskGetTickCount();
 
     for (;;) {
+        const uint32_t startedUs = micros();
         modbusPublisher.update();
+#if ENABLE_RUNTIME_INSTRUMENTATION
+        recordTaskRuntime(modbusTaskStats,
+                          micros() - startedUs,
+                          kModbusPeriodMs * 1000U);
+#endif
         vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(kModbusPeriodMs));
     }
 }
@@ -278,9 +551,11 @@ void modbusTaskEntry(void* /*parameter*/)
 void networkTaskEntry(void* /*parameter*/)
 {
     uint32_t lastStatusMs = 0;
+    bool bootStatusLogged = false;
 
     for (;;) {
         (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(25));
+        const uint32_t startedUs = micros();
 
         setupOtaOnceConnected();
 
@@ -291,28 +566,138 @@ void networkTaskEntry(void* /*parameter*/)
         MetaSense::WebSocketServer::loop();
         MetaSense::Input::publish();
 
+#if ENABLE_RUNTIME_INSTRUMENTATION
+        recordTaskRuntime(networkTaskStats,
+                          micros() - startedUs,
+                          25000U);
+#endif
+
         const uint32_t now = millis();
+        if (!bootStatusLogged && now >= 3000U) {
+            bootStatusLogged = true;
+            const bool vcuReady = MetaSense::Input::isVcuReady();
+            bool nauLdoConfigured = false;
+            bool nauInternalCalOk = false;
+            uint8_t nauInternalCalAttempts = 0;
+            MetaSense::Input::getLoadCellInitStatus(nauLdoConfigured,
+                                                    nauInternalCalOk,
+                                                    nauInternalCalAttempts);
+            const int rbPlusLevel = digitalRead(MetaSense::Globals::kRbPlusInputPin);
+            Serial.printf("[BOOTSTATUS] vcu_mode=%s, vcu_ready=%d, rb_plus=%d, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u\n",
+                          MetaSense::Globals::kVcuSwitch ? "gpio" : "forced",
+                          vcuReady ? 1 : 0,
+                          rbPlusLevel,
+                          nauLdoConfigured ? 1 : 0,
+                          nauInternalCalOk ? 1 : 0,
+                          static_cast<unsigned>(nauInternalCalAttempts));
+            Serial0.printf("[BOOTSTATUS] vcu_mode=%s, vcu_ready=%d, rb_plus=%d, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u\n",
+                           MetaSense::Globals::kVcuSwitch ? "gpio" : "forced",
+                           vcuReady ? 1 : 0,
+                           rbPlusLevel,
+                           nauLdoConfigured ? 1 : 0,
+                           nauInternalCalOk ? 1 : 0,
+                           static_cast<unsigned>(nauInternalCalAttempts));
+        }
+
         if (now - lastStatusMs > kHeartbeatPeriodMs) {
             lastStatusMs = now;
-            if (wifiCredentialsConfigured()) {
-                const wl_status_t status = WiFi.status();
-                const String ip = WiFi.localIP().toString();
-                const uint32_t ts = heartbeatTimestamp();
-                Serial.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s\n",
-                              static_cast<unsigned long>(ts),
-                              ssid,
-                              static_cast<int>(status),
-                              wifiStatusToString(status),
-                              ip.c_str(),
-                              otaStarted ? "ready" : "not-ready");
-                Serial0.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s\n",
-                               static_cast<unsigned long>(ts),
-                               ssid,
-                               static_cast<int>(status),
-                               wifiStatusToString(status),
-                               ip.c_str(),
-                               otaStarted ? "ready" : "not-ready");
-            }
+            const wl_status_t status = WiFi.status();
+            const String ip = WiFi.localIP().toString();
+            const uint32_t ts = heartbeatTimestamp();
+            const bool vcuReady = MetaSense::Input::isVcuReady();
+            bool nauLdoConfigured = false;
+            bool nauInternalCalOk = false;
+            uint8_t nauInternalCalAttempts = 0;
+            MetaSense::Input::getLoadCellInitStatus(nauLdoConfigured,
+                                                    nauInternalCalOk,
+                                                    nauInternalCalAttempts);
+            const int rbPlusLevel = digitalRead(MetaSense::Globals::kRbPlusInputPin);
+            Serial.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s, vcu_mode=%s, vcu_ready=%d, rb_plus=%d, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u\n",
+                          static_cast<unsigned long>(ts),
+                          wifiCredentialsConfigured() ? ssid : "<not-configured>",
+                          static_cast<int>(status),
+                          wifiStatusToString(status),
+                          ip.c_str(),
+                          otaStarted ? "ready" : "not-ready",
+                          MetaSense::Globals::kVcuSwitch ? "gpio" : "forced",
+                          vcuReady ? 1 : 0,
+                          rbPlusLevel,
+                          nauLdoConfigured ? 1 : 0,
+                          nauInternalCalOk ? 1 : 0,
+                          static_cast<unsigned>(nauInternalCalAttempts));
+            Serial0.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s, vcu_mode=%s, vcu_ready=%d, rb_plus=%d, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u\n",
+                           static_cast<unsigned long>(ts),
+                           wifiCredentialsConfigured() ? ssid : "<not-configured>",
+                           static_cast<int>(status),
+                           wifiStatusToString(status),
+                           ip.c_str(),
+                           otaStarted ? "ready" : "not-ready",
+                           MetaSense::Globals::kVcuSwitch ? "gpio" : "forced",
+                           vcuReady ? 1 : 0,
+                           rbPlusLevel,
+                           nauLdoConfigured ? 1 : 0,
+                           nauInternalCalOk ? 1 : 0,
+                           static_cast<unsigned>(nauInternalCalAttempts));
+
+            uint32_t samplerLastUs = 0;
+            uint32_t samplerMaxUs = 0;
+            uint32_t samplerEmaUs = 0;
+            uint32_t samplerLoops = 0;
+            MetaSense::Input::getLoadCellSamplerRuntime(
+                samplerLastUs,
+                samplerMaxUs,
+                samplerEmaUs,
+                samplerLoops);
+
+#if ENABLE_RUNTIME_INSTRUMENTATION
+            Serial.printf("[RUNTIME] ctrl(us):last=%lu ema=%lu max=%lu ov=%lu loops=%lu | "
+                          "net(us):last=%lu ema=%lu max=%lu ov=%lu loops=%lu | "
+                          "modbus(us):last=%lu ema=%lu max=%lu ov=%lu loops=%lu | "
+                          "sampler(us):last=%lu ema=%lu max=%lu loops=%lu\n",
+                          static_cast<unsigned long>(controlTaskStats.lastUs),
+                          static_cast<unsigned long>(controlTaskStats.emaUs),
+                          static_cast<unsigned long>(controlTaskStats.maxUs),
+                          static_cast<unsigned long>(controlTaskStats.overruns),
+                          static_cast<unsigned long>(controlTaskStats.loops),
+                          static_cast<unsigned long>(networkTaskStats.lastUs),
+                          static_cast<unsigned long>(networkTaskStats.emaUs),
+                          static_cast<unsigned long>(networkTaskStats.maxUs),
+                          static_cast<unsigned long>(networkTaskStats.overruns),
+                          static_cast<unsigned long>(networkTaskStats.loops),
+                              static_cast<unsigned long>(modbusTaskStats.lastUs),
+                              static_cast<unsigned long>(modbusTaskStats.emaUs),
+                              static_cast<unsigned long>(modbusTaskStats.maxUs),
+                              static_cast<unsigned long>(modbusTaskStats.overruns),
+                              static_cast<unsigned long>(modbusTaskStats.loops),
+                              static_cast<unsigned long>(samplerLastUs),
+                              static_cast<unsigned long>(samplerEmaUs),
+                              static_cast<unsigned long>(samplerMaxUs),
+                              static_cast<unsigned long>(samplerLoops));
+                Serial0.printf("[RUNTIME] ctrl(us):last=%lu ema=%lu max=%lu ov=%lu loops=%lu | "
+                               "net(us):last=%lu ema=%lu max=%lu ov=%lu loops=%lu | "
+                               "modbus(us):last=%lu ema=%lu max=%lu ov=%lu loops=%lu | "
+                               "sampler(us):last=%lu ema=%lu max=%lu loops=%lu\n",
+                               static_cast<unsigned long>(controlTaskStats.lastUs),
+                               static_cast<unsigned long>(controlTaskStats.emaUs),
+                               static_cast<unsigned long>(controlTaskStats.maxUs),
+                               static_cast<unsigned long>(controlTaskStats.overruns),
+                               static_cast<unsigned long>(controlTaskStats.loops),
+                               static_cast<unsigned long>(networkTaskStats.lastUs),
+                               static_cast<unsigned long>(networkTaskStats.emaUs),
+                               static_cast<unsigned long>(networkTaskStats.maxUs),
+                               static_cast<unsigned long>(networkTaskStats.overruns),
+                               static_cast<unsigned long>(networkTaskStats.loops),
+                               static_cast<unsigned long>(modbusTaskStats.lastUs),
+                               static_cast<unsigned long>(modbusTaskStats.emaUs),
+                               static_cast<unsigned long>(modbusTaskStats.maxUs),
+                               static_cast<unsigned long>(modbusTaskStats.overruns),
+                               static_cast<unsigned long>(modbusTaskStats.loops),
+                               static_cast<unsigned long>(samplerLastUs),
+                               static_cast<unsigned long>(samplerEmaUs),
+                               static_cast<unsigned long>(samplerMaxUs),
+                               static_cast<unsigned long>(samplerLoops));
+                resetMaxStats();
+#endif
         }
 
     }
@@ -324,6 +709,10 @@ void setup()
 {
     Serial.begin(115200);
     Serial0.begin(115200);
+    const uint32_t serialWaitStart = millis();
+    while (!Serial && (millis() - serialWaitStart) < 2000U) {
+        delay(10);
+    }
     delay(200);
     logLine("[BOOT] MetaSense startup");
     Wire.begin(MetaSense::Globals::kI2cSdaPin, MetaSense::Globals::kI2cSclPin);

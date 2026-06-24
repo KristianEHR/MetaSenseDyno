@@ -1,17 +1,27 @@
 #pragma once
+#include <Arduino.h>
+
 namespace MetaSense::Input {
 
     void tareMainGui();
     void tare();
+    bool requestTare();
     void setCalibrationFactor(float factor);
     bool calibrateWithKnownWeight(float knownWeightKg, float& outFactor);
+    bool requestCalibrationWithKnownWeight(float knownWeightKg);
     float getCalibrationFactor();
     float getZeroOffset();
+    uint16_t getLoadCellSampleRateSps();
+    bool applyLoadCellSettingsProfile();
 
     // Telemetry accessors
     float rpm();
     float torqueNm();
+    float currentKpLive();
     bool isVcuReady();
+    void getLoadCellInitStatus(bool& ldoConfigured, bool& internalCalOk, uint8_t& internalCalAttempts);
+    void getLoadCellSamplerRuntime(uint32_t& lastUs, uint32_t& maxUs, uint32_t& emaUs, uint32_t& loops);
+    void resetLoadCellSamplerMaxRuntime();
 
     // Update CAN-derived engine RPM input.
     void updateCanRpm(float rpm);
