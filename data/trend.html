@@ -445,26 +445,6 @@
       });
     }
 
-    function readNum(...vals) {
-      for (const v of vals) {
-        const n = Number(v);
-        if (Number.isFinite(n)) return n;
-      }
-      return 0;
-    }
-
-    function pointRpm(p) {
-      return readNum(p?.r, p?.rpm, p?.x, p?.engine_rpm);
-    }
-
-    function pointPower(p) {
-      return readNum(p?.h, p?.kw, p?.hp, p?.p);
-    }
-
-    function pointTorque(p) {
-      return readNum(p?.t, p?.torque, p?.nm, p?.q);
-    }
-
     // ============== RUN HISTORY FUNCTIONS ==============
     function loadRuns() { if (ws && ws.readyState === WebSocket.OPEN) ws.send("GET_RUNS"); }
     
@@ -516,6 +496,18 @@
     
     // ============== COMPARISON FUNCTIONS ==============
     function drawComparison() {
+  const readNum = (...vals) => {
+    for (const v of vals) {
+      const n = Number(v);
+      if (Number.isFinite(n)) return n;
+    }
+    return 0;
+  };
+
+  const pointRpm = p => readNum(p?.r, p?.rpm, p?.x, p?.engine_rpm);
+  const pointPower = p => readNum(p?.h, p?.kw, p?.hp, p?.p);
+  const pointTorque = p => readNum(p?.t, p?.torque, p?.nm, p?.q);
+
   const runs = selectedRuns
     .map(idx => runsData[idx])
     .filter(run => run && run.filename && loadedRunData[run.filename])
@@ -551,6 +543,7 @@
         : 'unknown';
 
       compareRenderSeries.push({
+        index: i + 1,
         customer: who,
         timestamp: ts,
         color,
@@ -590,7 +583,7 @@
         spanGaps: true
       });
       
-      legendHtml += `<span style="color: ${color};"><strong>●</strong> ${who}: ${hpPeak.toFixed(1)} kW / ${torquePeak.toFixed(1)} Nm</span>`;
+      legendHtml += `<span style="color: ${color};"><strong>● Run ${i + 1}</strong> ${who}: ${hpPeak.toFixed(1)} kW / ${torquePeak.toFixed(1)} Nm</span>`;
     }
   });
   
@@ -625,6 +618,19 @@
               return tmp.toDataURL('image/png');
             }
 
+            function colorHexToRgb(hex) {
+              if (typeof hex !== 'string') return null;
+              const normalized = hex.trim();
+              const match = /^#([0-9a-fA-F]{6})$/.exec(normalized);
+              if (!match) return null;
+              const val = parseInt(match[1], 16);
+              return {
+                r: (val >> 16) & 255,
+                g: (val >> 8) & 255,
+                b: val & 255
+              };
+            }
+
       if (!window.jspdf || !window.jspdf.jsPDF) {
         showToast("PDF engine not loaded");
         return;
@@ -657,8 +663,11 @@
 
       const hpSeries = (compareHPChart && compareHPChart.data && compareHPChart.data.datasets) ? compareHPChart.data.datasets : [];
       const tqSeries = (compareTorqueChart && compareTorqueChart.data && compareTorqueChart.data.datasets) ? compareTorqueChart.data.datasets : [];
-      const selectedSummary = compareRenderSeries.map((series, i) => {
-        return `${i + 1}. ${series.customer} | ${series.timestamp} | ${series.hpPeak.toFixed(1)} kW / ${series.torquePeak.toFixed(1)} Nm`;
+      const selectedSummary = compareRenderSeries.map((series) => {
+        return {
+          text: `Run ${series.index} | ${series.customer} | ${series.timestamp} | ${series.hpPeak.toFixed(1)} kW / ${series.torquePeak.toFixed(1)} Nm`,
+          color: series.color || '#000000'
+        };
       });
 
       // Fallback if comparison model is unexpectedly empty.
@@ -674,7 +683,10 @@
             return Math.max(m, Number.isFinite(n) ? Math.abs(n) : 0);
           }, 0);
           const label = String(series.label || `Run ${i + 1}`);
-          selectedSummary.push(`${i + 1}. ${label} | unknown | ${hpPeak.toFixed(1)} kW / ${tqPeak.toFixed(1)} Nm`);
+          selectedSummary.push({
+            text: `Run ${i + 1} | ${label} | unknown | ${hpPeak.toFixed(1)} kW / ${tqPeak.toFixed(1)} Nm`,
+            color: '#000000'
+          });
         });
       }
 
@@ -684,9 +696,16 @@
         pdf.text('Selected runs:', 12, textY);
         textY += 4;
         selectedSummary.slice(0, 6).forEach(line => {
-          pdf.text(line, 14, textY);
+          const rgb = colorHexToRgb(line.color);
+          if (rgb) {
+            pdf.setTextColor(rgb.r, rgb.g, rgb.b);
+          } else {
+            pdf.setTextColor(0, 0, 0);
+          }
+          pdf.text(line.text, 14, textY);
           textY += 4;
         });
+        pdf.setTextColor(0, 0, 0);
       }
 
       // Force final render before capture to avoid blank/flat exports.
@@ -795,6 +814,7 @@
       ws = new WebSocket("ws://" + location.hostname + "/ws");
       ws.onopen = function() {
         document.getElementById("status").innerHTML = '<span class="live-badge"></span>📡 Live Trends Active';
+        ws.send("SET_UI_MODE:trend");
         ws.send("GET_SETTINGS");
         ws.send("SET_TIME:" + Math.floor(Date.now() / 1000));
         loadRuns();

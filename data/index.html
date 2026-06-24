@@ -2005,6 +2005,7 @@
       ws.onopen = function() {
         document.getElementById("status").innerText = "✅ Live Data Active";
         ws.send("PAGE_MAIN");
+        ws.send("SET_UI_MODE:dashboard");
         ws.send("GET_SETTINGS");
       };
       
@@ -2329,7 +2330,7 @@
     document.getElementById("finalPeakTorque").textContent = `🏆 Torque max: ${peakTorque.toFixed(1)} Nm @ ${Math.round(peakTorqueRPM)} RPM`;
     requestRunChartUpdate(false);
 }
-            if (!msg.recording) {
+            if (!recordingNow) {
               runStartHeartbeatMs = null;
               suppressDynoModalReopen = false;
             }

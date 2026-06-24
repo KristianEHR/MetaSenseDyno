@@ -19,6 +19,8 @@ namespace MetaSense::Input {
     float torqueNm();
     float currentKpLive();
     bool isVcuReady();
+    void setUiModeHintTrend(bool trendMode);
+    bool isUiModeHintTrend();
     void getLoadCellInitStatus(bool& ldoConfigured, bool& internalCalOk, uint8_t& internalCalAttempts);
     void getLoadCellSamplerRuntime(uint32_t& lastUs, uint32_t& maxUs, uint32_t& emaUs, uint32_t& loops);
     void resetLoadCellSamplerMaxRuntime();

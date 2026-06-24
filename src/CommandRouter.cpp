@@ -37,6 +37,8 @@ bool requestCalibrationWithKnownWeight(float knownWeightKg);
 float getCalibrationFactor();
 float getZeroOffset();
 bool isVcuReady();
+void setUiModeHintTrend(bool trendMode);
+bool isUiModeHintTrend();
 bool applyLoadCellSettingsProfile();
 }
 
@@ -653,6 +655,14 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
     }
     else if (cmdUpper == "PAGE_MAIN" || cmdUpper == "PAGE_SETTINGS") {
         // Presence/heartbeat commands from browser pages.
+        MetaSense::Input::setUiModeHintTrend(false);
+    }
+    else if (cmdUpper.startsWith("SET_UI_MODE:")) {
+        String mode = cmd.substring(12);
+        mode.trim();
+        mode.toUpperCase();
+        const bool trendMode = (mode == "TREND");
+        MetaSense::Input::setUiModeHintTrend(trendMode);
     }
     else if (cmdUpper.startsWith("SET_TIME:")) {
         // Browser sends its Unix epoch so the ESP32 gets a real wall-clock time

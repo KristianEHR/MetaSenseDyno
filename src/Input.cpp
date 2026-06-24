@@ -140,6 +140,27 @@ constexpr float RPM_SETPOINT_MAX = RPM_MAX_LIMIT;
 constexpr uint32_t kWebSocketPublishPeriodMs = 50;   // 20 Hz fast telemetry cadence
 constexpr uint32_t kWebSocketSlowPublishPeriodMs = 500; // 2 Hz slow telemetry cadence
 constexpr uint8_t kWebSocketSlowTelemetrySlices = 15;
+#ifndef METASENSE_TELEMETRY_PROFILE_DEFAULT_TREND
+#define METASENSE_TELEMETRY_PROFILE_DEFAULT_TREND 0
+#endif
+#ifndef METASENSE_TREND_MINIMAL_TELEMETRY
+// When enabled, trend.html receives only the fields needed for live trend plots.
+#define METASENSE_TREND_MINIMAL_TELEMETRY 1
+#endif
+#ifndef METASENSE_DASHBOARD_TRANSITIONAL_RUN_FIELDS
+// When enabled, low-rate dashboard run-condition fields are sent only on change.
+#define METASENSE_DASHBOARD_TRANSITIONAL_RUN_FIELDS 1
+#endif
+
+enum class TelemetryProfile : uint8_t {
+    Full = 0,
+    TrendMinimal = 1
+};
+
+static TelemetryProfile gTelemetryProfile =
+    METASENSE_TELEMETRY_PROFILE_DEFAULT_TREND ? TelemetryProfile::TrendMinimal : TelemetryProfile::Full;
+static bool gUiModeHintTrend = false;
+
 #ifndef METASENSE_STREAM_DIAGNOSTICS
 #define METASENSE_STREAM_DIAGNOSTICS 0
 #endif
@@ -205,6 +226,15 @@ static volatile uint64_t lastRawCaptureAppendUs = 0;
 portMUX_TYPE calibMux = portMUX_INITIALIZER_UNLOCKED;
 portMUX_TYPE loadCellSamplerMux = portMUX_INITIALIZER_UNLOCKED;
 constexpr float kLambdaMax = 1.50f;
+constexpr size_t kFallbackRunMaxPoints = 150;
+constexpr uint32_t kFallbackRunSamplePeriodMs = 100;
+static float fallbackRunRpm[kFallbackRunMaxPoints] = {0.0f};
+static float fallbackRunTimeSec[kFallbackRunMaxPoints] = {0.0f};
+static float fallbackRunKw[kFallbackRunMaxPoints] = {0.0f};
+static float fallbackRunTorque[kFallbackRunMaxPoints] = {0.0f};
+static size_t fallbackRunCount = 0;
+static uint32_t fallbackRunStartMs = 0;
+static uint32_t fallbackRunLastSampleMs = 0;
 
 // helpers
 float lpFilter(float prev, float input, float alpha)
@@ -1364,12 +1394,86 @@ static MetaSense::Telemetry prevTelemetrySnapshot;
 static bool prevTelemetryInitialized = false;
 static bool prevRpmDeltaError = false;
 static bool prevCanFallbackActive = false;
-static bool prevRecording = false;
+static bool prevRecordingSent = false;
+static bool prevRecordingSentInitialized = false;
+static bool prevRpmSourceCanSent = false;
+static bool prevRpmSourceCanInitialized = false;
+static bool prevEnergyActiveSent = false;
+static bool prevEnergyActiveInitialized = false;
+static uint8_t prevDynoModeSent = 0;
+static bool prevDynoModeInitialized = false;
+static bool prevVcuReadySent = false;
+static bool prevVcuReadyInitialized = false;
+static bool prevSwActiveSent = false;
+static bool prevSwActiveInitialized = false;
 
 // Helper: compare floats with tolerance
 static inline bool floatChanged(float a, float b, float tolerance = 0.01f)
 {
     return fabs(a - b) > tolerance;
+}
+
+void resetFallbackRunLog(uint32_t nowMs)
+{
+    fallbackRunCount = 0;
+    fallbackRunStartMs = nowMs;
+    fallbackRunLastSampleMs = 0;
+}
+
+void appendFallbackRunLogSample(uint32_t nowMs)
+{
+    if (fallbackRunCount >= kFallbackRunMaxPoints) {
+        return;
+    }
+    if (fallbackRunLastSampleMs != 0 && (nowMs - fallbackRunLastSampleMs) < kFallbackRunSamplePeriodMs) {
+        return;
+    }
+
+    const size_t idx = fallbackRunCount++;
+    fallbackRunRpm[idx] = tele.rpm;
+    fallbackRunKw[idx] = tele.kw;
+    fallbackRunTorque[idx] = tele.torqueNm;
+    fallbackRunTimeSec[idx] = (nowMs >= fallbackRunStartMs)
+        ? static_cast<float>(nowMs - fallbackRunStartMs) / 1000.0f
+        : 0.0f;
+    fallbackRunLastSampleMs = nowMs;
+}
+
+void commitFallbackRunLog(const char* reason)
+{
+    if (fallbackRunCount == 0) {
+        const uint32_t nowMs = millis();
+        resetFallbackRunLog(nowMs);
+        appendFallbackRunLogSample(nowMs);
+    }
+
+    String payload;
+    payload.reserve(4096);
+    payload = "{\"customer\":\"\",\"unit\":\"\",\"comments\":\"\",\"meta\":{";
+    payload += "\"reason\":\"" + String((reason != nullptr) ? reason : "firmware_fallback") + "\",";
+    payload += "\"xAxis\":\"time\",";
+    payload += "\"mode\":\"firmware\",";
+    payload += "\"session\":0,";
+    payload += "\"samples\":" + String(static_cast<unsigned long>(fallbackRunCount));
+    payload += "},\"peaks\":{";
+    payload += "\"hp\":" + String(tele.peakKW, 2) + ",";
+    payload += "\"hp_rpm\":" + String(tele.peakKW_RPM, 0) + ",";
+    payload += "\"torque\":" + String(tele.peakTorque, 2) + ",";
+    payload += "\"torque_rpm\":" + String(tele.peakTorque_RPM, 0) + ",";
+    payload += "\"egt\":" + String(tele.egtHotC, 1);
+    payload += "},\"points\":[";
+
+    for (size_t i = 0; i < fallbackRunCount; ++i) {
+        if (i > 0) payload += ",";
+        payload += "{\"r\":" + String(fallbackRunRpm[i], 1);
+        payload += ",\"x\":" + String(fallbackRunTimeSec[i], 2);
+        payload += ",\"h\":" + String(fallbackRunKw[i], 2);
+        payload += ",\"t\":" + String(fallbackRunTorque[i], 2);
+        payload += "}";
+    }
+    payload += "]}";
+
+    (void)MetaSense::RunStorage::saveRun(payload);
 }
 
 void updateDyno(MetaSense::Telemetry& t, float dtSec)
@@ -1454,6 +1558,7 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
     const uint32_t nowMs = millis();
     const uint8_t slowSliceNow = slowTelemetrySlice;
     slowTelemetrySlice = static_cast<uint8_t>((slowTelemetrySlice + 1U) % kWebSocketSlowTelemetrySlices);
+    const bool trendMinimalTelemetry = METASENSE_TREND_MINIMAL_TELEMETRY && gUiModeHintTrend;
 
 #if METASENSE_STREAM_DIAGNOSTICS
     uint16_t wsClients = 0;
@@ -1487,102 +1592,166 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
 #endif
 
     // Fast telemetry fields (20 Hz)
-    if (floatChanged(data.rpm, prevTelemetrySnapshot.rpm, 1.0f)) {
-        json += "\"rpm\":" + String(data.rpm, 0) + ",";
-    }
-    if (rpmDeltaError != prevRpmDeltaError) {
-        json += "\"rpm_error\":" + String(rpmDeltaError ? 1 : 0) + ",";
-        prevRpmDeltaError = rpmDeltaError;
-    }
-    if (canFallbackActive != prevCanFallbackActive) {
-        json += "\"can_fallback\":" + String(canFallbackActive ? 1 : 0) + ",";
-        prevCanFallbackActive = canFallbackActive;
-    }
-    String rpmSourceStr = String(activeRpmFromCan ? "leafrpm" : "tachogen");
-    json += "\"rpm_source_active\":\"" + rpmSourceStr + "\",";
-    if (floatChanged(data.drumRpm, prevTelemetrySnapshot.drumRpm, 1.0f)) {
-        json += "\"drum_rpm\":" + String(data.drumRpm, 0) + ",";
-    }
-    if (floatChanged(data.rpmTarget, prevTelemetrySnapshot.rpmTarget, 1.0f)) {
-        json += "\"rpm_target\":" + String(data.rpmTarget, 0) + ",";
-    }
-    if (floatChanged(data.kw, prevTelemetrySnapshot.kw, 0.05f)) {
+    if (!trendMinimalTelemetry) {
+        if (floatChanged(data.rpm, prevTelemetrySnapshot.rpm, 1.0f)) {
+            json += "\"rpm\":" + String(data.rpm, 0) + ",";
+        }
+        if (rpmDeltaError != prevRpmDeltaError) {
+            json += "\"rpm_error\":" + String(rpmDeltaError ? 1 : 0) + ",";
+            prevRpmDeltaError = rpmDeltaError;
+        }
+        if (canFallbackActive != prevCanFallbackActive) {
+            json += "\"can_fallback\":" + String(canFallbackActive ? 1 : 0) + ",";
+            prevCanFallbackActive = canFallbackActive;
+        }
+    #if METASENSE_DASHBOARD_TRANSITIONAL_RUN_FIELDS
+        if (!prevRpmSourceCanInitialized || activeRpmFromCan != prevRpmSourceCanSent) {
+            String rpmSourceStr = String(activeRpmFromCan ? "leafrpm" : "tachogen");
+            json += "\"rpm_source_active\":\"" + rpmSourceStr + "\",";
+            prevRpmSourceCanSent = activeRpmFromCan;
+            prevRpmSourceCanInitialized = true;
+        }
+    #else
+        String rpmSourceStr = String(activeRpmFromCan ? "leafrpm" : "tachogen");
+        json += "\"rpm_source_active\":\"" + rpmSourceStr + "\",";
+    #endif
+        if (floatChanged(data.drumRpm, prevTelemetrySnapshot.drumRpm, 1.0f)) {
+            json += "\"drum_rpm\":" + String(data.drumRpm, 0) + ",";
+        }
+        if (floatChanged(data.rpmTarget, prevTelemetrySnapshot.rpmTarget, 1.0f)) {
+            json += "\"rpm_target\":" + String(data.rpmTarget, 0) + ",";
+        }
+        if (floatChanged(data.kw, prevTelemetrySnapshot.kw, 0.05f)) {
+            json += "\"kw\":" + String(data.kw, 2) + ",";
+        }
+        if (floatChanged(data.peakKW, prevTelemetrySnapshot.peakKW, 0.05f)) {
+            json += "\"peakKW\":" + String(data.peakKW, 2) + ",";
+        }
+        if (floatChanged(data.peakKW_RPM, prevTelemetrySnapshot.peakKW_RPM, 5.0f)) {
+            json += "\"peakKW_RPM\":" + String(data.peakKW_RPM, 0) + ",";
+        }
+
+        // Dashboard path: keep full torque family + load.
+        json += "\"torque\":" + String(data.torqueNm, 2) + ",";
+        json += "\"brakeTorque\":" + String(data.brakeTorqueNm, 2) + ",";
+        json += "\"e_torque\":" + String(data.eTorque, 2) + ",";
+        json += "\"load_kg\":" + String(data.loadKg, 1) + ",";
+
+        if (floatChanged(data.throttlePercent, prevTelemetrySnapshot.throttlePercent, 0.1f)) {
+            json += "\"throttle_pct\":" + String(data.throttlePercent, 0) + ",";
+        }
+        if (floatChanged(data.peakTorque, prevTelemetrySnapshot.peakTorque, 0.5f)) {
+            json += "\"peakTorque\":" + String(data.peakTorque, 2) + ",";
+        }
+        if (floatChanged(data.peakTorque_RPM, prevTelemetrySnapshot.peakTorque_RPM, 5.0f)) {
+            json += "\"peakTorque_RPM\":" + String(data.peakTorque_RPM, 0) + ",";
+        }
+    } else {
+        // Trend path: send only fields used by trend live graphs on every frame.
         json += "\"kw\":" + String(data.kw, 2) + ",";
-    }
-    if (floatChanged(data.peakKW, prevTelemetrySnapshot.peakKW, 0.05f)) {
-        json += "\"peakKW\":" + String(data.peakKW, 2) + ",";
-    }
-    if (floatChanged(data.peakKW_RPM, prevTelemetrySnapshot.peakKW_RPM, 5.0f)) {
-        json += "\"peakKW_RPM\":" + String(data.peakKW_RPM, 0) + ",";
+        json += "\"torque\":" + String(data.torqueNm, 2) + ",";
+        json += "\"lambda\":" + String(data.lambdaValue, 3) + ",";
+        json += "\"massflow_m3h\":" + String(data.massflowM3h, 1) + ",";
     }
 
-    // Always send torque family and load for smooth gauges/graphs
-    json += "\"torque\":" + String(data.torqueNm, 2) + ",";
-    json += "\"brakeTorque\":" + String(data.brakeTorqueNm, 2) + ",";
-    json += "\"e_torque\":" + String(data.eTorque, 2) + ",";
-    json += "\"load_kg\":" + String(data.loadKg, 1) + ",";
-
-    if (floatChanged(data.throttlePercent, prevTelemetrySnapshot.throttlePercent, 0.1f)) {
-        json += "\"throttle_pct\":" + String(data.throttlePercent, 0) + ",";
-    }
-    if (floatChanged(data.peakTorque, prevTelemetrySnapshot.peakTorque, 0.5f)) {
-        json += "\"peakTorque\":" + String(data.peakTorque, 2) + ",";
-    }
-    if (floatChanged(data.peakTorque_RPM, prevTelemetrySnapshot.peakTorque_RPM, 5.0f)) {
-        json += "\"peakTorque_RPM\":" + String(data.peakTorque_RPM, 0) + ",";
+    if (!trendMinimalTelemetry) {
+        json += "\"recording\":" + String(isRecording ? 1 : 0) + ",";
+        prevRecordingSent = isRecording;
+        prevRecordingSentInitialized = true;
     }
 
-    json += "\"recording\":" + String(isRecording ? 1 : 0) + ",";
+    const bool emitSlowTelemetry = (gTelemetryProfile == TelemetryProfile::Full) && !trendMinimalTelemetry;
 
     // Slow telemetry fields are sent as evenly sized micro-chunks
     // (one field per fast frame) to minimize bursty UI workload.
-    switch (slowSliceNow) {
-        case 0:
-            json += "\"air_density\":" + String(data.airDensity, 3) + ",";
-            break;
-        case 1:
-            json += "\"climate_cf\":" + String(data.climateCF, 4) + ",";
-            break;
-        case 2:
-            json += "\"ambient_temp\":" + String(data.ambientC, 1) + ",";
-            break;
-        case 3:
-            json += "\"pressure\":" + String(data.pressureHpa, 1) + ",";
-            break;
-        case 4:
-            json += "\"egt_hot\":" + String(data.egtHotC, 1) + ",";
-            break;
-        case 5:
-            json += "\"rel_humidity\":" + String(data.humidity, 1) + ",";
-            break;
-        case 6:
-            json += "\"energy\":" + String(data.energyMJ, 2) + ",";
-            break;
-        case 7:
-            json += "\"lambda\":" + String(data.lambdaValue, 3) + ",";
-            break;
-        case 8:
-            json += "\"massflow_m3h\":" + String(data.massflowM3h, 1) + ",";
-            break;
-        case 9:
-            json += "\"energy_active\":" + String(MetaSense::DynoStateMachine::isEnergyMeasuring() ? 1 : 0) + ",";
-            break;
-        case 10:
-            json += "\"egt_status\":" + String(data.egtStatus) + ",";
-            break;
-        case 11:
-            json += "\"egt_ready\":" + String(data.egtReady ? 1 : 0) + ",";
-            break;
-        case 12:
-            json += "\"dyno_mode\":\"" + String(MetaSense::toString(data.mode)) + "\",";
-            break;
-        case 13:
-            json += "\"vcu_ready\":" + String(data.vcuReady ? 1 : 0) + ",";
-            break;
-        case 14:
-        default:
-            json += "\"sw_active\":" + String(data.swActive ? 1 : 0) + ",";
-            break;
+    // Step-1 scaffold: profile defaults to Full, so behavior remains unchanged.
+    if (emitSlowTelemetry) {
+        switch (slowSliceNow) {
+            case 0:
+                json += "\"air_density\":" + String(data.airDensity, 3) + ",";
+                break;
+            case 1:
+                json += "\"climate_cf\":" + String(data.climateCF, 4) + ",";
+                break;
+            case 2:
+                json += "\"ambient_temp\":" + String(data.ambientC, 1) + ",";
+                break;
+            case 3:
+                json += "\"pressure\":" + String(data.pressureHpa, 1) + ",";
+                break;
+            case 4:
+                json += "\"egt_hot\":" + String(data.egtHotC, 1) + ",";
+                break;
+            case 5:
+                json += "\"rel_humidity\":" + String(data.humidity, 1) + ",";
+                break;
+            case 6:
+                json += "\"energy\":" + String(data.energyMJ, 2) + ",";
+                break;
+            case 7:
+                json += "\"lambda\":" + String(data.lambdaValue, 3) + ",";
+                break;
+            case 8:
+                json += "\"massflow_m3h\":" + String(data.massflowM3h, 1) + ",";
+                break;
+            case 9:
+            {
+                const bool energyActive = MetaSense::DynoStateMachine::isEnergyMeasuring();
+    #if METASENSE_DASHBOARD_TRANSITIONAL_RUN_FIELDS
+                if (!prevEnergyActiveInitialized || energyActive != prevEnergyActiveSent) {
+                    json += "\"energy_active\":" + String(energyActive ? 1 : 0) + ",";
+                    prevEnergyActiveSent = energyActive;
+                    prevEnergyActiveInitialized = true;
+                }
+    #else
+                json += "\"energy_active\":" + String(energyActive ? 1 : 0) + ",";
+    #endif
+                break;
+            }
+            case 10:
+                json += "\"egt_status\":" + String(data.egtStatus) + ",";
+                break;
+            case 11:
+                json += "\"egt_ready\":" + String(data.egtReady ? 1 : 0) + ",";
+                break;
+            case 12:
+            {
+                const uint8_t dynoModeNow = static_cast<uint8_t>(data.mode);
+    #if METASENSE_DASHBOARD_TRANSITIONAL_RUN_FIELDS
+                if (!prevDynoModeInitialized || dynoModeNow != prevDynoModeSent) {
+                    json += "\"dyno_mode\":\"" + String(MetaSense::toString(data.mode)) + "\",";
+                    prevDynoModeSent = dynoModeNow;
+                    prevDynoModeInitialized = true;
+                }
+    #else
+                json += "\"dyno_mode\":\"" + String(MetaSense::toString(data.mode)) + "\",";
+    #endif
+                break;
+            }
+            case 13:
+    #if METASENSE_DASHBOARD_TRANSITIONAL_RUN_FIELDS
+                if (!prevVcuReadyInitialized || data.vcuReady != prevVcuReadySent) {
+                    json += "\"vcu_ready\":" + String(data.vcuReady ? 1 : 0) + ",";
+                    prevVcuReadySent = data.vcuReady;
+                    prevVcuReadyInitialized = true;
+                }
+    #else
+                json += "\"vcu_ready\":" + String(data.vcuReady ? 1 : 0) + ",";
+    #endif
+                break;
+            case 14:
+            default:
+    #if METASENSE_DASHBOARD_TRANSITIONAL_RUN_FIELDS
+                if (!prevSwActiveInitialized || data.swActive != prevSwActiveSent) {
+                    json += "\"sw_active\":" + String(data.swActive ? 1 : 0) + ",";
+                    prevSwActiveSent = data.swActive;
+                    prevSwActiveInitialized = true;
+                }
+    #else
+                json += "\"sw_active\":" + String(data.swActive ? 1 : 0) + ",";
+    #endif
+                break;
+        }
     }
 
     // Remove trailing comma and close JSON
@@ -1962,6 +2131,16 @@ bool isVcuReady()
     return tele.vcuReady;
 }
 
+void setUiModeHintTrend(bool trendMode)
+{
+    gUiModeHintTrend = trendMode;
+}
+
+bool isUiModeHintTrend()
+{
+    return gUiModeHintTrend;
+}
+
 void getLoadCellInitStatus(bool& ldoConfigured, bool& internalCalOk, uint8_t& internalCalAttempts)
 {
     ldoConfigured = loadCellNauLdoConfigured;
@@ -2144,6 +2323,7 @@ void begin()
 void startRecording()
 {
     tele.recording = true;
+    resetFallbackRunLog(millis());
 
     tele.peakTorque     = 0.0f;
     tele.peakTorque_RPM = 0.0f;
@@ -2356,16 +2536,31 @@ void loop()
         tele.rpm,
         primaryBrakeSignedPercent);
 
-    if (tele.torqueNm > tele.peakTorque) {
-        tele.peakTorque     = tele.torqueNm;
-        tele.peakTorque_RPM = tele.rpm;
+    if (tele.recording) {
+        appendFallbackRunLogSample(now);
+        const float torqueMag = fabsf(tele.torqueNm);
+        const float powerMag = fabsf(tele.kw);
+
+        if (torqueMag > tele.peakTorque) {
+            tele.peakTorque     = torqueMag;
+            tele.peakTorque_RPM = tele.rpm;
+        }
+        if (powerMag > tele.peakKW) {
+            tele.peakKW     = powerMag;
+            tele.peakKW_RPM = tele.rpm;
+        }
+        if (tele.rpm > tele.maxRpm) {
+            tele.maxRpm = tele.rpm;
+        }
+        if (torqueMag > tele.maxTorqueNm) {
+            tele.maxTorqueNm = torqueMag;
+        }
     }
-    if (tele.rpm > tele.maxRpm)          tele.maxRpm      = tele.rpm;
-    if (tele.torqueNm > tele.maxTorqueNm) tele.maxTorqueNm = tele.torqueNm;
 
     MetaSense::RunStorage::save(tele);
 
     if (prevRecording && !tele.recording) {
+        commitFallbackRunLog("firmware_recording_stop");
         notifyRunComplete(tele);
     }
     prevRecording = tele.recording;
