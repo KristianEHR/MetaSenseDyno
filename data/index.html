@@ -620,6 +620,88 @@
   animation: fallbackPulse 1s infinite;
 }
 
+.can-monitor {
+  position: fixed;
+  bottom: 102px;
+  left: 20px;
+  z-index: 99;
+  width: min(320px, calc(100vw - 40px));
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid #4fc3f7;
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(3px);
+  font-size: 13px;
+}
+
+.can-monitor-title {
+  color: #aee7ff;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.can-monitor-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 10px;
+}
+
+.can-monitor-label {
+  color: #bbbbbb;
+}
+
+.can-monitor-value {
+  color: #ffffff;
+  font-weight: 700;
+  text-align: right;
+  min-width: 68px;
+}
+
+.can-monitor-status-row {
+  margin-top: 9px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.can-flag {
+  border: 1px solid #555;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: #999;
+  background: rgba(120, 120, 120, 0.2);
+  font-weight: 700;
+}
+
+.can-flag.on {
+  color: #052007;
+  background: #7dff95;
+  border-color: #7dff95;
+}
+
+.can-flag.warn {
+  color: #2a1a00;
+  background: #ffd089;
+  border-color: #ffd089;
+}
+
+.can-flag.fault {
+  color: #260000;
+  background: #ff8a8a;
+  border-color: #ff8a8a;
+}
+
+@media (max-width: 900px) {
+  .can-monitor {
+    bottom: 102px;
+    left: 20px;
+  }
+}
+
 @keyframes fallbackPulse {
   0% { opacity: 1; }
   50% { opacity: 0.45; }
@@ -646,6 +728,7 @@
       <button id="tareButton">TARE (ZERO)</button>
       <button id="autoRunButton">Auto Run (F8)</button>
       <button id="manualRunButton">Manual Run (F12)</button>
+      <button id="toggleCanMonitorButton">CAN Monitor: ON</button>
       <a href="/settings"><button>⚙ SETTINGS</button></a>
       <a href="/captures"><button>🧪 Capture Test</button></a>
       <a href="/trend.html" target="_blank"><button>📊 Trends</button></a>
@@ -665,6 +748,35 @@
   <div class="rpm-source">
     📊 RPM Source: <span id="rpmSourceValue">LEAF CAN RPM</span>
     <span id="canFallbackBadge" class="fallback-badge">CAN FALLBACK</span>
+  </div>
+
+  <div id="canMonitor" class="can-monitor" aria-live="polite">
+    <div class="can-monitor-title">Leaf CAN Monitor</div>
+    <div class="can-monitor-grid">
+      <span class="can-monitor-label">Motor RPM</span>
+      <span id="canMonRpm" class="can-monitor-value">---</span>
+
+      <span class="can-monitor-label">Actual Torque (Nm)</span>
+      <span id="canMonTorque" class="can-monitor-value">---</span>
+
+      <span class="can-monitor-label">Inverter Temp (C)</span>
+      <span id="canMonInvTemp" class="can-monitor-value">---</span>
+
+      <span class="can-monitor-label">Stator Temp (C)</span>
+      <span id="canMonStatorTemp" class="can-monitor-value">---</span>
+
+      <span class="can-monitor-label">Coolant Temp (C)</span>
+      <span id="canMonCoolantTemp" class="can-monitor-value">---</span>
+
+      <span class="can-monitor-label">Last Frame Age (ms)</span>
+      <span id="canMonAge" class="can-monitor-value">---</span>
+    </div>
+    <div class="can-monitor-status-row">
+      <span id="canFlagReady" class="can-flag">READY</span>
+      <span id="canFlagWarning" class="can-flag">WARNING</span>
+      <span id="canFlagFault" class="can-flag">FAULT</span>
+      <span id="canFlagLimp" class="can-flag">LIMP</span>
+    </div>
   </div>
 
   <div id="streamMetrics" class="stream-metrics" style="display:none;">Lag: -- ms | Backlog drops: --</div>
@@ -940,6 +1052,7 @@
     let autoGenerateReportEnabled = false;
     let autoGenerateReportTriggered = false;
     const autoReportPrefKey = "metasense.autoGenerateReport";
+    const canMonitorPrefKey = "metasense.canMonitorVisible";
     const autoButtonIdleLabel = "Auto Run (F8)";
     const autoButtonActiveLabel = "🔴 Auto Run ACTIVE (F8 to cancel)";
 	
@@ -1035,8 +1148,64 @@
       nau_ready: false,
       recording: false,
       lambda: 1.0,
-      massflow_m3h: 0
+      massflow_m3h: 0,
+      leaf_rpm: 0,
+      leaf_torque: 0,
+      leaf_inv_temp: 0,
+      leaf_stator_temp: 0,
+      leaf_coolant_temp: 0,
+      leaf_ready: false,
+      leaf_warning: false,
+      leaf_fault: false,
+      leaf_limp: false,
+      leaf_last_update_ms: 0
     };
+
+    function updateCanMonitor(telemetry) {
+      if (!telemetry) return;
+
+      const rpm = Number(telemetry.leaf_rpm);
+      const tq = Number(telemetry.leaf_torque);
+      const inv = Number(telemetry.leaf_inv_temp);
+      const stat = Number(telemetry.leaf_stator_temp);
+      const cool = Number(telemetry.leaf_coolant_temp);
+      const lastMs = Number(telemetry.leaf_last_update_ms);
+
+      const setText = (id, text) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = text;
+      };
+      const fmt = (v, digits = 1) => (Number.isFinite(v) ? v.toFixed(digits) : "---");
+
+      setText("canMonRpm", Number.isFinite(rpm) ? Math.round(rpm).toString() : "---");
+      setText("canMonTorque", fmt(tq, 2));
+      setText("canMonInvTemp", fmt(inv, 1));
+      setText("canMonStatorTemp", fmt(stat, 1));
+      setText("canMonCoolantTemp", fmt(cool, 1));
+
+      let ageText = "---";
+      if (Number.isFinite(lastMs) && lastMs > 0 && Number.isFinite(telemetry.heartbeat_ms)) {
+        const age = Math.max(0, Math.round(Number(telemetry.heartbeat_ms) - lastMs));
+        ageText = age.toString();
+      }
+      setText("canMonAge", ageText);
+
+      const setFlag = (id, isOn, mode = "normal") => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.remove("on", "warn", "fault");
+        if (isOn) {
+          if (mode === "warn") el.classList.add("warn");
+          else if (mode === "fault") el.classList.add("fault");
+          else el.classList.add("on");
+        }
+      };
+
+      setFlag("canFlagReady", Number(telemetry.leaf_ready) === 1 || telemetry.leaf_ready === true, "normal");
+      setFlag("canFlagWarning", Number(telemetry.leaf_warning) === 1 || telemetry.leaf_warning === true, "warn");
+      setFlag("canFlagFault", Number(telemetry.leaf_fault) === 1 || telemetry.leaf_fault === true, "fault");
+      setFlag("canFlagLimp", Number(telemetry.leaf_limp) === 1 || telemetry.leaf_limp === true, "warn");
+    }
 
     function showToast(message, durationMs = 2200) {
       const existing = document.getElementById("toast");
@@ -1688,6 +1857,35 @@
       setAutoReportPreference(enabled);
     }
 
+    function setCanMonitorVisibility(visible, persist = true) {
+      const panel = document.getElementById("canMonitor");
+      const btn = document.getElementById("toggleCanMonitorButton");
+      if (panel) {
+        panel.style.display = visible ? "block" : "none";
+      }
+      if (btn) {
+        btn.textContent = visible ? "CAN Monitor: ON" : "CAN Monitor: OFF";
+      }
+      if (persist) {
+        try {
+          localStorage.setItem(canMonitorPrefKey, visible ? "1" : "0");
+        } catch (e) {
+          // Ignore storage failures.
+        }
+      }
+    }
+
+    function loadCanMonitorPreference() {
+      let visible = true;
+      try {
+        const pref = localStorage.getItem(canMonitorPrefKey);
+        if (pref === "0") visible = false;
+      } catch (e) {
+        visible = true;
+      }
+      setCanMonitorVisibility(visible, false);
+    }
+
     function showReportSelection() {
       reportReadyActive = true;
       stopRequestPending = false;
@@ -2090,6 +2288,16 @@
             if (msg.recording !== undefined) cachedTelemetry.recording = Number(msg.recording) === 1;
             if (msg.lambda !== undefined) cachedTelemetry.lambda = msg.lambda;
             if (msg.massflow_m3h !== undefined) cachedTelemetry.massflow_m3h = msg.massflow_m3h;
+            if (msg.leaf_rpm !== undefined) cachedTelemetry.leaf_rpm = msg.leaf_rpm;
+            if (msg.leaf_torque !== undefined) cachedTelemetry.leaf_torque = msg.leaf_torque;
+            if (msg.leaf_inv_temp !== undefined) cachedTelemetry.leaf_inv_temp = msg.leaf_inv_temp;
+            if (msg.leaf_stator_temp !== undefined) cachedTelemetry.leaf_stator_temp = msg.leaf_stator_temp;
+            if (msg.leaf_coolant_temp !== undefined) cachedTelemetry.leaf_coolant_temp = msg.leaf_coolant_temp;
+            if (msg.leaf_ready !== undefined) cachedTelemetry.leaf_ready = Number(msg.leaf_ready) === 1;
+            if (msg.leaf_warning !== undefined) cachedTelemetry.leaf_warning = Number(msg.leaf_warning) === 1;
+            if (msg.leaf_fault !== undefined) cachedTelemetry.leaf_fault = Number(msg.leaf_fault) === 1;
+            if (msg.leaf_limp !== undefined) cachedTelemetry.leaf_limp = Number(msg.leaf_limp) === 1;
+            if (msg.leaf_last_update_ms !== undefined) cachedTelemetry.leaf_last_update_ms = msg.leaf_last_update_ms;
 
             // Create a merged view with cached data + new msg for backward compatibility
             const telemetry = Object.assign({}, cachedTelemetry, msg);
@@ -2179,6 +2387,8 @@
                 else if (confidencePercent > 50) confidenceElem.style.color = "#ffaa44";
                 else confidenceElem.style.color = "#ff8888";
               }
+
+              updateCanMonitor(telemetry);
             }
             
             // Update ratio indicator next to torque toggle
@@ -2376,6 +2586,7 @@ else if (msg.type === "info" || msg.type === "status") {
     }
     
     function init() {
+      loadCanMonitorPreference();
       createTicks();
       createHPTicks();
       createTorqueTicks();
@@ -2383,6 +2594,7 @@ else if (msg.type === "info" || msg.type === "status") {
       updateGauge("hp", 0, maxVals.hp, "hpText", 1);
       updateGauge("torque", 0, maxVals.torque, "torqueText", 1);
       updateBMP280Display();
+      updateCanMonitor(cachedTelemetry);
       
       const ctx = document.getElementById('modalDynoChart').getContext('2d');
       modalDynoChart = new Chart(ctx, {
@@ -2472,6 +2684,12 @@ else if (msg.type === "info" || msg.type === "status") {
       if (customerEl && customerEl.value.trim().length === 0) customerEl.value = "MetaSense";
       if (unitEl && unitEl.value.trim().length === 0) unitEl.value = "TM mini";
       document.getElementById("manualModal").style.display = "block";
+    };
+
+    document.getElementById("toggleCanMonitorButton").onclick = function() {
+      const panel = document.getElementById("canMonitor");
+      const currentlyVisible = !!panel && panel.style.display !== "none";
+      setCanMonitorVisibility(!currentlyVisible, true);
     };
     
     document.getElementById("confirmManual").onclick = function() {

@@ -27,6 +27,9 @@ namespace MetaSense::Input {
 
     // Update CAN-derived engine RPM input.
     void updateCanRpm(float rpm);
+    void updateCanTorque(float torqueNm);
+    void updateCanTemps(float inverterTempC, float statorTempC, float coolantTempC);
+    void updateCanStatus(bool ready, bool fault, bool warning, bool limp);
 
     // Initialize the dyno input/control subsystem
     void begin();

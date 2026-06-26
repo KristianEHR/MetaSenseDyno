@@ -16,7 +16,11 @@
 #include "Settings.h"
 #include "RunStorage.h"
 #include "TempHAL.h"
+#include "Inverter.h"
+#include "LeafCan.h"
 #include "globals.h"
+
+#include "CanHAL.h"
 
 
 namespace MetaSense::HardwareOutputStateMachine {
@@ -121,12 +125,49 @@ static const uint32_t CAN_RPM_TIMEOUT_MS = 100;
 static const uint32_t CAN_RPM_MIN_UPDATE_MS = 20;
 static float lastCanRpm            = 0.0f;
 static const float CAN_MAX_JUMP    = 2000.0f;
+static float leafCanRpmMonitor = 0.0f;
+static uint32_t lastCanRpmMonitorUpdate = 0;
+static float canTorqueNm = 0.0f;
+static float canInvTempC = 0.0f;
+static float canStatorTempC = 0.0f;
+static float canCoolantTempC = 0.0f;
+static bool canInvReady = false;
+static bool canInvFault = false;
+static bool canInvWarning = false;
+static bool canInvLimp = false;
+static uint32_t lastCanTorqueUpdate = 0;
+static uint32_t lastCanTempUpdate = 0;
+static uint32_t lastCanStatusUpdate = 0;
+static uint32_t lastCanLeafAnyUpdate = 0;
+static CanHAL leafCanHal;
+static LeafInvFeedback leafFb;
+static bool leafCanReady = false;
+static uint32_t lastCanInitAttemptMs = 0;
 
 // RPM delta error
 static bool  rpmDeltaError         = false;
 static bool  canFallbackActive     = false;
 static bool  activeRpmFromCan      = false;
 static const float RPM_DELTA_LIMIT = 100.0f;
+static const uint32_t CAN_TORQUE_TIMEOUT_MS = 200;
+static const uint32_t CAN_TEMP_TIMEOUT_MS = 1000;
+
+#ifndef METASENSE_LEAF_CAN_RX_ENABLED
+#define METASENSE_LEAF_CAN_RX_ENABLED 1
+#endif
+#ifndef METASENSE_LEAF_CAN_TX_PIN
+#define METASENSE_LEAF_CAN_TX_PIN 4
+#endif
+#ifndef METASENSE_LEAF_CAN_RX_PIN
+#define METASENSE_LEAF_CAN_RX_PIN 5
+#endif
+#ifndef METASENSE_LEAF_CAN_MAX_FRAMES_PER_LOOP
+#define METASENSE_LEAF_CAN_MAX_FRAMES_PER_LOOP 8
+#endif
+#ifndef METASENSE_FORCE_TACHO_RPM_SOURCE
+// Safety: keep control-loop RPM on tachogen to avoid CAN RPM dual-writer races.
+#define METASENSE_FORCE_TACHO_RPM_SOURCE 1
+#endif
 
 // safety limits
 constexpr float RPM_MAX_LIMIT   = 18000.0f;
@@ -1413,6 +1454,73 @@ static inline bool floatChanged(float a, float b, float tolerance = 0.01f)
     return fabs(a - b) > tolerance;
 }
 
+void pollLeafCanFrames(uint32_t nowMs)
+{
+#if METASENSE_LEAF_CAN_RX_ENABLED
+    if (!leafCanReady) {
+        if ((nowMs - lastCanInitAttemptMs) < 2000U) {
+            return;
+        }
+        lastCanInitAttemptMs = nowMs;
+        leafCanReady = leafCanHal.begin(METASENSE_LEAF_CAN_TX_PIN, METASENSE_LEAF_CAN_RX_PIN);
+        if (leafCanReady) {
+            LeafCan::reset(leafFb);
+            Serial.println("[Input] Leaf CAN RX initialized");
+            Serial0.println("[Input] Leaf CAN RX initialized");
+        }
+    }
+
+    if (!leafCanReady) {
+        return;
+    }
+
+    for (uint8_t i = 0; i < METASENSE_LEAF_CAN_MAX_FRAMES_PER_LOOP; ++i) {
+        uint32_t id = 0;
+        uint8_t dlc = 0;
+        uint8_t data[8] = {0};
+        if (!leafCanHal.receive(id, data, dlc)) {
+            break;
+        }
+
+        twai_message_t msg = {};
+        msg.identifier = id;
+        msg.data_length_code = dlc;
+        for (uint8_t j = 0; j < dlc && j < 8U; ++j) {
+            msg.data[j] = data[j];
+        }
+
+        LeafCan::decodeFrame(msg, leafFb, nowMs);
+        switch (id) {
+            case 0x1DA:
+                // Keep Leaf CAN RPM available for monitor display, independent of control source.
+                leafCanRpmMonitor = leafFb.rpm;
+                lastCanRpmMonitorUpdate = nowMs;
+#if !METASENSE_FORCE_TACHO_RPM_SOURCE
+                MetaSense::Input::updateCanRpm(leafFb.rpm);
+#endif
+                lastCanLeafAnyUpdate = nowMs;
+                break;
+            case 0x1DB:
+                MetaSense::Input::updateCanTorque(leafFb.torque_nm);
+                lastCanLeafAnyUpdate = nowMs;
+                break;
+            case 0x1DC:
+                MetaSense::Input::updateCanTemps(leafFb.inverter_temp, leafFb.stator_temp, leafFb.coolant_temp);
+                lastCanLeafAnyUpdate = nowMs;
+                break;
+            case 0x1D4:
+                MetaSense::Input::updateCanStatus(leafFb.ready, leafFb.fault, leafFb.warning, leafFb.limp);
+                lastCanLeafAnyUpdate = nowMs;
+                break;
+            default:
+                break;
+        }
+    }
+#else
+    (void)nowMs;
+#endif
+}
+
 void resetFallbackRunLog(uint32_t nowMs)
 {
     fallbackRunCount = 0;
@@ -1636,6 +1744,15 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         json += "\"brakeTorque\":" + String(data.brakeTorqueNm, 2) + ",";
         json += "\"e_torque\":" + String(data.eTorque, 2) + ",";
         json += "\"load_kg\":" + String(data.loadKg, 1) + ",";
+        json += "\"leaf_rpm\":" + String(data.leaf_rpm, 0) + ",";
+        json += "\"leaf_torque\":" + String(data.leaf_torqueNm, 2) + ",";
+        json += "\"leaf_inv_temp\":" + String(data.leaf_invTempC, 1) + ",";
+        json += "\"leaf_stator_temp\":" + String(data.leaf_statorTempC, 1) + ",";
+        json += "\"leaf_coolant_temp\":" + String(data.leaf_coolantTempC, 1) + ",";
+        json += "\"leaf_ready\":" + String(data.leaf_invReady ? 1 : 0) + ",";
+        json += "\"leaf_fault\":" + String(data.leaf_invFault ? 1 : 0) + ",";
+        json += "\"leaf_warning\":" + String(data.leaf_invWarning ? 1 : 0) + ",";
+        json += "\"leaf_limp\":" + String(data.leaf_invLimp ? 1 : 0) + ",";
 
         if (floatChanged(data.throttlePercent, prevTelemetrySnapshot.throttlePercent, 0.1f)) {
             json += "\"throttle_pct\":" + String(data.throttlePercent, 0) + ",";
@@ -2175,12 +2292,52 @@ void updateCanRpm(float rpm)
         canRpm = rpm;
         lastCanRpm = rpm;
         lastCanRpmUpdate = now;
+        lastCanLeafAnyUpdate = now;
     }
+}
+
+void updateCanTorque(float torqueNm)
+{
+    if (!isfinite(torqueNm)) {
+        return;
+    }
+    canTorqueNm = torqueNm;
+    lastCanTorqueUpdate = millis();
+    lastCanLeafAnyUpdate = lastCanTorqueUpdate;
+}
+
+void updateCanTemps(float inverterTempC, float statorTempC, float coolantTempC)
+{
+    if (isfinite(inverterTempC)) {
+        canInvTempC = inverterTempC;
+        MetaSense::Inverter::setTemperatureC(inverterTempC);
+    }
+    if (isfinite(statorTempC)) {
+        canStatorTempC = statorTempC;
+    }
+    if (isfinite(coolantTempC)) {
+        canCoolantTempC = coolantTempC;
+    }
+    lastCanTempUpdate = millis();
+    lastCanLeafAnyUpdate = lastCanTempUpdate;
+}
+
+void updateCanStatus(bool ready, bool fault, bool warning, bool limp)
+{
+    canInvReady = ready;
+    canInvFault = fault;
+    canInvWarning = warning;
+    canInvLimp = limp;
+    lastCanStatusUpdate = millis();
+    lastCanLeafAnyUpdate = lastCanStatusUpdate;
 }
 
 void begin()
 {
     tele = MetaSense::Telemetry();
+    LeafCan::reset(leafFb);
+    leafCanReady = false;
+    lastCanInitAttemptMs = 0;
     zeroOffset = 0.0f;
     calibrationFactor = 0.01f;
     filteredAdc = 0.0f;
@@ -2364,6 +2521,8 @@ void loop()
         egtDigitalReady = egtDigital.begin();
     }
 
+    pollLeafCanFrames(now);
+
     if (MetaSense::Settings::usePot3Kp) {
         applyRuntimeKpFromPot(false);
     }
@@ -2408,23 +2567,43 @@ void loop()
     }
     alpha = constrain(alpha, 0.01f, 1.0f);
 
-    // RPM source: Leaf CAN is primary, tachogen on GPIO 3 is the active fallback.
+    // RPM source: Tachogen is forced primary for control-loop stability.
     tachoRpm = readTachoRpm();
-    bool canValid = (millis() - lastCanRpmUpdate) < CAN_RPM_TIMEOUT_MS;
+    const bool canRpmAllowed = (!METASENSE_FORCE_TACHO_RPM_SOURCE) && MetaSense::Settings::useCanLeafRpm;
+    bool canValid = canRpmAllowed && ((millis() - lastCanRpmUpdate) < CAN_RPM_TIMEOUT_MS);
     float rpmRaw = 0.0f;
-    canFallbackActive = !canValid;
+    canFallbackActive = canRpmAllowed && !canValid;
     activeRpmFromCan = canValid;
     rpmRaw = canValid ? canRpm : tachoRpm;
 
     rpmFilt = lpFilter(rpmFilt, rpmRaw, alpha);
     tele.rpm = rpmFilt;
+    const bool canRpmMonitorFresh = (now - lastCanRpmMonitorUpdate) < CAN_TEMP_TIMEOUT_MS;
+    tele.leaf_rpm = canRpmMonitorFresh ? leafCanRpmMonitor : 0.0f;
+    const bool canTorqueFresh = (now - lastCanTorqueUpdate) < CAN_TORQUE_TIMEOUT_MS;
+    const bool canTempsFresh = (now - lastCanTempUpdate) < CAN_TEMP_TIMEOUT_MS;
+    const bool canStatusFresh = (now - lastCanStatusUpdate) < CAN_TEMP_TIMEOUT_MS;
+    tele.leaf_torqueNm = canTorqueFresh ? canTorqueNm : 0.0f;
+    tele.leaf_invTempC = canTempsFresh ? canInvTempC : 0.0f;
+    tele.leaf_statorTempC = canTempsFresh ? canStatorTempC : 0.0f;
+    tele.leaf_coolantTempC = canTempsFresh ? canCoolantTempC : 0.0f;
+    tele.leaf_invReady = canStatusFresh ? canInvReady : false;
+    tele.leaf_invFault = canStatusFresh ? canInvFault : false;
+    tele.leaf_invWarning = canStatusFresh ? canInvWarning : false;
+    tele.leaf_invLimp = canStatusFresh ? canInvLimp : false;
+    tele.leaf_lastUpdateMs = lastCanLeafAnyUpdate;
 
-    if (canValid) {
+    if (canRpmAllowed && canValid) {
         float delta = fabs(canRpm - tachoRpm);
         rpmDeltaError = (delta > RPM_DELTA_LIMIT);
     } else {
         rpmDeltaError = false;
     }
+
+#if METASENSE_FORCE_TACHO_RPM_SOURCE
+    (void)rpm;
+    return;
+#endif
 
     // other sensors
     float drumRaw = readDrumRpm();
@@ -2503,8 +2682,8 @@ void loop()
 
     updateDyno(tele, dtSec);
 
-    // Mirror the live torque gauge so the Acc. Energy panel stays in sync.
-    tele.eTorque = tele.torqueNm;
+    // Prefer fresh CAN actual torque in the live gauge while preserving dyno torque math.
+    tele.eTorque = canTorqueFresh ? canTorqueNm : tele.torqueNm;
 
     bool safe = checkSafety(tele);
     if (!safe) {

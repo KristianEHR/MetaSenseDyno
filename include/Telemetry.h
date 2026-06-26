@@ -68,6 +68,18 @@ struct Telemetry {
 
     bool vcuReady = false;  // GPIO 36: VCU / RB+ hardware interlock
     bool swActive = false;  // GPIO 35: panel SW switch (recording toggle)
+
+    // Leaf inverter CAN telemetry (captured in parallel with analog/I2C sources).
+    float leaf_rpm = 0.0f;
+    float leaf_torqueNm = 0.0f;
+    float leaf_invTempC = 0.0f;
+    float leaf_statorTempC = 0.0f;
+    float leaf_coolantTempC = 0.0f;
+    bool leaf_invReady = false;
+    bool leaf_invFault = false;
+    bool leaf_invWarning = false;
+    bool leaf_invLimp = false;
+    uint32_t leaf_lastUpdateMs = 0;
 };
 
 } // namespace MetaSense
