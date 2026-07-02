@@ -36,6 +36,7 @@ bool calibrateWithKnownWeight(float knownWeightKg, float& outFactor);
 bool requestCalibrationWithKnownWeight(float knownWeightKg);
 float getCalibrationFactor();
 float getZeroOffset();
+float getZeroOffsetRaw();
 bool isVcuReady();
 void setUiModeHintTrend(bool trendMode);
 bool isUiModeHintTrend();
@@ -87,7 +88,7 @@ bool parseKnownWeightCommand(const String& cmd, float& knownWeightKg)
 String buildProfilePayload(bool includeTypeEnvelope)
 {
     calibrationFactor = MetaSense::Input::getCalibrationFactor();
-    calibrationZero = MetaSense::Input::getZeroOffset();
+    calibrationZero = MetaSense::Input::getZeroOffsetRaw();
 
     String json;
     json.reserve(900);
@@ -184,8 +185,8 @@ bool applyProfilePayload(const String& payload)
         const float n = profile["loadAvgN"].as<float>();
         if (n < 1.0f) {
             MetaSense::Settings::loadAvgN = 1.0f;
-        } else if (n > 48.0f) {
-            MetaSense::Settings::loadAvgN = 48.0f;
+        } else if (n > 255.0f) {
+            MetaSense::Settings::loadAvgN = 255.0f;
         } else {
             MetaSense::Settings::loadAvgN = n;
         }
@@ -194,8 +195,8 @@ bool applyProfilePayload(const String& payload)
         const float n = profile["loadAvgN2"].as<float>();
         if (n < 1.0f) {
             MetaSense::Settings::loadAvgN2 = 1.0f;
-        } else if (n > 48.0f) {
-            MetaSense::Settings::loadAvgN2 = 48.0f;
+        } else if (n > 255.0f) {
+            MetaSense::Settings::loadAvgN2 = 255.0f;
         } else {
             MetaSense::Settings::loadAvgN2 = n;
         }
@@ -594,7 +595,7 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
         MetaSense::WebSocketServer::sendStatus("Calibration queued");
     }
     else if (cmdUpper == "GET_CALIBRATION") {
-        calibrationZero = MetaSense::Input::getZeroOffset();
+        calibrationZero = MetaSense::Input::getZeroOffsetRaw();
         calibrationFactor = MetaSense::Input::getCalibrationFactor();
         String info;
         info.reserve(64);
@@ -733,16 +734,16 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
         } else if (key == "loadAvgN") {
             if (fval < 1.0f) {
                 MetaSense::Settings::loadAvgN = 1.0f;
-            } else if (fval > 48.0f) {
-                MetaSense::Settings::loadAvgN = 48.0f;
+            } else if (fval > 255.0f) {
+                MetaSense::Settings::loadAvgN = 255.0f;
             } else {
                 MetaSense::Settings::loadAvgN = fval;
             }
         } else if (key == "loadAvgN2") {
             if (fval < 1.0f) {
                 MetaSense::Settings::loadAvgN2 = 1.0f;
-            } else if (fval > 48.0f) {
-                MetaSense::Settings::loadAvgN2 = 48.0f;
+            } else if (fval > 255.0f) {
+                MetaSense::Settings::loadAvgN2 = 255.0f;
             } else {
                 MetaSense::Settings::loadAvgN2 = fval;
             }

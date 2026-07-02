@@ -364,14 +364,14 @@
       <label>Load Moving Average Window (N samples)</label>
       <div class="info">Applies to load-cell raw smoothing before zero/deadband and torque conversion. Lower N = faster response.</div>
       <div class="param-row">
-        <input type="number" id="loadAvgN" value="5" min="1" max="48" step="1">
+        <input type="number" id="loadAvgN" value="5" min="1" max="255" step="1">
         <button onclick="saveSingle('loadAvgN', event)">💾 SAVE</button>
       </div>
 
       <label>Load Stage B Window (N2 samples)</label>
       <div class="info">Used only when Load Filter Mode is set to B. This is the second MA coefficient/window.</div>
       <div class="param-row">
-        <input type="number" id="loadAvgN2" value="5" min="1" max="48" step="1">
+        <input type="number" id="loadAvgN2" value="5" min="1" max="255" step="1">
         <button onclick="saveSingle('loadAvgN2', event)">💾 SAVE</button>
       </div>
 
@@ -420,12 +420,17 @@
 
       <!-- Inertia-only gear ratio -->
       <div id="gearRatioSection" class="hidden">
-        <label>Virtual Gear Ratio (Drum RPM → Engine RPM)</label>
+        <label>Drum/Engine RPM Ratio</label>
         <div class="param-row">
           <input type="number" id="virtGearRatio" value="1.0" min="0.1" max="50" step="0.1">
           <button onclick="saveSingle('virtGearRatio', event)">💾 SAVE</button>
         </div>
-        <div class="info">Used to convert drum RPM to engine RPM in fixed-ratio inertia setups.</div>
+        <div class="info">
+          Use this as the multiplier from drum RPM to engine RPM:<br>
+          <strong>engine RPM = drum RPM × ratio</strong><br>
+          Example: Leaf CAN / drum RPM of 3000 with a 16/11 drivetrain means engine RPM = 3000 × 1.455 = 4364.<br>
+          Enter <strong>16/11 = 1.455</strong> for that drivetrain.
+        </div>
       </div>
 
       <label>Factory Settings File (FS Refresh)</label>
@@ -684,54 +689,53 @@
 
           } else if (msg.type === "info" || msg.type === "status") {
             showToast(msg.msg);
+            const text = String(msg.msg || "").toLowerCase();
 
             if (tarePending) {
-              const text = String(msg.msg || "").toLowerCase();
               if (text.includes("tare applied") || text.includes("zero=")) {
                 tarePending = false;
                 setTareButtonBusy(false);
               }
             }
 
-            if (calibratePending) {
-              const text = String(msg.msg || "").toLowerCase();
-              const calibrationDone =
-                text.includes("calibration done") ||
-                text.includes("new factor") ||
-                text.includes("calibration factor updated") ||
-                text.includes("factor=");
+            const calibrationDone =
+              text.includes("calibration done") ||
+              text.includes("new factor") ||
+              text.includes("calibration factor updated") ||
+              text.includes("factor=");
 
-              const calibrationFailed =
-                text.includes("calibration rejected") ||
-                text.includes("calibration failed") ||
-                text.includes("not enough stable readings") ||
-                text.includes("load not stable enough") ||
-                text.includes("calibration busy") ||
-                text.includes("invalid calibration weight");
+            const calibrationFailed =
+              text.includes("calibration rejected") ||
+              text.includes("calibration failed") ||
+              text.includes("not enough stable readings") ||
+              text.includes("load not stable enough") ||
+              text.includes("calibration busy") ||
+              text.includes("invalid calibration weight");
 
-              if (calibrationDone) {
-                const factorMatch = String(msg.msg || "").match(/factor\s*=\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
-                const factorMatchAlt = String(msg.msg || "").match(/new factor:\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/i);
-                if (factorMatch && factorMatch[1] !== undefined) {
-                  const parsed = Number(factorMatch[1]);
-                  if (Number.isFinite(parsed)) {
-                    document.getElementById("calFactor").value = parsed.toFixed(6);
-                  }
-                } else if (factorMatchAlt && factorMatchAlt[1] !== undefined) {
-                  const parsed = Number(factorMatchAlt[1]);
-                  if (Number.isFinite(parsed)) {
-                    document.getElementById("calFactor").value = parsed.toFixed(6);
-                  }
+            if (calibrationDone) {
+              const factorMatch = String(msg.msg || "").match(/factor\s*=\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
+              const factorMatchAlt = String(msg.msg || "").match(/new factor:\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/i);
+              if (factorMatch && factorMatch[1] !== undefined) {
+                const parsed = Number(factorMatch[1]);
+                if (Number.isFinite(parsed)) {
+                  document.getElementById("calFactor").value = parsed.toFixed(6);
                 }
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                  ws.send("GET_SETTINGS");
+              } else if (factorMatchAlt && factorMatchAlt[1] !== undefined) {
+                const parsed = Number(factorMatchAlt[1]);
+                if (Number.isFinite(parsed)) {
+                  document.getElementById("calFactor").value = parsed.toFixed(6);
                 }
-                calibratePending = false;
-                setCalibrateButtonBusy(false);
-              } else if (calibrationFailed) {
+              }
+              if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send("GET_SETTINGS");
+              }
+              if (calibratePending) {
                 calibratePending = false;
                 setCalibrateButtonBusy(false);
               }
+            } else if (calibrationFailed && calibratePending) {
+                calibratePending = false;
+                setCalibrateButtonBusy(false);
             }
           }
         } catch (e) {
@@ -790,7 +794,7 @@
           calibratePending = false;
           setCalibrateButtonBusy(false);
           showToast("No calibration confirmation received. Check load and retry.");
-        }, 12000);
+        }, 18000);
       } else {
         showToast("Enter valid weight!");
       }

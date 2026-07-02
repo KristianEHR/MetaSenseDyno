@@ -49,7 +49,7 @@ static float drumRpmFilt = 0.0f;
 static float loadKgFilt  = 0.0f;
 static float torqueFilt  = 0.0f;
 static float filteredAdc = 0.0f;
-constexpr uint8_t kLoadRawAverageWindowMax = 48;
+constexpr uint8_t kLoadRawAverageWindowMax = 255;
 constexpr uint8_t kLoadRawAverageWindowDefault = 5;
 constexpr uint8_t kLoadFilterModeMovingAverage = 0;
 constexpr uint8_t kLoadFilterModeTwoStageMovingAverage = 1;
@@ -82,6 +82,7 @@ static float lambdaRawAverageSum = 0.0f;
 static float canRpm   = 0.0f;
 static float tachoRpm = 0.0f;
 static float tachoCal = 10.0f;   // tachogen calibration factor
+constexpr float kLoadCellRawScale = 0.01f;
 static float zeroOffset = 0.0f;
 static float zeroDeadbandRaw = 0.0f;
 static float calibrationFactor = 0.01f;
@@ -122,7 +123,10 @@ static uint32_t lastAmbientSampleMs = 0;
 // CAN RPM validity timeout + plausibility
 static uint32_t lastCanRpmUpdate   = 0;
 static const uint32_t CAN_RPM_TIMEOUT_MS = 100;
-static const uint32_t CAN_RPM_MIN_UPDATE_MS = 20;
+#ifndef METASENSE_CAN_RPM_MIN_UPDATE_MS
+#define METASENSE_CAN_RPM_MIN_UPDATE_MS 10
+#endif
+static const uint32_t CAN_RPM_MIN_UPDATE_MS = METASENSE_CAN_RPM_MIN_UPDATE_MS;
 static float lastCanRpm            = 0.0f;
 static const float CAN_MAX_JUMP    = 2000.0f;
 static float leafCanRpmMonitor = 0.0f;
@@ -143,6 +147,14 @@ static CanHAL leafCanHal;
 static LeafInvFeedback leafFb;
 static bool leafCanReady = false;
 static uint32_t lastCanInitAttemptMs = 0;
+static bool vcuDebugSimMode = false;
+static bool vcuDebugInv12v = false;
+static float vcuDebugHvVoltage = 0.0f;
+static float vcuDebugTorqueDemandNm = 0.0f;
+static bool vcuDebugRPlus = false;
+static bool vcuDebugPrecharge = false;
+static bool vcuDebugSsr = false;
+static bool vcuDebugRMinus = false;
 
 // RPM delta error
 static bool  rpmDeltaError         = false;
@@ -177,9 +189,14 @@ constexpr float EGT_MAX_LIMIT_C = 950.0f;
 constexpr float TORQUE_MIN = -200.0f;
 constexpr float TORQUE_MAX =  200.0f;
 constexpr float RPM_SETPOINT_MAX = RPM_MAX_LIMIT;
-// 40 Hz telemetry publish reduces visible UI drag while keeping bandwidth moderate.
-constexpr uint32_t kWebSocketPublishPeriodMs = 50;   // 20 Hz fast telemetry cadence
-constexpr uint32_t kWebSocketSlowPublishPeriodMs = 500; // 2 Hz slow telemetry cadence
+#ifndef METASENSE_WS_FAST_PERIOD_MS
+#define METASENSE_WS_FAST_PERIOD_MS 50
+#endif
+#ifndef METASENSE_WS_SLOW_PERIOD_MS
+#define METASENSE_WS_SLOW_PERIOD_MS 500
+#endif
+constexpr uint32_t kWebSocketPublishPeriodMs = METASENSE_WS_FAST_PERIOD_MS;
+constexpr uint32_t kWebSocketSlowPublishPeriodMs = METASENSE_WS_SLOW_PERIOD_MS;
 constexpr uint8_t kWebSocketSlowTelemetrySlices = 15;
 #ifndef METASENSE_TELEMETRY_PROFILE_DEFAULT_TREND
 #define METASENSE_TELEMETRY_PROFILE_DEFAULT_TREND 0
@@ -213,7 +230,10 @@ constexpr float kRuntimeKpMin = 0.005f;
 constexpr float kRuntimeKpMax = 0.200f;
 constexpr float kRuntimeKpAlpha = 0.12f;
 constexpr float kRuntimeKpApplyDelta = 0.001f;
-constexpr uint32_t kAmbientSamplePeriodMs = 1000;
+#ifndef METASENSE_AMBIENT_SAMPLE_PERIOD_MS
+#define METASENSE_AMBIENT_SAMPLE_PERIOD_MS 100
+#endif
+constexpr uint32_t kAmbientSamplePeriodMs = METASENSE_AMBIENT_SAMPLE_PERIOD_MS;
 constexpr uint32_t kLoadCellNauRetryPeriodMs = 5000;
 constexpr uint16_t kMcp9600BootSettleDelayMs = 1000;
 constexpr uint16_t kMcp9600BootRetryDelayMs = 500;
@@ -227,7 +247,7 @@ constexpr NAU7802_SampleRate kLoadCellDefaultRuntimeRate = NAU7802_RATE_80SPS;
 constexpr NAU7802_SampleRate kLoadCellStableRate = NAU7802_RATE_80SPS;
 constexpr float kLambdaMin = 0.50f;
 constexpr uint8_t kCalibrationSkipFirstSamples = 10;
-constexpr uint32_t kCalibrationSettlingMs = 2000;
+constexpr uint32_t kCalibrationSettlingMs = 1000;
 constexpr uint32_t kCalibrationDurationMs = 5000;
 constexpr uint32_t kCalibrationSamplePeriodMs = 50;
 constexpr uint8_t kLoadRawBurstSamples = 4;
@@ -835,7 +855,7 @@ float readLoadKg()
     }
 
     // Backward-compatible fallback for boards wired without NAU7802.
-    return readAdcSafe(kLoadCellPin) * 0.01f;
+    return readAdcSafe(kLoadCellPin) * kLoadCellRawScale;
 }
 
 uint16_t getLoadCellSampleRateSpsLocal()
@@ -854,7 +874,7 @@ bool readDirectLoadRawSample(float& outRaw, uint16_t waitMs = 0)
                     const bool i2cLocked = MetaSense::I2cBus::take(pdMS_TO_TICKS(2));
                     const bool hasSample = loadCellNau.available();
                     if (hasSample) {
-                        outRaw = static_cast<float>(loadCellNau.read());
+                        outRaw = static_cast<float>(loadCellNau.read()) * kLoadCellRawScale;
                     }
                     if (i2cLocked) {
                         MetaSense::I2cBus::give();
@@ -865,11 +885,12 @@ bool readDirectLoadRawSample(float& outRaw, uint16_t waitMs = 0)
                     }
                 }
             } else if (loadCellNau.available()) {
-                outRaw = static_cast<float>(loadCellNau.read());
+                outRaw = static_cast<float>(loadCellNau.read()) * kLoadCellRawScale;
                 return isfinite(outRaw);
             }
         } else {
-            outRaw = readAdcSafe(kLoadCellPin);
+            // Keep fallback calibration units aligned with runtime fallback path.
+            outRaw = readAdcSafe(kLoadCellPin) * kLoadCellRawScale;
             return isfinite(outRaw);
         }
 
@@ -1098,9 +1119,9 @@ bool sampleLoadRawStats(float& outAverageRaw, float& outMaxAbsDeviation, uint16_
     const uint8_t targetSamples = min<uint8_t>(maxSamples, kLoadRawStatsMaxSamples);
     const uint32_t start = millis();
 
-    float seedRaw = getLoadCellSamplerAverageRaw();
+    float seedRaw = filteredAdc;
     if (!isfinite(seedRaw)) {
-        seedRaw = filteredAdc;
+        seedRaw = getLoadCellSamplerAverageRaw();
     }
     resetLoadRawAverage(seedRaw);
 
@@ -1130,7 +1151,7 @@ void loadCellSamplerTask(void* /*pvParameters*/)
 
                 if (loadCellMutex != nullptr && xSemaphoreTake(loadCellMutex, pdMS_TO_TICKS(2)) == pdTRUE) {
                     while (loadCellNau.available() && rawCount < 8) {
-                        rawSamples[rawCount++] = static_cast<float>(loadCellNau.read());
+                        rawSamples[rawCount++] = static_cast<float>(loadCellNau.read()) * kLoadCellRawScale;
                     }
                     xSemaphoreGive(loadCellMutex);
                 }
@@ -1139,7 +1160,7 @@ void loadCellSamplerTask(void* /*pvParameters*/)
                     pushLoadCellSamplerRaw(rawSamples[i]);
                 }
             } else {
-                const float raw = readAdcSafe(kLoadCellPin) * 0.01f;
+                const float raw = readAdcSafe(kLoadCellPin) * kLoadCellRawScale;
                 pushLoadCellSamplerRaw(raw);
             }
         }
@@ -1588,39 +1609,61 @@ void updateDyno(MetaSense::Telemetry& t, float dtSec)
 {
     if (MetaSense::Settings::inertiaMode) {
         // --- Inertia dyno path ---
-        // ω_drum (rad/s)
-        const float omega = t.drumRpm * (2.0f * 3.14159265f / 60.0f);
+        // Use drum/e-motor RPM with physical drum inertia in inertia mode.
+        const float omegaDrum = t.drumRpm * (2.0f * 3.14159265f / 60.0f);
+        const float ratio = (MetaSense::Settings::virtGearRatio > 0.01f)
+            ? MetaSense::Settings::virtGearRatio
+            : 1.0f;
 
         // Angular acceleration α = dω/dt, lightly filtered
         float alpha = 0.0f;
         if (dtSec > 0.001f) {
-            alpha = lpFilter(0.0f, (omega - omegaPrev) / dtSec,
+            alpha = lpFilter(0.0f, (omegaDrum - omegaPrev) / dtSec,
                              MetaSense::Settings::filterAlpha);
         }
-        omegaPrev = omega;
+        omegaPrev = omegaDrum;
 
-        // T_drum = J · α
+        // T = J * alpha with measured drum inertia.
         const float J = MetaSense::Settings::drumInertiaKgM2;
         const float torqueDrum = J * alpha;
-        torqueFilt = lpFilter(torqueFilt, torqueDrum, MetaSense::Settings::filterAlpha);
+        const float torqueEngineEq = torqueDrum / ratio;
+        torqueFilt = lpFilter(torqueFilt, torqueEngineEq, MetaSense::Settings::filterAlpha);
 
-        // Scale to engine side: T_engine = T_drum × ratio
-        const float ratio = MetaSense::Settings::virtGearRatio;
-        t.torqueNm      = torqueFilt * ratio;
-        t.brakeTorqueNm = t.torqueNm;
+        // Inertia mode: report test-engine equivalent torque while preserving physical drum power.
+        t.torqueNm      = torqueFilt;
+        t.brakeTorqueNm = torqueDrum;
 
-        // Power is invariant: P = T_drum · ω_drum  (watts → kW)
-        const float powerW = torqueFilt * omega;
+        // Apply climate correction so displayed torque and derived power use corrected values.
+        const float rhoActual = computeAirDensityKgM3(ambientTempC, ambientPressureHpa, ambientHumidityPct);
+        const float rhoRef    = computeAirDensityKgM3(20.0f, 1013.25f, 0.0f);
+        t.climateCF = (rhoActual > 0.3f) ? (rhoRef / rhoActual) : 1.0f;
+        t.torqueNm      *= t.climateCF;
+        t.brakeTorqueNm *= t.climateCF;
+
+        const float powerW = t.torqueNm * omegaDrum;
         t.kw = powerW / 1000.0f;
 
         t.energyMJ += (powerW * dtSec) / 1000000.0f;
 
     } else {
         // --- Brake / load-cell dyno path (original) ---
-        const float armCm = (MetaSense::Settings::armCm > 0.01f) ? MetaSense::Settings::armCm : 0.01f;
-        const float rawTorqueNm = (t.loadKg * 9.82f / 100.0f) * armCm;
-        t.torqueNm      = rawTorqueNm;
-        t.brakeTorqueNm = t.torqueNm;
+        const float ratio = (MetaSense::Settings::virtGearRatio > 0.01f)
+            ? MetaSense::Settings::virtGearRatio
+            : 1.0f;
+        const float omegaDrum = t.drumRpm * (2.0f * 3.14159265f / 60.0f);
+        const float armConfigured = (MetaSense::Settings::armCm > 0.001f)
+            ? MetaSense::Settings::armCm
+            : 20.0f;
+        // UI stores arm length in cm. Accept legacy meter values (<=2.0) too.
+        const float armMeters = (armConfigured <= 2.0f)
+            ? armConfigured
+            : (armConfigured / 100.0f);
+        // Measured brake torque from calibrated load-cell kg and lever arm.
+        const float rawBrakeTorqueNm = (t.loadKg * 9.82f) * armMeters;
+        // Convert brake/drum torque to test-engine equivalent using RPM ratio.
+        const float rawEngineTorqueNm = rawBrakeTorqueNm / ratio;
+        t.torqueNm      = rawEngineTorqueNm;
+        t.brakeTorqueNm = rawBrakeTorqueNm;
 
         // --- Climate correction: normalise torque/power to standard conditions ---
         // Reference: 1013.25 hPa, 20 °C, 0 % RH  (ρ_ref ≈ 1.2041 kg/m³)
@@ -1628,7 +1671,7 @@ void updateDyno(MetaSense::Telemetry& t, float dtSec)
         const float rhoRef    = computeAirDensityKgM3(20.0f, 1013.25f, 0.0f);
         t.climateCF = (rhoActual > 0.3f) ? (rhoRef / rhoActual) : 1.0f;
         t.torqueNm      *= t.climateCF;
-        t.brakeTorqueNm  = t.torqueNm;
+        t.brakeTorqueNm *= t.climateCF;
 
         // P(W) = T(Nm) * ω(rad/s) = T * rpm * 2π / 60
         // Correct for drivetrain losses to get crank power.
@@ -1638,7 +1681,7 @@ void updateDyno(MetaSense::Telemetry& t, float dtSec)
         t.kw = powerW / 1000.0f;
         t.energyMJ += (powerW * dtSec) / 1000000.0f;
 
-        omegaPrev = t.drumRpm * (2.0f * 3.14159265f / 60.0f); // keep in sync
+        omegaPrev = omegaDrum; // keep in sync
     }
 }
 
@@ -1678,6 +1721,16 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
 
     String json;
     json.reserve(420);
+
+    const float armConfigured = (MetaSense::Settings::armCm > 0.001f)
+        ? MetaSense::Settings::armCm
+        : 20.0f;
+    const float armMeters = (armConfigured <= 2.0f)
+        ? armConfigured
+        : (armConfigured / 100.0f);
+    const float measuredLoadTorqueNm = isfinite(data.loadKg)
+        ? (data.loadKg * 9.82f) * armMeters
+        : 0.0f;
 
     json = "{\"type\":\"data\",";
 
@@ -1742,6 +1795,7 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         // Dashboard path: keep full torque family + load.
         json += "\"torque\":" + String(data.torqueNm, 2) + ",";
         json += "\"brakeTorque\":" + String(data.brakeTorqueNm, 2) + ",";
+        json += "\"torque_measured\":" + String(measuredLoadTorqueNm, 2) + ",";
         json += "\"e_torque\":" + String(data.eTorque, 2) + ",";
         json += "\"load_kg\":" + String(data.loadKg, 1) + ",";
         json += "\"leaf_rpm\":" + String(data.leaf_rpm, 0) + ",";
@@ -1753,6 +1807,24 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         json += "\"leaf_fault\":" + String(data.leaf_invFault ? 1 : 0) + ",";
         json += "\"leaf_warning\":" + String(data.leaf_invWarning ? 1 : 0) + ",";
         json += "\"leaf_limp\":" + String(data.leaf_invLimp ? 1 : 0) + ",";
+        json += "\"vcu_sim\":" + String(data.vcuSimMode ? 1 : 0) + ",";
+        json += "\"vcu_inv12v\":" + String(data.vcuInv12v ? 1 : 0) + ",";
+        json += "\"vcu_hv\":" + String(data.vcuHvVoltage, 1) + ",";
+        json += "\"vcu_torque_demand\":" + String(data.vcuTorqueDemandNm, 2) + ",";
+        json += "\"vcu_rplus\":" + String(data.vcuRPlusCmd ? 1 : 0) + ",";
+        json += "\"vcu_precharge\":" + String(data.vcuPrechargeCmd ? 1 : 0) + ",";
+        json += "\"vcu_ssr\":" + String(data.vcuSsrCmd ? 1 : 0) + ",";
+        json += "\"vcu_rminus\":" + String(data.vcuRMinusCmd ? 1 : 0) + ",";
+        {
+            const char* vcuSt;
+            if (!data.vcuInv12v)         vcuSt = "WAIT_12V";
+            else if (data.vcuPrechargeCmd) vcuSt = "PRECHARGE";
+            else if (data.vcuRPlusCmd)     vcuSt = "ARMED";
+            else                           vcuSt = "IDLE";
+            json += "\"vcu_state\":\"";
+            json += vcuSt;
+            json += "\",";
+        }
 
         if (floatChanged(data.throttlePercent, prevTelemetrySnapshot.throttlePercent, 0.1f)) {
             json += "\"throttle_pct\":" + String(data.throttlePercent, 0) + ",";
@@ -1767,6 +1839,7 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         // Trend path: send only fields used by trend live graphs on every frame.
         json += "\"kw\":" + String(data.kw, 2) + ",";
         json += "\"torque\":" + String(data.torqueNm, 2) + ",";
+        json += "\"torque_measured\":" + String(measuredLoadTorqueNm, 2) + ",";
         json += "\"lambda\":" + String(data.lambdaValue, 3) + ",";
         json += "\"massflow_m3h\":" + String(data.massflowM3h, 1) + ",";
     }
@@ -2002,7 +2075,7 @@ void calibrationTask(void* /*pvParameters*/)
                 sendCalibrationInfo("Tare started...");
                 MetaSense::Input::tare();
                 MetaSense::RunStorage::saveCalibration();
-                sendCalibrationInfo("Tare applied (zero=" + String(zeroOffset, 2) + ")");
+                sendCalibrationInfo("Tare applied (zero=" + String(MetaSense::Input::getZeroOffsetRaw(), 2) + ")");
             } else {
                 loadCellExclusiveSampling = true;
                 setLoadCellStableSampling(true);
@@ -2100,6 +2173,7 @@ void tare()
     float avgRaw = 0.0f;
     float maxDev = 0.0f;
     setLoadCellStableSampling(true);
+    delay(kCalibrationSettlingMs);
     if (sampleLoadRawStats(avgRaw, maxDev, 1000, 48)) {
         zeroOffset = avgRaw;
         // Bound deadband to avoid tare under unstable noise from muting torque output.
@@ -2110,7 +2184,12 @@ void tare()
         resetLoadKgAverage(0.0f);
         loadKgFilt = 0.0f;
     } else {
-        zeroOffset = getLoadCellSamplerAverageRaw();
+        float fallbackRaw = getLoadCellSamplerAverageRaw();
+        if (!isfinite(fallbackRaw)) {
+            fallbackRaw = filteredAdc;
+        }
+        // Keep tare offset semantics aligned with runtime raw-filtered path.
+        zeroOffset = applyLoadRawAverage(fallbackRaw);
         filteredAdc = zeroOffset;
         zeroDeadbandRaw = 0.0f;
         resetLoadCellSampler(filteredAdc);
@@ -2168,7 +2247,7 @@ bool calibrateWithKnownWeight(float knownWeightKg, float& outFactor)
     float maxDev = 0.0f;
     loadCellExclusiveSampling = true;
     setLoadCellStableSampling(true);
-    delay(150);
+    delay(kCalibrationSettlingMs);
     if (!sampleLoadRawStats(avgRaw, maxDev, 1000, 32)) {
         loadCellExclusiveSampling = false;
         setLoadCellStableSampling(false);
@@ -2226,6 +2305,11 @@ float getZeroOffset()
     return zeroOffset;
 }
 
+float getZeroOffsetRaw()
+{
+    return zeroOffset / kLoadCellRawScale;
+}
+
 float rpm()
 {
     return tele.rpm;
@@ -2234,6 +2318,24 @@ float rpm()
 float torqueNm()
 {
     return tele.torqueNm;
+}
+
+float egtHotC()
+{
+    return tele.egtHotC;
+}
+
+void getEnvironment(float& ambientC,
+                    float& pressureHpa,
+                    float& humidityPct,
+                    float& airDensity,
+                    float& climateCf)
+{
+    ambientC = tele.ambientC;
+    pressureHpa = tele.pressureHpa;
+    humidityPct = tele.humidity;
+    airDensity = tele.airDensity;
+    climateCf = tele.climateCF;
 }
 
 float currentKpLive()
@@ -2330,6 +2432,25 @@ void updateCanStatus(bool ready, bool fault, bool warning, bool limp)
     canInvLimp = limp;
     lastCanStatusUpdate = millis();
     lastCanLeafAnyUpdate = lastCanStatusUpdate;
+}
+
+void updateVcuDebug(bool simMode,
+                    bool inv12v,
+                    float hvVoltage,
+                    float torqueDemandNm,
+                    bool rPlus,
+                    bool precharge,
+                    bool ssr,
+                    bool rMinus)
+{
+    vcuDebugSimMode = simMode;
+    vcuDebugInv12v = inv12v;
+    vcuDebugHvVoltage = isfinite(hvVoltage) ? hvVoltage : 0.0f;
+    vcuDebugTorqueDemandNm = isfinite(torqueDemandNm) ? torqueDemandNm : 0.0f;
+    vcuDebugRPlus = rPlus;
+    vcuDebugPrecharge = precharge;
+    vcuDebugSsr = ssr;
+    vcuDebugRMinus = rMinus;
 }
 
 void begin()
@@ -2567,14 +2688,21 @@ void loop()
     }
     alpha = constrain(alpha, 0.01f, 1.0f);
 
-    // RPM source: Tachogen is forced primary for control-loop stability.
+    // RPM source strategy:
+    // - CAN mode: raw CAN RPM is e-motor RPM, test-engine RPM = e-motor RPM * gear ratio.
+    // - Tachogen mode/fallback: tachogen is treated as test-engine RPM directly.
     tachoRpm = readTachoRpm();
     const bool canRpmAllowed = (!METASENSE_FORCE_TACHO_RPM_SOURCE) && MetaSense::Settings::useCanLeafRpm;
     bool canValid = canRpmAllowed && ((millis() - lastCanRpmUpdate) < CAN_RPM_TIMEOUT_MS);
     float rpmRaw = 0.0f;
     canFallbackActive = canRpmAllowed && !canValid;
     activeRpmFromCan = canValid;
-    rpmRaw = canValid ? canRpm : tachoRpm;
+    const float emotorRpmRaw = canRpm;
+    const float rpmRatio = (MetaSense::Settings::virtGearRatio > 0.01f)
+        ? MetaSense::Settings::virtGearRatio
+        : 1.0f;
+    const float canEngineRpm = emotorRpmRaw * rpmRatio;
+    rpmRaw = canValid ? canEngineRpm : tachoRpm;
 
     rpmFilt = lpFilter(rpmFilt, rpmRaw, alpha);
     tele.rpm = rpmFilt;
@@ -2592,21 +2720,24 @@ void loop()
     tele.leaf_invWarning = canStatusFresh ? canInvWarning : false;
     tele.leaf_invLimp = canStatusFresh ? canInvLimp : false;
     tele.leaf_lastUpdateMs = lastCanLeafAnyUpdate;
+    tele.vcuSimMode = vcuDebugSimMode;
+    tele.vcuInv12v = vcuDebugInv12v;
+    tele.vcuHvVoltage = vcuDebugHvVoltage;
+    tele.vcuTorqueDemandNm = vcuDebugTorqueDemandNm;
+    tele.vcuRPlusCmd = vcuDebugRPlus;
+    tele.vcuPrechargeCmd = vcuDebugPrecharge;
+    tele.vcuSsrCmd = vcuDebugSsr;
+    tele.vcuRMinusCmd = vcuDebugRMinus;
 
     if (canRpmAllowed && canValid) {
-        float delta = fabs(canRpm - tachoRpm);
+        float delta = fabs(canEngineRpm - tachoRpm);
         rpmDeltaError = (delta > RPM_DELTA_LIMIT);
     } else {
         rpmDeltaError = false;
     }
 
-#if METASENSE_FORCE_TACHO_RPM_SOURCE
-    (void)rpm;
-    return;
-#endif
-
     // other sensors
-    float drumRaw = readDrumRpm();
+    float drumRaw = (canRpmAllowed && canValid) ? emotorRpmRaw : readDrumRpm();
     float loadRaw = readLoadKg();
     MetaSense::RunStorage::appendFsLiveProbeSample(static_cast<uint64_t>(esp_timer_get_time()), loadRaw);
     const bool captureActive = MetaSense::RunStorage::rawCaptureActive();
@@ -2664,6 +2795,10 @@ void loop()
     MetaSense::DynoStateMachine::setManualRpmTarget(manualRpmTarget);
     MetaSense::DynoStateMachine::update();
 
+    tele.mode = MetaSense::Settings::inertiaMode
+        ? MetaSense::DynoMode::Inertia
+        : MetaSense::DynoMode::Brake;
+
     if (MetaSense::DynoStateMachine::isAutoRunActive()) {
         // In autorun, preserve target provided by state machine path.
         tele.rpmTarget = MetaSense::Settings::getRpmTarget();
@@ -2682,9 +2817,6 @@ void loop()
 
     updateDyno(tele, dtSec);
 
-    // Prefer fresh CAN actual torque in the live gauge while preserving dyno torque math.
-    tele.eTorque = canTorqueFresh ? canTorqueNm : tele.torqueNm;
-
     bool safe = checkSafety(tele);
     if (!safe) {
         tele.torqueNm      = 0.0f;
@@ -2696,6 +2828,9 @@ void loop()
         tele.rpm,
         dtSec);
     if (!safe) torqueCmd = 0.0f;
+
+    // eTorque is the PI torque demand signal.
+    tele.eTorque = torqueCmd;
 
     const float maxAllowedRpm = (MetaSense::Settings::maxRPM > 0.0f) ? MetaSense::Settings::maxRPM : RPM_MAX_LIMIT;
     const float maxAllowedTorque = (MetaSense::Settings::maxTorque > 0.0f) ? MetaSense::Settings::maxTorque : TORQUE_MAX;

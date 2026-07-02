@@ -17,6 +17,9 @@ OutputState pendingState = OutputState::START;
 uint32_t pendingStateSinceMs = 0;
 constexpr uint32_t kRelaySwitchDelayMs = 15;
 constexpr uint32_t kStateDebounceMs = 50;
+bool vcuRelayOverrideEnabled = false;
+bool vcuRPlusCommand = false;
+bool vcuPrechargeCommand = false;
 Adafruit_NeoPixel strip(MetaSense::Globals::kOnboardLedCount,
                         MetaSense::Globals::kOnboardLedPin,
                         NEO_GRB + NEO_KHZ800);
@@ -75,6 +78,12 @@ void setRelayOutputs(bool rbMinusOn, bool sssrOn)
 {
     digitalWrite(MetaSense::Globals::kRbMinusFetPin, rbMinusOn ? HIGH : LOW);
     digitalWrite(MetaSense::Globals::kSssrPin, sssrOn ? HIGH : LOW);
+
+    // New HV relay pins are owned by VCU path when override is enabled.
+    const bool rPlusOn = vcuRelayOverrideEnabled ? vcuRPlusCommand : false;
+    const bool prechargeOn = vcuRelayOverrideEnabled ? vcuPrechargeCommand : false;
+    digitalWrite(MetaSense::Globals::kRPlusRelayPin, rPlusOn ? HIGH : LOW);
+    digitalWrite(MetaSense::Globals::kPrechargeRelayPin, prechargeOn ? HIGH : LOW);
 }
 
 void writePrimaryBrakeSplit(OutputState hwState, float signedPercent)
@@ -189,6 +198,8 @@ void begin()
 
     pinMode(MetaSense::Globals::kRbMinusFetPin, OUTPUT);
     pinMode(MetaSense::Globals::kSssrPin, OUTPUT);
+    pinMode(MetaSense::Globals::kRPlusRelayPin, OUTPUT);
+    pinMode(MetaSense::Globals::kPrechargeRelayPin, OUTPUT);
 
     setRelayOutputs(false, false);
     state = OutputState::START;
@@ -278,6 +289,13 @@ void stop()
 {
     writeThrottle(0.0f);
     setStateIdle();
+}
+
+void setVcuRelayOverride(bool enabled, bool rPlus, bool precharge)
+{
+    vcuRelayOverrideEnabled = enabled;
+    vcuRPlusCommand = rPlus;
+    vcuPrechargeCommand = precharge;
 }
 
 } // namespace MetaSense::HardwareOutputStateMachine

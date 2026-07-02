@@ -770,12 +770,27 @@
 
       <span class="can-monitor-label">Last Frame Age (ms)</span>
       <span id="canMonAge" class="can-monitor-value">---</span>
+
+      <span class="can-monitor-label">VCU State</span>
+      <span id="canMonVcuState" class="can-monitor-value">---</span>
+
+      <span class="can-monitor-label">VCU Sim Mode</span>
+      <span id="canMonVcuMode" class="can-monitor-value">---</span>
+
+      <span class="can-monitor-label">VCU HV Bus (V)</span>
+      <span id="canMonVcuHv" class="can-monitor-value">---</span>
+
+      <span class="can-monitor-label">VCU Torque Demand (Nm)</span>
+      <span id="canMonVcuTorque" class="can-monitor-value">---</span>
     </div>
     <div class="can-monitor-status-row">
       <span id="canFlagReady" class="can-flag">READY</span>
       <span id="canFlagWarning" class="can-flag">WARNING</span>
       <span id="canFlagFault" class="can-flag">FAULT</span>
       <span id="canFlagLimp" class="can-flag">LIMP</span>
+      <span id="canFlagVcu12v" class="can-flag">VCU 12V</span>
+      <span id="canFlagVcuRplus" class="can-flag">R+</span>
+      <span id="canFlagVcuPrecharge" class="can-flag">PRECHARGE</span>
     </div>
   </div>
 
@@ -1158,7 +1173,16 @@
       leaf_warning: false,
       leaf_fault: false,
       leaf_limp: false,
-      leaf_last_update_ms: 0
+      leaf_last_update_ms: 0,
+      vcu_state: "WAIT_12V",
+      vcu_sim: false,
+      vcu_inv12v: false,
+      vcu_hv: 0,
+      vcu_torque_demand: 0,
+      vcu_rplus: false,
+      vcu_precharge: false,
+      vcu_ssr: false,
+      vcu_rminus: false
     };
 
     function updateCanMonitor(telemetry) {
@@ -1170,6 +1194,8 @@
       const stat = Number(telemetry.leaf_stator_temp);
       const cool = Number(telemetry.leaf_coolant_temp);
       const lastMs = Number(telemetry.leaf_last_update_ms);
+      const vcuHv = Number(telemetry.vcu_hv);
+      const vcuTorque = Number(telemetry.vcu_torque_demand);
 
       const setText = (id, text) => {
         const el = document.getElementById(id);
@@ -1182,6 +1208,10 @@
       setText("canMonInvTemp", fmt(inv, 1));
       setText("canMonStatorTemp", fmt(stat, 1));
       setText("canMonCoolantTemp", fmt(cool, 1));
+      setText("canMonVcuState", telemetry.vcu_state || "---");
+      setText("canMonVcuMode", (Number(telemetry.vcu_sim) === 1 || telemetry.vcu_sim === true) ? "SIM" : "HW");
+      setText("canMonVcuHv", fmt(vcuHv, 1));
+      setText("canMonVcuTorque", fmt(vcuTorque, 2));
 
       let ageText = "---";
       if (Number.isFinite(lastMs) && lastMs > 0 && Number.isFinite(telemetry.heartbeat_ms)) {
@@ -1205,6 +1235,9 @@
       setFlag("canFlagWarning", Number(telemetry.leaf_warning) === 1 || telemetry.leaf_warning === true, "warn");
       setFlag("canFlagFault", Number(telemetry.leaf_fault) === 1 || telemetry.leaf_fault === true, "fault");
       setFlag("canFlagLimp", Number(telemetry.leaf_limp) === 1 || telemetry.leaf_limp === true, "warn");
+      setFlag("canFlagVcu12v", Number(telemetry.vcu_inv12v) === 1 || telemetry.vcu_inv12v === true, "normal");
+      setFlag("canFlagVcuRplus", Number(telemetry.vcu_rplus) === 1 || telemetry.vcu_rplus === true, "normal");
+      setFlag("canFlagVcuPrecharge", Number(telemetry.vcu_precharge) === 1 || telemetry.vcu_precharge === true, "warn");
     }
 
     function showToast(message, durationMs = 2200) {
@@ -2257,12 +2290,12 @@
             if (msg.peakKW_RPM !== undefined) cachedTelemetry.peakKW_RPM = msg.peakKW_RPM;
             if (msg.torque !== undefined) cachedTelemetry.torque = msg.torque;
             if (msg.brakeTorque !== undefined) cachedTelemetry.brakeTorque = msg.brakeTorque;
+            if (msg.torque_measured !== undefined) cachedTelemetry.torque_measured = msg.torque_measured;
             if (msg.load_kg !== undefined) cachedTelemetry.load_kg = msg.load_kg;
             if (msg.throttle_pct !== undefined) cachedTelemetry.throttle_pct = msg.throttle_pct;
             if (msg.peakTorque !== undefined) cachedTelemetry.peakTorque = msg.peakTorque;
             if (msg.peakTorque_RPM !== undefined) cachedTelemetry.peakTorque_RPM = msg.peakTorque_RPM;
             if (msg.e_torque !== undefined) cachedTelemetry.e_torque = msg.e_torque;
-            if (msg.gear_ratio !== undefined) cachedTelemetry.e_torque = msg.gear_ratio;
             if (msg.energy !== undefined) cachedTelemetry.energy = msg.energy;
             if (msg.energy_active !== undefined) cachedTelemetry.energy_active = Number(msg.energy_active) === 1;
             if (msg.rel_humidity !== undefined) cachedTelemetry.rel_humidity = msg.rel_humidity;
@@ -2298,6 +2331,15 @@
             if (msg.leaf_fault !== undefined) cachedTelemetry.leaf_fault = Number(msg.leaf_fault) === 1;
             if (msg.leaf_limp !== undefined) cachedTelemetry.leaf_limp = Number(msg.leaf_limp) === 1;
             if (msg.leaf_last_update_ms !== undefined) cachedTelemetry.leaf_last_update_ms = msg.leaf_last_update_ms;
+            if (msg.vcu_state !== undefined) cachedTelemetry.vcu_state = msg.vcu_state;
+            if (msg.vcu_sim !== undefined) cachedTelemetry.vcu_sim = Number(msg.vcu_sim) === 1;
+            if (msg.vcu_inv12v !== undefined) cachedTelemetry.vcu_inv12v = Number(msg.vcu_inv12v) === 1;
+            if (msg.vcu_hv !== undefined) cachedTelemetry.vcu_hv = msg.vcu_hv;
+            if (msg.vcu_torque_demand !== undefined) cachedTelemetry.vcu_torque_demand = msg.vcu_torque_demand;
+            if (msg.vcu_rplus !== undefined) cachedTelemetry.vcu_rplus = Number(msg.vcu_rplus) === 1;
+            if (msg.vcu_precharge !== undefined) cachedTelemetry.vcu_precharge = Number(msg.vcu_precharge) === 1;
+            if (msg.vcu_ssr !== undefined) cachedTelemetry.vcu_ssr = Number(msg.vcu_ssr) === 1;
+            if (msg.vcu_rminus !== undefined) cachedTelemetry.vcu_rminus = Number(msg.vcu_rminus) === 1;
 
             // Create a merged view with cached data + new msg for backward compatibility
             const telemetry = Object.assign({}, cachedTelemetry, msg);
@@ -2346,11 +2388,19 @@
             const peakTorqueRPM = Number.isFinite(Number(telemetry.peakTorque_RPM)) ? Number(telemetry.peakTorque_RPM) : Math.round(displayRPM);
             const peakEGTValue = Number.isFinite(Number(telemetry.peakEGT)) ? Number(telemetry.peakEGT) : 0;
             
-            // Update gear ratio display
-            const eTorque = Number.isFinite(Number(telemetry.e_torque)) ? Number(telemetry.e_torque) : null;
-            if (eTorque !== null) {
-              document.getElementById("gearRatioValue").textContent = eTorque.toFixed(2);
-            }
+            const dynoMode = String(telemetry.dyno_mode || "").toLowerCase();
+            const correctedEngineTorque = Number.isFinite(Number(telemetry.torque)) ? Number(telemetry.torque) :
+              (Number.isFinite(Number(telemetry.brakeTorque)) ? Number(telemetry.brakeTorque) : 0);
+            const correctedBrakeTorque = Number.isFinite(Number(telemetry.brakeTorque)) ? Number(telemetry.brakeTorque) :
+              (Number.isFinite(Number(telemetry.torque)) ? Number(telemetry.torque) : 0);
+
+            // In brake mode, default display torque to corrected brake/load torque.
+            const engineTorque = (dynoMode === "brake") ? correctedBrakeTorque : correctedEngineTorque;
+            const brakeTorque = correctedBrakeTorque;
+
+            // E_torque display follows explicit telemetry when available, else engine torque.
+            const eTorque = Number.isFinite(Number(telemetry.e_torque)) ? Number(telemetry.e_torque) : engineTorque;
+            document.getElementById("gearRatioValue").textContent = eTorque.toFixed(2);
             // Update Energy display
             if (shouldUpdateSlowPanel) {
               if (telemetry.energy !== undefined) {
@@ -2391,11 +2441,12 @@
               updateCanMonitor(telemetry);
             }
             
-            // Update ratio indicator next to torque toggle
+            // Update ratio indicator with PI demand and active torque source.
+            const torqueSourceLabel = (dynoMode === "inertia") ? "Inertia" : "Load cell";
             if (eTorque !== null && showEngineTorque) {
-              document.getElementById("ratioIndicator").textContent = `(E_torque: ${eTorque.toFixed(2)}Nm)`;
-            } else if (!showEngineTorque) {
-              document.getElementById("ratioIndicator").textContent = "";
+              document.getElementById("ratioIndicator").textContent = `(E_torque: ${eTorque.toFixed(2)}Nm | source: ${torqueSourceLabel})`;
+            } else {
+              document.getElementById("ratioIndicator").textContent = `(source: ${torqueSourceLabel})`;
             }
             
             updateNeedleGauge(displayRPM);
@@ -2406,10 +2457,6 @@
             }
             
             // Torque gauge source follows the active mode toggle.
-            const engineTorque = Number.isFinite(Number(telemetry.torque)) ? Number(telemetry.torque) :
-              (Number.isFinite(Number(telemetry.brakeTorque)) ? Number(telemetry.brakeTorque) : 0);
-            const brakeTorque = Number.isFinite(Number(telemetry.brakeTorque)) ? Number(telemetry.brakeTorque) :
-              (Number.isFinite(Number(telemetry.torque)) ? Number(telemetry.torque) : 0);
             const torqueValue = showEngineTorque ? engineTorque : brakeTorque;
             updateGauge("torque", torqueValue, maxVals.torque, "torqueText", 1);
             

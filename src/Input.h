@@ -11,12 +11,19 @@ namespace MetaSense::Input {
     bool requestCalibrationWithKnownWeight(float knownWeightKg);
     float getCalibrationFactor();
     float getZeroOffset();
+    float getZeroOffsetRaw();
     uint16_t getLoadCellSampleRateSps();
     bool applyLoadCellSettingsProfile();
 
     // Telemetry accessors
     float rpm();
     float torqueNm();
+    float egtHotC();
+    void getEnvironment(float& ambientC,
+                        float& pressureHpa,
+                        float& humidityPct,
+                        float& airDensity,
+                        float& climateCf);
     float currentKpLive();
     bool isVcuReady();
     void setUiModeHintTrend(bool trendMode);
@@ -30,6 +37,14 @@ namespace MetaSense::Input {
     void updateCanTorque(float torqueNm);
     void updateCanTemps(float inverterTempC, float statorTempC, float coolantTempC);
     void updateCanStatus(bool ready, bool fault, bool warning, bool limp);
+    void updateVcuDebug(bool simMode,
+                        bool inv12v,
+                        float hvVoltage,
+                        float torqueDemandNm,
+                        bool rPlus,
+                        bool precharge,
+                        bool ssr,
+                        bool rMinus);
 
     // Initialize the dyno input/control subsystem
     void begin();

@@ -80,6 +80,16 @@ struct Telemetry {
     bool leaf_invWarning = false;
     bool leaf_invLimp = false;
     uint32_t leaf_lastUpdateMs = 0;
+
+    // CCO VCU debug telemetry (bench/simulation friendly).
+    bool vcuSimMode = false;
+    bool vcuInv12v = false;
+    float vcuHvVoltage = 0.0f;
+    float vcuTorqueDemandNm = 0.0f;
+    bool vcuRPlusCmd = false;
+    bool vcuPrechargeCmd = false;
+    bool vcuSsrCmd = false;
+    bool vcuRMinusCmd = false;
 };
 
 } // namespace MetaSense

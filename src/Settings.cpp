@@ -227,15 +227,25 @@ void loadFromStorage()
     if (virtGearRatio <= 0.0f) {
         virtGearRatio = kDefaultVirtGearRatio;
     }
+    // Backward-compatibility: some older builds stored lever arm in meters.
+    // The current setting/UI is centimeters, so migrate small meter-like values.
+    if (armCm > 0.0f && armCm <= 2.0f) {
+        armCm *= 100.0f;
+    }
+    if (armCm <= 0.0f) {
+        armCm = kDefaultArmCm;
+    } else if (armCm > 200.0f) {
+        armCm = 200.0f;
+    }
     if (loadAvgN < 1.0f) {
         loadAvgN = 1.0f;
-    } else if (loadAvgN > 48.0f) {
-        loadAvgN = 48.0f;
+    } else if (loadAvgN > 255.0f) {
+        loadAvgN = 255.0f;
     }
     if (loadAvgN2 < 1.0f) {
         loadAvgN2 = 1.0f;
-    } else if (loadAvgN2 > 48.0f) {
-        loadAvgN2 = 48.0f;
+    } else if (loadAvgN2 > 255.0f) {
+        loadAvgN2 = 255.0f;
     }
     if (loadFilterMode > 1) {
         loadFilterMode = kDefaultLoadFilterMode;

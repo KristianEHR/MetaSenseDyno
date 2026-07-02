@@ -6,6 +6,7 @@
 #include "RunStorage.h"
 #include "Settings.h"
 #include "WebSocketServer.h"
+#include "MetaSenseDynoVCU.h"
 
 #include <ESPAsyncWebServer.h>
 #include <LittleFS.h>
@@ -31,6 +32,18 @@
 #define VCU_switch 0
 #endif
 
+#ifndef METASENSE_VCU_OWNS_HV_RPLUS_PRECHARGE
+#define METASENSE_VCU_OWNS_HV_RPLUS_PRECHARGE 0
+#endif
+
+#ifndef METASENSE_VCU_SIM_MODE
+#define METASENSE_VCU_SIM_MODE 0
+#endif
+
+namespace MetaSense::HardwareOutputStateMachine {
+void setVcuRelayOverride(bool enabled, bool rPlus, bool precharge);
+}
+
 namespace MetaSense::Globals {
 const bool kVcuSwitch = (VCU_switch != 0);
 }
@@ -41,6 +54,7 @@ const char* password = "Niser0201";
 namespace {
  
 MetaSense::ModbusPublisher modbusPublisher;
+MetaSense::MetaSenseDynoVCU dynoVcu;
 AsyncWebServer webServer(80);
 bool otaStarted = false;
 bool webServerStarted = false;
@@ -52,9 +66,15 @@ constexpr const char* kOtaHostname = "dyno-controller";
 constexpr const char* kOtaPassword = "metasense";
 constexpr uint32_t kI2cClockHz = 50000;
 constexpr uint16_t kI2cTimeoutMs = 50;
-constexpr uint32_t kControlPeriodMs = 25;
+#ifndef METASENSE_CONTROL_PERIOD_MS
+#define METASENSE_CONTROL_PERIOD_MS 10
+#endif
+#ifndef METASENSE_HEARTBEAT_PERIOD_MS
+#define METASENSE_HEARTBEAT_PERIOD_MS 5000
+#endif
+constexpr uint32_t kControlPeriodMs = METASENSE_CONTROL_PERIOD_MS;
 constexpr uint32_t kModbusPeriodMs = 50;
-constexpr uint32_t kHeartbeatPeriodMs = 10000;
+constexpr uint32_t kHeartbeatPeriodMs = METASENSE_HEARTBEAT_PERIOD_MS;
 constexpr UBaseType_t kControlTaskPriority = 5;
 constexpr UBaseType_t kNetworkTaskPriority = 3;
 constexpr UBaseType_t kModbusTaskPriority = 1;
@@ -70,6 +90,57 @@ struct TaskRuntimeStats {
 TaskRuntimeStats controlTaskStats;
 TaskRuntimeStats networkTaskStats;
 TaskRuntimeStats modbusTaskStats;
+
+void updateBenchVcuSimInputs(uint32_t nowMs,
+                             bool prechargeCmd,
+                             bool rPlusCmd,
+                             bool& inverter12vOn,
+                             float& hvVoltage)
+{
+    static bool initialized = false;
+    static uint32_t lastMs = 0;
+    static bool simInv12v = false;
+    static float simHvVoltage = 0.0f;
+
+    if (!initialized) {
+        initialized = true;
+        lastMs = nowMs;
+        simInv12v = false;
+        simHvVoltage = 0.0f;
+    }
+
+    uint32_t deltaMs = nowMs - lastMs;
+    if (deltaMs > 250U) {
+        deltaMs = 250U;
+    }
+    lastMs = nowMs;
+
+    const float dt = static_cast<float>(deltaMs) / 1000.0f;
+
+    if (nowMs > 1200U) {
+        simInv12v = true;
+    }
+
+    if (!simInv12v) {
+        simHvVoltage = 0.0f;
+    } else if (prechargeCmd && !rPlusCmd) {
+        simHvVoltage += 220.0f * dt;
+    } else if (rPlusCmd) {
+        simHvVoltage += 80.0f * dt;
+    } else {
+        simHvVoltage -= 140.0f * dt;
+    }
+
+    if (simHvVoltage < 0.0f) {
+        simHvVoltage = 0.0f;
+    }
+    if (simHvVoltage > 360.0f) {
+        simHvVoltage = 360.0f;
+    }
+
+    inverter12vOn = simInv12v;
+    hvVoltage = simHvVoltage;
+}
 
 void recordTaskRuntime(TaskRuntimeStats& stats, uint32_t elapsedUs, uint32_t periodUs)
 {
@@ -523,6 +594,40 @@ void controlTaskEntry(void* /*parameter*/)
     for (;;) {
         const uint32_t startedUs = micros();
         MetaSense::ControlTask::loop();
+        const uint32_t nowMs = millis();
+        bool inverter12vInput = MetaSense::Input::isVcuReady();
+        float hvVoltageInput = 0.0f;
+
+    #if METASENSE_VCU_SIM_MODE
+        updateBenchVcuSimInputs(nowMs,
+                    dynoVcu.getPrecharge(),
+                    dynoVcu.getRPlus(),
+                    inverter12vInput,
+                    hvVoltageInput);
+    #endif
+
+        dynoVcu.update(nowMs,
+                   MetaSense::Settings::getRpmTarget(),
+                   MetaSense::Input::rpm(),
+                   hvVoltageInput,
+                   inverter12vInput);
+
+        MetaSense::Input::updateVcuDebug(METASENSE_VCU_SIM_MODE != 0,
+                         inverter12vInput,
+                         hvVoltageInput,
+                         dynoVcu.getTorqueDemand(),
+                         dynoVcu.getRPlus(),
+                         dynoVcu.getPrecharge(),
+                         dynoVcu.getSSR(),
+                         dynoVcu.getRMinus());
+
+    #if METASENSE_VCU_OWNS_HV_RPLUS_PRECHARGE
+        MetaSense::HardwareOutputStateMachine::setVcuRelayOverride(true,
+                                        dynoVcu.getRPlus(),
+                                        dynoVcu.getPrecharge());
+    #else
+        MetaSense::HardwareOutputStateMachine::setVcuRelayOverride(false, false, false);
+    #endif
 #if ENABLE_RUNTIME_INSTRUMENTATION
         recordTaskRuntime(controlTaskStats,
                           micros() - startedUs,
@@ -605,6 +710,18 @@ void networkTaskEntry(void* /*parameter*/)
             const String ip = WiFi.localIP().toString();
             const uint32_t ts = heartbeatTimestamp();
             const bool vcuReady = MetaSense::Input::isVcuReady();
+            const float torqueNm = MetaSense::Input::torqueNm();
+            const float egtHotC = MetaSense::Input::egtHotC();
+            float ambientC = 0.0f;
+            float pressureHpa = 0.0f;
+            float humidityPct = 0.0f;
+            float airDensity = 0.0f;
+            float climateCf = 0.0f;
+            MetaSense::Input::getEnvironment(ambientC,
+                                             pressureHpa,
+                                             humidityPct,
+                                             airDensity,
+                                             climateCf);
             bool nauLdoConfigured = false;
             bool nauInternalCalOk = false;
             uint8_t nauInternalCalAttempts = 0;
@@ -612,7 +729,7 @@ void networkTaskEntry(void* /*parameter*/)
                                                     nauInternalCalOk,
                                                     nauInternalCalAttempts);
             const int rbPlusLevel = digitalRead(MetaSense::Globals::kRbPlusInputPin);
-            Serial.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s, vcu_mode=%s, vcu_ready=%d, rb_plus=%d, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u\n",
+            Serial.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s, vcu_mode=%s, vcu_ready=%d, rb_plus=%d, torque=%.2f, egt_hot=%.1f, amb=%.1f, press=%.1f, rh=%.1f, rho=%.3f, cf=%.4f, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u\n",
                           static_cast<unsigned long>(ts),
                           wifiCredentialsConfigured() ? ssid : "<not-configured>",
                           static_cast<int>(status),
@@ -622,10 +739,17 @@ void networkTaskEntry(void* /*parameter*/)
                           MetaSense::Globals::kVcuSwitch ? "gpio" : "forced",
                           vcuReady ? 1 : 0,
                           rbPlusLevel,
+                          torqueNm,
+                          egtHotC,
+                          ambientC,
+                          pressureHpa,
+                          humidityPct,
+                          airDensity,
+                          climateCf,
                           nauLdoConfigured ? 1 : 0,
                           nauInternalCalOk ? 1 : 0,
                           static_cast<unsigned>(nauInternalCalAttempts));
-            Serial0.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s, vcu_mode=%s, vcu_ready=%d, rb_plus=%d, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u\n",
+            Serial0.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s, vcu_mode=%s, vcu_ready=%d, rb_plus=%d, torque=%.2f, egt_hot=%.1f, amb=%.1f, press=%.1f, rh=%.1f, rho=%.3f, cf=%.4f, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u\n",
                            static_cast<unsigned long>(ts),
                            wifiCredentialsConfigured() ? ssid : "<not-configured>",
                            static_cast<int>(status),
@@ -635,6 +759,13 @@ void networkTaskEntry(void* /*parameter*/)
                            MetaSense::Globals::kVcuSwitch ? "gpio" : "forced",
                            vcuReady ? 1 : 0,
                            rbPlusLevel,
+                           torqueNm,
+                           egtHotC,
+                           ambientC,
+                           pressureHpa,
+                           humidityPct,
+                           airDensity,
+                           climateCf,
                            nauLdoConfigured ? 1 : 0,
                            nauInternalCalOk ? 1 : 0,
                            static_cast<unsigned>(nauInternalCalAttempts));
@@ -737,6 +868,7 @@ void setup()
     logWifiConfiguration();
 
     MetaSense::ControlTask::begin();
+    dynoVcu.begin(millis());
     if (MetaSense::CommandRouter::loadFactoryProfileOnBoot()) {
         logLine("[BOOT] Factory profile loaded from FS");
     } else {

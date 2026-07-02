@@ -33,6 +33,53 @@
 			]
 		},
 		{
+			"label": "Build (esp32s3-USB-cco)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-USB-cco"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$platformio"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Upload (esp32s3-USB-cco)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-USB-cco",
+				"-t",
+				"upload"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$platformio"
+			]
+		},
+		{
+			"label": "Upload Filesystem (esp32s3-USB-cco)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-USB-cco",
+				"-t",
+				"uploadfs"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$platformio"
+			]
+		},
+		{
 			"label": "Build (esp32s3-ota)",
 			"type": "shell",
 			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
