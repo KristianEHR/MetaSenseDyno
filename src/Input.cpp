@@ -26,7 +26,12 @@
 namespace MetaSense::HardwareOutputStateMachine {
 
 void begin();
-void update(float engineThrottlePercent, float setPoint, float rpm, float primaryBrakePercent);
+void update(float engineThrottlePercent,
+            float setPoint,
+            float rpm,
+            float primaryBrakePercent,
+            bool inverterStatusReady,
+            bool inverterReady);
 bool isMotorState();
 void stop();
 
@@ -1811,7 +1816,7 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         json += "\"vcu_inv12v\":" + String(data.vcuInv12v ? 1 : 0) + ",";
         json += "\"vcu_hv\":" + String(data.vcuHvVoltage, 1) + ",";
         json += "\"vcu_torque_demand\":" + String(data.vcuTorqueDemandNm, 2) + ",";
-        json += "\"vcu_rplus\":" + String(data.vcuRPlusCmd ? 1 : 0) + ",";
+        json += "\"vcu_rplus\":" + String(data.vcuRbPlusCmd ? 1 : 0) + ",";
         json += "\"vcu_precharge\":" + String(data.vcuPrechargeCmd ? 1 : 0) + ",";
         json += "\"vcu_ssr\":" + String(data.vcuSsrCmd ? 1 : 0) + ",";
         json += "\"vcu_rminus\":" + String(data.vcuRMinusCmd ? 1 : 0) + ",";
@@ -1819,7 +1824,7 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             const char* vcuSt;
             if (!data.vcuInv12v)         vcuSt = "WAIT_12V";
             else if (data.vcuPrechargeCmd) vcuSt = "PRECHARGE";
-            else if (data.vcuRPlusCmd)     vcuSt = "ARMED";
+            else if (data.vcuRbPlusCmd)    vcuSt = "ARMED";
             else                           vcuSt = "IDLE";
             json += "\"vcu_state\":\"";
             json += vcuSt;
@@ -2724,7 +2729,7 @@ void loop()
     tele.vcuInv12v = vcuDebugInv12v;
     tele.vcuHvVoltage = vcuDebugHvVoltage;
     tele.vcuTorqueDemandNm = vcuDebugTorqueDemandNm;
-    tele.vcuRPlusCmd = vcuDebugRPlus;
+    tele.vcuRbPlusCmd = vcuDebugRPlus;
     tele.vcuPrechargeCmd = vcuDebugPrecharge;
     tele.vcuSsrCmd = vcuDebugSsr;
     tele.vcuRMinusCmd = vcuDebugRMinus;
@@ -2848,7 +2853,9 @@ void loop()
         engineThrottlePercent,
         tele.rpmTarget,
         tele.rpm,
-        primaryBrakeSignedPercent);
+        primaryBrakeSignedPercent,
+        canStatusFresh,
+        tele.leaf_invReady);
 
     if (tele.recording) {
         appendFallbackRunLogSample(now);

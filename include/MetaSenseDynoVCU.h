@@ -21,7 +21,7 @@ public:
                 bool inverter_12v_on);
 
     // Future HW outputs (kept inert in Phase-1).
-    bool getRPlus() const { return r_plus_; }
+    bool getRbPlus() const { return rb_plus_; }
     bool getPrecharge() const { return precharge_; }
     bool getSSR() const { return ssr_; }
     bool getRMinus() const { return r_minus_; }
@@ -35,7 +35,7 @@ private:
 
     LeafInvFeedback leafFb_{};
 
-    bool r_plus_ = false;
+    bool rb_plus_ = false;
     bool precharge_ = false;
     bool ssr_ = false;
     bool r_minus_ = false;

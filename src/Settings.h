@@ -15,6 +15,9 @@ extern float ki;
 extern bool usePot3Kp;
 extern float ambientRhOffsetPct;
 extern float motorModeMaxRpm;
+extern float idleTorqueNm;
+extern float brakeMaxTorqueNm;
+extern bool forceVcuReadyForUiTest;
 
 // Gauge display ranges (sent back in settings snapshot)
 extern float maxRPM;

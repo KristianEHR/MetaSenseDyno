@@ -66,8 +66,8 @@ struct Telemetry {
     float climateCF = 1.0f;   // climate correction factor (normalised to 1013.25 hPa / 20°C / 0% RH)
     DynoMode mode = DynoMode::Standard;
 
-    bool vcuReady = false;  // GPIO 36: VCU / RB+ hardware interlock
-    bool swActive = false;  // GPIO 35: panel SW switch (recording toggle)
+    bool vcuReady = false;  // VCU-ready interlock input (platform pin assignment)
+    bool swActive = false;  // Panel switch input (recording toggle)
 
     // Leaf inverter CAN telemetry (captured in parallel with analog/I2C sources).
     float leaf_rpm = 0.0f;
@@ -86,7 +86,7 @@ struct Telemetry {
     bool vcuInv12v = false;
     float vcuHvVoltage = 0.0f;
     float vcuTorqueDemandNm = 0.0f;
-    bool vcuRPlusCmd = false;
+    bool vcuRbPlusCmd = false;
     bool vcuPrechargeCmd = false;
     bool vcuSsrCmd = false;
     bool vcuRMinusCmd = false;

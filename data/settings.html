@@ -402,6 +402,30 @@
         <input type="number" id="motorModeMaxRpm" value="2000" min="100" max="20000" step="100">
         <button onclick="saveSingle('motorModeMaxRpm', event)">💾 SAVE</button>
       </div>
+
+      <label>IDLE Torque (Nm)</label>
+      <div class="info">Fixed torque command used when hardware output state machine is in IDLE mode. Range 0.0 to 10.0 Nm.</div>
+      <div class="param-row">
+        <input type="number" id="idleTorqueNm" value="4.0" min="0" max="10" step="0.1">
+        <button onclick="saveSingle('idleTorqueNm', event)">💾 SAVE</button>
+      </div>
+
+      <label>Brake Max Torque (Nm)</label>
+      <div class="info">Maximum absolute torque command allowed while dyno mode is BRAKE. Range 0.0 to 200.0 Nm.</div>
+      <div class="param-row">
+        <input type="number" id="brakeMaxTorqueNm" value="200.0" min="0" max="200" step="0.5">
+        <button onclick="saveSingle('brakeMaxTorqueNm', event)">💾 SAVE</button>
+      </div>
+
+      <label>VCU Ready Override (UI Test)</label>
+      <div class="info">Temporary test override when inverter is disconnected. Enables Manual/Auto run flow, but firmware keeps outputs inhibited unless real inverter-ready CAN status is present. Set OFF for normal operation.</div>
+      <div class="param-row">
+        <select id="forceVcuReadyForUiTest">
+          <option value="0" selected>OFF (Normal)</option>
+          <option value="1">ON (UI Test Only)</option>
+        </select>
+        <button onclick="saveSingle('forceVcuReadyForUiTest', event)">💾 SAVE</button>
+      </div>
 	  
 	       <!-- Drivetrain Efficiency -->
       <label>Drivetrain Efficiency (%) — Crank Power Correction</label>
@@ -667,6 +691,9 @@
             document.getElementById("loadFilterMode").value = msg.loadFilterMode || "moving_avg";
             document.getElementById("rhOffsetPct").value = msg.rhOffsetPct !== undefined ? msg.rhOffsetPct : 0.0;
             document.getElementById("motorModeMaxRpm").value = msg.motorModeMaxRpm !== undefined ? msg.motorModeMaxRpm : 2000;
+            document.getElementById("idleTorqueNm").value = msg.idleTorqueNm !== undefined ? msg.idleTorqueNm : 4.0;
+            document.getElementById("brakeMaxTorqueNm").value = msg.brakeMaxTorqueNm !== undefined ? msg.brakeMaxTorqueNm : 200.0;
+            document.getElementById("forceVcuReadyForUiTest").value = msg.forceVcuReadyForUiTest ? "1" : "0";
             document.getElementById("dynoMode").value = msg.mode;
             document.getElementById("virtGearRatio").value = msg.virtGearRatio || 1.0;
             document.getElementById("drumMass").value = msg.drumMass;

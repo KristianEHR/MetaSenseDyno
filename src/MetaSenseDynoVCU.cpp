@@ -10,6 +10,8 @@ constexpr float kPiKiPerSec = 0.80f;
 constexpr float kTorqueClampNm = 250.0f;
 constexpr uint32_t kPrechargeDurationMs = 1500;
 constexpr float kHvReadyVoltageV = 300.0f;
+constexpr float kIdleSetpointMaxRpm = 50.0f;
+constexpr float kMotorSetpointMaxRpm = 1500.0f;
 
 } // namespace
 
@@ -27,7 +29,7 @@ void MetaSenseDynoVCU::begin(uint32_t now_ms)
     hvArmed_ = false;
 
     // Phase-1: keep outputs inert; ownership remains in existing HW state machine.
-    r_plus_ = false;
+    rb_plus_ = false;
     precharge_ = false;
     ssr_ = false;
     r_minus_ = false;
@@ -65,13 +67,25 @@ void MetaSenseDynoVCU::update(uint32_t now_ms,
     dynoTorqueDemandNm_ = updatePiLoop(rpm_setpoint, rpm_meas, dtSec);
     lastUpdateMs_ = now_ms;
 
-    // Phase-2 scaffold: only R+ and precharge are produced here.
-    if (!inverter_12v_on) {
+    // Match relay intent to selected operating region:
+    // Idle  : setpoint <= 50 rpm
+    // Motor : 50..1500 rpm (SSR powers inverter bus here)
+    // Dyno  : >1500 rpm
+    const bool motorSelected =
+        (rpm_setpoint > kIdleSetpointMaxRpm) &&
+        (rpm_setpoint <= kMotorSetpointMaxRpm);
+
+    // Force all HV outputs off outside Motor-selected path or when inverter 12V is not present.
+    if (!inverter_12v_on || !motorSelected) {
         hvArmed_ = false;
         prechargeStartMs_ = now_ms;
-        r_plus_ = false;
+        ssr_ = false;
+        rb_plus_ = false;
         precharge_ = false;
     } else {
+        // SSR must be asserted first in motor precharge sequence.
+        ssr_ = true;
+
         if (!hvArmed_) {
             const bool prechargeDoneByTime = (now_ms - prechargeStartMs_) >= kPrechargeDurationMs;
             const bool prechargeDoneByVoltage = hv_voltage >= kHvReadyVoltageV;
@@ -80,12 +94,11 @@ void MetaSenseDynoVCU::update(uint32_t now_ms,
             }
         }
 
-        r_plus_ = hvArmed_;
+        rb_plus_ = hvArmed_;
         precharge_ = !hvArmed_;
     }
 
-    // SSR and R- ownership remains in existing state machine for now.
-    ssr_ = false;
+    // R- ownership remains in existing state machine for now.
     r_minus_ = false;
 }
 

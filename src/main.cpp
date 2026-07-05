@@ -41,7 +41,7 @@
 #endif
 
 namespace MetaSense::HardwareOutputStateMachine {
-void setVcuRelayOverride(bool enabled, bool rPlus, bool precharge);
+void setVcuRelayOverride(bool enabled, bool rbPlus, bool precharge, bool ssr, bool rbMinus);
 }
 
 namespace MetaSense::Globals {
@@ -601,7 +601,7 @@ void controlTaskEntry(void* /*parameter*/)
     #if METASENSE_VCU_SIM_MODE
         updateBenchVcuSimInputs(nowMs,
                     dynoVcu.getPrecharge(),
-                    dynoVcu.getRPlus(),
+                    dynoVcu.getRbPlus(),
                     inverter12vInput,
                     hvVoltageInput);
     #endif
@@ -616,17 +616,19 @@ void controlTaskEntry(void* /*parameter*/)
                          inverter12vInput,
                          hvVoltageInput,
                          dynoVcu.getTorqueDemand(),
-                         dynoVcu.getRPlus(),
+                         dynoVcu.getRbPlus(),
                          dynoVcu.getPrecharge(),
                          dynoVcu.getSSR(),
                          dynoVcu.getRMinus());
 
     #if METASENSE_VCU_OWNS_HV_RPLUS_PRECHARGE
         MetaSense::HardwareOutputStateMachine::setVcuRelayOverride(true,
-                                        dynoVcu.getRPlus(),
-                                        dynoVcu.getPrecharge());
+                                        dynoVcu.getRbPlus(),
+                                        dynoVcu.getPrecharge(),
+                                        dynoVcu.getSSR(),
+                                        dynoVcu.getRMinus());
     #else
-        MetaSense::HardwareOutputStateMachine::setVcuRelayOverride(false, false, false);
+        MetaSense::HardwareOutputStateMachine::setVcuRelayOverride(false, false, false, false, false);
     #endif
 #if ENABLE_RUNTIME_INSTRUMENTATION
         recordTaskRuntime(controlTaskStats,

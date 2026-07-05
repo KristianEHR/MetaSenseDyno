@@ -37,11 +37,16 @@ namespace MetaSense::Input {
     void updateCanTorque(float torqueNm);
     void updateCanTemps(float inverterTempC, float statorTempC, float coolantTempC);
     void updateCanStatus(bool ready, bool fault, bool warning, bool limp);
+    bool sendLeafTorqueCommand55B(float torqueDemandNm,
+                                  bool inverterReadyBit,
+                                  bool hvOkBit,
+                                  bool brakeBit,
+                                  bool gearDriveBit);
     void updateVcuDebug(bool simMode,
                         bool inv12v,
                         float hvVoltage,
                         float torqueDemandNm,
-                        bool rPlus,
+                        bool rbPlus,
                         bool precharge,
                         bool ssr,
                         bool rMinus);

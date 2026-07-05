@@ -667,6 +667,22 @@
   gap: 6px;
 }
 
+.can-monitor-status-group {
+  margin-top: 7px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.can-monitor-status-label {
+  color: #8fa6b8;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  min-width: 34px;
+}
+
 .can-flag {
   border: 1px solid #555;
   border-radius: 999px;
@@ -782,15 +798,21 @@
 
       <span class="can-monitor-label">VCU Torque Demand (Nm)</span>
       <span id="canMonVcuTorque" class="can-monitor-value">---</span>
+
+      <span class="can-monitor-label">FW Output State</span>
+      <span id="canMonFwState" class="can-monitor-value">---</span>
     </div>
-    <div class="can-monitor-status-row">
+    <div class="can-monitor-status-group">
       <span id="canFlagReady" class="can-flag">READY</span>
       <span id="canFlagWarning" class="can-flag">WARNING</span>
       <span id="canFlagFault" class="can-flag">FAULT</span>
       <span id="canFlagLimp" class="can-flag">LIMP</span>
-      <span id="canFlagVcu12v" class="can-flag">VCU 12V</span>
-      <span id="canFlagVcuRplus" class="can-flag">R+</span>
-      <span id="canFlagVcuPrecharge" class="can-flag">PRECHARGE</span>
+    </div>
+    <div class="can-monitor-status-group">
+      <span id="canFlagHwPrecharge" class="can-flag">HV_PRECHARGE</span>
+      <span id="canFlagHwRbplus" class="can-flag">HV_RB+</span>
+      <span id="canFlagHwRbminus" class="can-flag">HV_RB-</span>
+      <span id="canFlagHwSsr" class="can-flag">HV_SSR</span>
     </div>
   </div>
 
@@ -932,7 +954,7 @@
       <div class="gear-box" style="position: static; transform: none; margin-top: 12px; width: var(--side-gauge-size);">
         <div class="title">⚡ Acc. Energy</div>
         <div class="reading">E_torque: <span id="gearRatioValue">---</span> Nm</div>
-        <div class="reading">Energy:  <span id="EnergyValue">---</span> GJ <span id="EnergyStateBadge" style="margin-left:8px; padding:2px 6px; border-radius:999px; background:#333; color:#bbb; font-size:12px;">idle</span></div>
+        <div class="reading">Energy:  <span id="EnergyValue">---</span> GJ</div>
         <button id="resetEnergyButton">⟳ Reset Energy</button>
       </div>
     </div>
@@ -977,6 +999,13 @@
       
       <label>End Recording at RPM:</label>
       <input type="number" id="endRPM" value="14000" min="100" max="30000" step="100">
+
+      <label>Ramp Profile:</label>
+      <select id="autoRampProfile">
+        <option value="hybrid" selected>Hybrid (Linear up to Start RPM, then Exponential)</option>
+        <option value="linear">Linear (all the way)</option>
+        <option value="exponential">Exponential (all the way)</option>
+      </select>
       
       <label>Customer Name:</label>
       <input type="text" id="customerName" placeholder="MetaSense">
@@ -1157,7 +1186,7 @@
       air_density: 1.204,
       climate_cf: 1.0,
       dyno_mode: "idle",
-      vcu_ready: false,
+      inv_ready: false,
       sw_active: false,
       load_raw: 0,
       nau_ready: false,
@@ -1179,10 +1208,15 @@
       vcu_inv12v: false,
       vcu_hv: 0,
       vcu_torque_demand: 0,
-      vcu_rplus: false,
+      vcu_rbplus: false,
       vcu_precharge: false,
       vcu_ssr: false,
-      vcu_rminus: false
+      vcu_rminus: false,
+      fw_state: "IDLE",
+      hw_rbplus: false,
+      hw_precharge: false,
+      hw_rbminus: false,
+      hw_ssr: false
     };
 
     function updateCanMonitor(telemetry) {
@@ -1196,6 +1230,7 @@
       const lastMs = Number(telemetry.leaf_last_update_ms);
       const vcuHv = Number(telemetry.vcu_hv);
       const vcuTorque = Number(telemetry.vcu_torque_demand);
+      const isSimMode = Number(telemetry.vcu_sim) === 1 || telemetry.vcu_sim === true;
 
       const setText = (id, text) => {
         const el = document.getElementById(id);
@@ -1208,11 +1243,23 @@
       setText("canMonInvTemp", fmt(inv, 1));
       setText("canMonStatorTemp", fmt(stat, 1));
       setText("canMonCoolantTemp", fmt(cool, 1));
-      setText("canMonVcuState", telemetry.vcu_state || "---");
-      setText("canMonVcuMode", (Number(telemetry.vcu_sim) === 1 || telemetry.vcu_sim === true) ? "SIM" : "HW");
+      let vcuStateText = telemetry.vcu_state || "---";
+      if (!isSimMode) {
+        const inv12v = Number(telemetry.vcu_inv12v) === 1 || telemetry.vcu_inv12v === true;
+        const hwPrecharge = Number(telemetry.hw_precharge) === 1 || telemetry.hw_precharge === true;
+        const hwRbplus = Number(telemetry.hw_rbplus) === 1 || telemetry.hw_rbplus === true;
+        const hwSsr = Number(telemetry.hw_ssr) === 1 || telemetry.hw_ssr === true;
+        if (!inv12v) vcuStateText = "WAIT_12V";
+        else if (hwPrecharge) vcuStateText = "PRECHARGE";
+        else if (hwRbplus) vcuStateText = "ARMED";
+        else if (hwSsr) vcuStateText = "SSR_ON";
+        else vcuStateText = "IDLE";
+      }
+      setText("canMonVcuState", vcuStateText);
+      setText("canMonVcuMode", isSimMode ? "SIM" : "RUN");
       setText("canMonVcuHv", fmt(vcuHv, 1));
       setText("canMonVcuTorque", fmt(vcuTorque, 2));
-
+      setText("canMonFwState", telemetry.fw_state || "---");
       let ageText = "---";
       if (Number.isFinite(lastMs) && lastMs > 0 && Number.isFinite(telemetry.heartbeat_ms)) {
         const age = Math.max(0, Math.round(Number(telemetry.heartbeat_ms) - lastMs));
@@ -1235,9 +1282,16 @@
       setFlag("canFlagWarning", Number(telemetry.leaf_warning) === 1 || telemetry.leaf_warning === true, "warn");
       setFlag("canFlagFault", Number(telemetry.leaf_fault) === 1 || telemetry.leaf_fault === true, "fault");
       setFlag("canFlagLimp", Number(telemetry.leaf_limp) === 1 || telemetry.leaf_limp === true, "warn");
-      setFlag("canFlagVcu12v", Number(telemetry.vcu_inv12v) === 1 || telemetry.vcu_inv12v === true, "normal");
-      setFlag("canFlagVcuRplus", Number(telemetry.vcu_rplus) === 1 || telemetry.vcu_rplus === true, "normal");
-      setFlag("canFlagVcuPrecharge", Number(telemetry.vcu_precharge) === 1 || telemetry.vcu_precharge === true, "warn");
+      setFlag("canFlagHwRbplus", Number(telemetry.hw_rbplus) === 1 || telemetry.hw_rbplus === true, "normal");
+      setFlag(
+        "canFlagHwPrecharge",
+        isSimMode
+          ? (Number(telemetry.vcu_precharge) === 1 || telemetry.vcu_precharge === true)
+          : (Number(telemetry.hw_precharge) === 1 || telemetry.hw_precharge === true),
+        "warn"
+      );
+      setFlag("canFlagHwRbminus", Number(telemetry.hw_rbminus) === 1 || telemetry.hw_rbminus === true, "normal");
+      setFlag("canFlagHwSsr", Number(telemetry.hw_ssr) === 1 || telemetry.hw_ssr === true, "normal");
     }
 
     function showToast(message, durationMs = 2200) {
@@ -1751,7 +1805,7 @@
       const engineTorque = Number.isFinite(Number(telemetry.torque)) ? Number(telemetry.torque) : 0;
       const brakeTorque = Number.isFinite(Number(telemetry.brakeTorque))
         ? Number(telemetry.brakeTorque)
-        : engineTorque;
+        : 0;
 
       currentRunData.push({
         rpm: Number.isFinite(Number(displayRPM)) ? Number(displayRPM) : 0,
@@ -1809,7 +1863,7 @@
         msg.egt_status !== undefined ||
         msg.egt_ready !== undefined ||
         msg.dyno_mode !== undefined ||
-        msg.vcu_ready !== undefined ||
+        msg.inv_ready !== undefined ||
         msg.sw_active !== undefined;
 
       const heartbeatMs = Number(msg && msg.heartbeat_ms);
@@ -2314,7 +2368,7 @@
             if (msg.air_density !== undefined) cachedTelemetry.air_density = msg.air_density;
             if (msg.climate_cf !== undefined) cachedTelemetry.climate_cf = msg.climate_cf;
             if (msg.dyno_mode !== undefined) cachedTelemetry.dyno_mode = msg.dyno_mode;
-            if (msg.vcu_ready !== undefined) cachedTelemetry.vcu_ready = Number(msg.vcu_ready) === 1;
+            if (msg.inv_ready !== undefined) cachedTelemetry.inv_ready = Number(msg.inv_ready) === 1;
             if (msg.sw_active !== undefined) cachedTelemetry.sw_active = Number(msg.sw_active) === 1;
             if (msg.load_raw !== undefined) cachedTelemetry.load_raw = msg.load_raw;
             if (msg.nau_ready !== undefined) cachedTelemetry.nau_ready = Number(msg.nau_ready) === 1;
@@ -2336,10 +2390,15 @@
             if (msg.vcu_inv12v !== undefined) cachedTelemetry.vcu_inv12v = Number(msg.vcu_inv12v) === 1;
             if (msg.vcu_hv !== undefined) cachedTelemetry.vcu_hv = msg.vcu_hv;
             if (msg.vcu_torque_demand !== undefined) cachedTelemetry.vcu_torque_demand = msg.vcu_torque_demand;
-            if (msg.vcu_rplus !== undefined) cachedTelemetry.vcu_rplus = Number(msg.vcu_rplus) === 1;
+            if (msg.vcu_rbplus !== undefined) cachedTelemetry.vcu_rbplus = Number(msg.vcu_rbplus) === 1;
             if (msg.vcu_precharge !== undefined) cachedTelemetry.vcu_precharge = Number(msg.vcu_precharge) === 1;
             if (msg.vcu_ssr !== undefined) cachedTelemetry.vcu_ssr = Number(msg.vcu_ssr) === 1;
             if (msg.vcu_rminus !== undefined) cachedTelemetry.vcu_rminus = Number(msg.vcu_rminus) === 1;
+            if (msg.fw_state !== undefined) cachedTelemetry.fw_state = msg.fw_state;
+            if (msg.hw_rbplus !== undefined) cachedTelemetry.hw_rbplus = Number(msg.hw_rbplus) === 1;
+            if (msg.hw_precharge !== undefined) cachedTelemetry.hw_precharge = Number(msg.hw_precharge) === 1;
+            if (msg.hw_rbminus !== undefined) cachedTelemetry.hw_rbminus = Number(msg.hw_rbminus) === 1;
+            if (msg.hw_ssr !== undefined) cachedTelemetry.hw_ssr = Number(msg.hw_ssr) === 1;
 
             // Create a merged view with cached data + new msg for backward compatibility
             const telemetry = Object.assign({}, cachedTelemetry, msg);
@@ -2389,14 +2448,8 @@
             const peakEGTValue = Number.isFinite(Number(telemetry.peakEGT)) ? Number(telemetry.peakEGT) : 0;
             
             const dynoMode = String(telemetry.dyno_mode || "").toLowerCase();
-            const correctedEngineTorque = Number.isFinite(Number(telemetry.torque)) ? Number(telemetry.torque) :
-              (Number.isFinite(Number(telemetry.brakeTorque)) ? Number(telemetry.brakeTorque) : 0);
-            const correctedBrakeTorque = Number.isFinite(Number(telemetry.brakeTorque)) ? Number(telemetry.brakeTorque) :
-              (Number.isFinite(Number(telemetry.torque)) ? Number(telemetry.torque) : 0);
-
-            // In brake mode, default display torque to corrected brake/load torque.
-            const engineTorque = (dynoMode === "brake") ? correctedBrakeTorque : correctedEngineTorque;
-            const brakeTorque = correctedBrakeTorque;
+            const engineTorque = Number.isFinite(Number(telemetry.torque)) ? Number(telemetry.torque) : 0;
+            const brakeTorque = Number.isFinite(Number(telemetry.brakeTorque)) ? Number(telemetry.brakeTorque) : 0;
 
             // E_torque display follows explicit telemetry when available, else engine torque.
             const eTorque = Number.isFinite(Number(telemetry.e_torque)) ? Number(telemetry.e_torque) : engineTorque;
@@ -2410,13 +2463,6 @@
                   const energyEl = document.getElementById("EnergyValue");
                   if (energyEl) energyEl.textContent = (energyValue / 1000.0).toFixed(4);
                 }
-              }
-              const energyStateBadge = document.getElementById("EnergyStateBadge");
-              if (energyStateBadge) {
-                const energyActive = Boolean(telemetry.energy_active);
-                energyStateBadge.textContent = energyActive ? "active" : "idle";
-                energyStateBadge.style.background = energyActive ? "#0b3" : "#333";
-                energyStateBadge.style.color = energyActive ? "#001a0e" : "#bbb";
               }
               if (telemetry.rel_humidity !== undefined || telemetry.ratio_confidence !== undefined) {
                 let confidencePercent = 0;
@@ -2456,7 +2502,7 @@
               document.getElementById("rpmSetpointDisplay").textContent = Math.round(telemetry.rpm_target);
             }
             
-            // Torque gauge source follows the active mode toggle.
+            // Torque gauge follows selected mode toggle without remapping torque channels.
             const torqueValue = showEngineTorque ? engineTorque : brakeTorque;
             updateGauge("torque", torqueValue, maxVals.torque, "torqueText", 1);
             
@@ -2693,6 +2739,7 @@ else if (msg.type === "info" || msg.type === "status") {
     document.getElementById("confirmAuto").onclick = function() {
       const start = parseFloat(document.getElementById("startRPM").value);
       const end = parseFloat(document.getElementById("endRPM").value);
+      const rampProfile = document.getElementById("autoRampProfile")?.value || "hybrid";
       currentCustomer = document.getElementById("customerName").value.trim();
       currentUnit = document.getElementById("testUnit").value.trim();
       currentComments = document.getElementById("runComments").value.trim();
@@ -2703,7 +2750,7 @@ else if (msg.type === "info" || msg.type === "status") {
       if (start > 0 && end > start && end <= 30000) {
         if (ws) ws.send("SET_CUSTOMER:" + currentCustomer + "|" + currentUnit + "|" + currentComments);
         setTimeout(() => {
-          if (ws) ws.send(`AUTO_RUN:${start}:${end}`);
+          if (ws) ws.send(`AUTO_RUN:${start}:${end}:${rampProfile}`);
         }, 50);
         autoModeActive = true;
           isManualRecording = false;

@@ -22,6 +22,9 @@ constexpr float kLegacyDefaultKi = 0.05f;
 constexpr bool  kDefaultUsePot3Kp = false;
 constexpr float kDefaultAmbientRhOffsetPct = 0.0f;
 constexpr float kDefaultMotorModeMaxRpm = 2000.0f;
+constexpr float kDefaultIdleTorqueNm = 4.0f;
+constexpr float kDefaultBrakeMaxTorqueNm = 200.0f;
+constexpr bool kDefaultForceVcuReadyForUiTest = false;
 
 constexpr float kDefaultMaxRPM = 18000.0f;
 constexpr float kDefaultMaxHP = 25.0f;
@@ -63,6 +66,9 @@ float ki = kDefaultKi;
 bool usePot3Kp = kDefaultUsePot3Kp;
 float ambientRhOffsetPct = kDefaultAmbientRhOffsetPct;
 float motorModeMaxRpm = kDefaultMotorModeMaxRpm;
+float idleTorqueNm = kDefaultIdleTorqueNm;
+float brakeMaxTorqueNm = kDefaultBrakeMaxTorqueNm;
+bool forceVcuReadyForUiTest = kDefaultForceVcuReadyForUiTest;
 
 // Gauge display ranges
 float maxRPM          = kDefaultMaxRPM;
@@ -131,6 +137,9 @@ void resetToDefaults()
     usePot3Kp = kDefaultUsePot3Kp;
     ambientRhOffsetPct = kDefaultAmbientRhOffsetPct;
     motorModeMaxRpm = kDefaultMotorModeMaxRpm;
+    idleTorqueNm = kDefaultIdleTorqueNm;
+    brakeMaxTorqueNm = kDefaultBrakeMaxTorqueNm;
+    forceVcuReadyForUiTest = kDefaultForceVcuReadyForUiTest;
 
     maxRPM = kDefaultMaxRPM;
     maxHP = kDefaultMaxHP;
@@ -180,6 +189,9 @@ void loadFromStorage()
     usePot3Kp = prefs.getBool("pot3kp", usePot3Kp);
     ambientRhOffsetPct = prefs.getFloat("rhOffPct", ambientRhOffsetPct);
     motorModeMaxRpm = prefs.getFloat("motorMaxRpm", motorModeMaxRpm);
+    idleTorqueNm = prefs.getFloat("idleTorque", idleTorqueNm);
+    brakeMaxTorqueNm = prefs.getFloat("brakeMaxTq", brakeMaxTorqueNm);
+    forceVcuReadyForUiTest = kDefaultForceVcuReadyForUiTest;
 
     // One-time migration: only bump unchanged legacy defaults to the
     // physics-based RPM-domain PI gains. Preserve user-tuned values.
@@ -258,6 +270,16 @@ void loadFromStorage()
           loadCellRateSps == 80 || loadCellRateSps == 320)) {
         loadCellRateSps = kDefaultLoadCellRateSps;
     }
+    if (idleTorqueNm < 0.0f) {
+        idleTorqueNm = 0.0f;
+    } else if (idleTorqueNm > 10.0f) {
+        idleTorqueNm = 10.0f;
+    }
+    if (brakeMaxTorqueNm < 0.0f) {
+        brakeMaxTorqueNm = 0.0f;
+    } else if (brakeMaxTorqueNm > 200.0f) {
+        brakeMaxTorqueNm = 200.0f;
+    }
 
     recomputeInertia();
 }
@@ -282,6 +304,8 @@ void saveToStorage()
     prefs.putBool("pot3kp", usePot3Kp);
     prefs.putFloat("rhOffPct", ambientRhOffsetPct);
     prefs.putFloat("motorMaxRpm", motorModeMaxRpm);
+    prefs.putFloat("idleTorque", idleTorqueNm);
+    prefs.putFloat("brakeMaxTq", brakeMaxTorqueNm);
 
     prefs.putFloat("maxRPM", maxRPM);
     prefs.putFloat("maxHP", maxHP);

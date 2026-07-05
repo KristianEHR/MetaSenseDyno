@@ -91,6 +91,8 @@ float energyMJ      = 0.0f;
 bool  measuringMJ   = false;
 float lastRunEnergy = 0.0f;
 bool  runFinished   = false;
+MetaSense::DynoStateMachine::AutoRampProfile rampProfile =
+    MetaSense::DynoStateMachine::AutoRampProfile::Hybrid;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -222,6 +224,29 @@ void setManualRpmTarget(float rpm)
     manualRpmTarget = rpm;
 }
 
+void setAutoRampProfile(AutoRampProfile profile)
+{
+    rampProfile = profile;
+}
+
+AutoRampProfile autoRampProfile()
+{
+    return rampProfile;
+}
+
+const char* autoRampProfileName()
+{
+    switch (rampProfile) {
+        case AutoRampProfile::Linear:
+            return "linear";
+        case AutoRampProfile::Exponential:
+            return "exponential";
+        case AutoRampProfile::Hybrid:
+        default:
+            return "hybrid";
+    }
+}
+
 void abortAutoRun()
 {
     // Abort: stop recording, reset energy, go back to manual
@@ -296,14 +321,29 @@ void update()
         case State::MANUAL:
         case State::AUTO_IDLE:
         {
-            // Enter AUTO sequence
-            // If already above start RPM, jump directly to exponential up
-            if (rpm >= rpmStart) {
-                rpmRampUp.init(rpmStart, rpmEnd, tauUp, dtSeconds);
-                startMeasuringIfInWindow(rpm);
-                state = State::AUTO_UP_EXP;
-            } else {
-                state = State::AUTO_UP_LINEAR;
+            // Enter AUTO sequence according to selected ramp profile.
+            switch (rampProfile) {
+                case AutoRampProfile::Linear:
+                    state = State::AUTO_UP_LINEAR;
+                    break;
+
+                case AutoRampProfile::Exponential:
+                    rpmRampUp.init(rpm, rpmEnd, tauUp, dtSeconds);
+                    startMeasuringIfInWindow(rpm);
+                    state = State::AUTO_UP_EXP;
+                    break;
+
+                case AutoRampProfile::Hybrid:
+                default:
+                    // Original behavior: linear to start RPM, then exponential.
+                    if (rpm >= rpmStart) {
+                        rpmRampUp.init(rpmStart, rpmEnd, tauUp, dtSeconds);
+                        startMeasuringIfInWindow(rpm);
+                        state = State::AUTO_UP_EXP;
+                    } else {
+                        state = State::AUTO_UP_LINEAR;
+                    }
+                    break;
             }
             break;
         }
@@ -315,20 +355,45 @@ void update()
 
             if (commanded >= rpmStart) {
                 commanded = rpmStart;
+                if (rampProfile == AutoRampProfile::Linear) {
+                    // Linear-only profile: clamp and finish when end RPM reached.
+                    if (commanded > rpmEnd) {
+                        commanded = rpmEnd;
+                    }
+                } else {
+                    // Hybrid profile: transition to exponential at start RPM.
+                    rpmRampUp.init(rpmStart, rpmEnd, tauUp, dtSeconds);
 
-                // Initialize exponential up-sweep
-                rpmRampUp.init(rpmStart, rpmEnd, tauUp, dtSeconds);
+                    if (!recording) {
+                        startRecording();
+                    }
+                    startMeasuringIfInWindow(commanded);
 
-                // Start recording when entering measurement region
-                if (!recording) {
-                    startRecording();
+                    state = State::AUTO_UP_EXP;
                 }
-                startMeasuringIfInWindow(commanded);
-
-                state = State::AUTO_UP_EXP;
             }
 
+            if (commanded > rpmEnd) {
+                commanded = rpmEnd;
+            }
             MetaSense::Settings::setRpmTarget(commanded);
+
+            if (!recording) {
+                startRecording();
+            }
+            updateEnergy(rpm, torqueNm);
+
+            const bool reachedEndRpm = (rpm >= rpmEnd) || (commanded >= (rpmEnd * 0.995f));
+            if (reachedEndRpm) {
+                lastRunEnergy = energyMJ;
+                runFinished   = true;
+                if (recording) {
+                    stopRecording();
+                }
+                autoMode = false;
+                panelAuto = false;
+                state = State::MANUAL;
+            }
             break;
         }
 

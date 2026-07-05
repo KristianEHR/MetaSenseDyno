@@ -33,7 +33,7 @@
 			]
 		},
 		{
-			"label": "Build (esp32s3-USB-cco)",
+			"label": "OPERATIVE - Build (esp32s3-USB-cco)",
 			"type": "shell",
 			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
 			"args": [
@@ -48,13 +48,44 @@
 			"group": "build"
 		},
 		{
-			"label": "Upload (esp32s3-USB-cco)",
+			"label": "OPERATIVE - Upload (esp32s3-USB-cco)",
 			"type": "shell",
 			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
 			"args": [
 				"run",
 				"-e",
 				"esp32s3-USB-cco",
+				"-t",
+				"upload"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$platformio"
+			]
+		},
+		{
+			"label": "SIM - Build (esp32s3-USB-cco-sim)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-USB-cco-sim"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$platformio"
+			],
+			"group": "build"
+		},
+		{
+			"label": "SIM - Upload (esp32s3-USB-cco-sim)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-USB-cco-sim",
 				"-t",
 				"upload"
 			],

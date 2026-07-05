@@ -110,6 +110,8 @@ String buildProfilePayload(bool includeTypeEnvelope)
     json += ",\"kpSource\":\"" + String(MetaSense::Settings::usePot3Kp ? "pot3" : "firmware") + "\"";
     json += ",\"rhOffsetPct\":" + String(MetaSense::Settings::ambientRhOffsetPct, 1);
     json += ",\"motorModeMaxRpm\":" + String(MetaSense::Settings::motorModeMaxRpm, 0);
+    json += ",\"idleTorqueNm\":" + String(MetaSense::Settings::idleTorqueNm, 2);
+    json += ",\"brakeMaxTorqueNm\":" + String(MetaSense::Settings::brakeMaxTorqueNm, 1);
     json += ",\"pulsesPerRev\":" + String(MetaSense::Settings::pulsesPerRev, 2);
     json += ",\"pulsesPerRevDrum\":" + String(MetaSense::Settings::pulsesPerRevDrum, 2);
     json += ",\"rpmFilter\":" + String(MetaSense::Settings::filterAlpha, 3);
@@ -230,6 +232,26 @@ bool applyProfilePayload(const String& payload)
     }
     if (!profile["rhOffsetPct"].isNull()) MetaSense::Settings::ambientRhOffsetPct = profile["rhOffsetPct"].as<float>();
     if (!profile["motorModeMaxRpm"].isNull()) MetaSense::Settings::motorModeMaxRpm = profile["motorModeMaxRpm"].as<float>();
+    if (!profile["idleTorqueNm"].isNull()) {
+        const float idleTorque = profile["idleTorqueNm"].as<float>();
+        if (idleTorque < 0.0f) {
+            MetaSense::Settings::idleTorqueNm = 0.0f;
+        } else if (idleTorque > 10.0f) {
+            MetaSense::Settings::idleTorqueNm = 10.0f;
+        } else {
+            MetaSense::Settings::idleTorqueNm = idleTorque;
+        }
+    }
+    if (!profile["brakeMaxTorqueNm"].isNull()) {
+        const float brakeMaxTorque = profile["brakeMaxTorqueNm"].as<float>();
+        if (brakeMaxTorque < 0.0f) {
+            MetaSense::Settings::brakeMaxTorqueNm = 0.0f;
+        } else if (brakeMaxTorque > 200.0f) {
+            MetaSense::Settings::brakeMaxTorqueNm = 200.0f;
+        } else {
+            MetaSense::Settings::brakeMaxTorqueNm = brakeMaxTorque;
+        }
+    }
     if (!profile["tachoCal"].isNull()) MetaSense::Settings::setTachoCal(profile["tachoCal"].as<float>());
     if (!profile["rpmTarget"].isNull()) MetaSense::Settings::setRpmTarget(profile["rpmTarget"].as<float>());
     if (!profile["rpmStart"].isNull()) MetaSense::Settings::setRpmStart(profile["rpmStart"].as<float>());
@@ -331,6 +353,9 @@ void sendSettingsSnapshot()
     json += ",\"kpSource\":\"" + String(MetaSense::Settings::usePot3Kp ? "pot3" : "firmware") + "\"";
     json += ",\"rhOffsetPct\":" + String(MetaSense::Settings::ambientRhOffsetPct, 1);
     json += ",\"motorModeMaxRpm\":" + String(MetaSense::Settings::motorModeMaxRpm, 0);
+    json += ",\"idleTorqueNm\":" + String(MetaSense::Settings::idleTorqueNm, 2);
+    json += ",\"brakeMaxTorqueNm\":" + String(MetaSense::Settings::brakeMaxTorqueNm, 1);
+    json += ",\"forceVcuReadyForUiTest\":" + String(MetaSense::Settings::forceVcuReadyForUiTest ? 1 : 0);
     json += ",\"pulsesPerRev\":" + String(MetaSense::Settings::pulsesPerRev, 2);
     json += ",\"rpmFilter\":" + String(MetaSense::Settings::filterAlpha, 3);
     json += ",\"loadAvgN\":" + String(MetaSense::Settings::loadAvgN, 0);
@@ -500,20 +525,40 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
             return;
         }
 
+        const int thirdColon = cmd.indexOf(':', secondColon + 1);
+
         const float startRpm = cmd.substring(firstColon + 1, secondColon).toFloat();
-        const float endRpm = cmd.substring(secondColon + 1).toFloat();
+        const float endRpm = (thirdColon > secondColon)
+            ? cmd.substring(secondColon + 1, thirdColon).toFloat()
+            : cmd.substring(secondColon + 1).toFloat();
         if (startRpm <= 0.0f || endRpm <= startRpm) {
             MetaSense::WebSocketServer::sendInfo("Invalid AUTO_RUN range");
             return;
         }
 
+        MetaSense::DynoStateMachine::AutoRampProfile rampProfile =
+            MetaSense::DynoStateMachine::AutoRampProfile::Hybrid;
+        if (thirdColon > secondColon) {
+            String profile = cmd.substring(thirdColon + 1);
+            profile.trim();
+            profile.toLowerCase();
+            if (profile == "linear") {
+                rampProfile = MetaSense::DynoStateMachine::AutoRampProfile::Linear;
+            } else if (profile == "exponential" || profile == "exp") {
+                rampProfile = MetaSense::DynoStateMachine::AutoRampProfile::Exponential;
+            } else if (profile == "hybrid") {
+                rampProfile = MetaSense::DynoStateMachine::AutoRampProfile::Hybrid;
+            }
+        }
+
         MetaSense::Settings::setRpmStart(startRpm);
         MetaSense::Settings::setRpmEnd(endRpm);
         MetaSense::Settings::saveToStorage();
+        MetaSense::DynoStateMachine::setAutoRampProfile(rampProfile);
         MetaSense::DynoStateMachine::setPanelAuto(true);
         MetaSense::DynoStateMachine::setAutoMode(true);
         MetaSense::DynoStateMachine::startRecording();
-        MetaSense::WebSocketServer::sendStatus("Auto run armed");
+        MetaSense::WebSocketServer::sendStatus("Auto run armed (" + String(MetaSense::DynoStateMachine::autoRampProfileName()) + ")");
     }
     else if (cmdUpper == "MANUAL_START") {
         if (!MetaSense::Input::isVcuReady()) {
@@ -800,6 +845,28 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
             }
         } else if (key == "motorModeMaxRpm") {
             MetaSense::Settings::motorModeMaxRpm = (fval > 0.0f) ? fval : MetaSense::Settings::motorModeMaxRpm;
+        } else if (key == "idleTorqueNm") {
+            if (fval < 0.0f) {
+                MetaSense::Settings::idleTorqueNm = 0.0f;
+            } else if (fval > 10.0f) {
+                MetaSense::Settings::idleTorqueNm = 10.0f;
+            } else {
+                MetaSense::Settings::idleTorqueNm = fval;
+            }
+        } else if (key == "brakeMaxTorqueNm") {
+            if (fval < 0.0f) {
+                MetaSense::Settings::brakeMaxTorqueNm = 0.0f;
+            } else if (fval > 200.0f) {
+                MetaSense::Settings::brakeMaxTorqueNm = 200.0f;
+            } else {
+                MetaSense::Settings::brakeMaxTorqueNm = fval;
+            }
+        } else if (key == "forceVcuReadyForUiTest") {
+            String flag = val;
+            flag.trim();
+            flag.toLowerCase();
+            MetaSense::Settings::forceVcuReadyForUiTest =
+                (flag == "1" || flag == "true" || flag == "on" || flag == "yes");
         } else if (key == "pulsesPerRev") {
             MetaSense::Settings::pulsesPerRev = (fval > 0.0f) ? fval : MetaSense::Settings::pulsesPerRev;
         } else if (key == "pulsesPerRevDrum") {

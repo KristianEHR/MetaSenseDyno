@@ -2,6 +2,11 @@
 
 #include <cstring>
 
+#ifndef METASENSE_LEAF_CAN_TX_ENABLED
+// Safety default: allow Leaf CAN receive/monitoring, block all outbound frames.
+#define METASENSE_LEAF_CAN_TX_ENABLED 0
+#endif
+
 bool CanHAL::begin(int txPin, int rxPin) {
     twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT((gpio_num_t)txPin, (gpio_num_t)rxPin, TWAI_MODE_NORMAL);
     twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
@@ -14,11 +19,18 @@ bool CanHAL::begin(int txPin, int rxPin) {
 }
 
 bool CanHAL::send(uint32_t id, const uint8_t* data, uint8_t len) {
+#if !METASENSE_LEAF_CAN_TX_ENABLED
+    (void)id;
+    (void)data;
+    (void)len;
+    return false;
+#else
     twai_message_t msg = {};
     msg.identifier = id;
     msg.data_length_code = len;
     memcpy(msg.data, data, len);
     return twai_transmit(&msg, pdMS_TO_TICKS(10)) == ESP_OK;
+#endif
 }
 
 bool CanHAL::receive(uint32_t& id, uint8_t* data, uint8_t& len) {
