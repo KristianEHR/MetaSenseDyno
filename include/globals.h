@@ -2,6 +2,8 @@
 
 namespace MetaSense::Globals {
 
+extern const bool kVcuSwitch;
+
 constexpr int kOnboardLedPin = 48;
 constexpr int kOnboardLedCount = 1;
 constexpr int kI2cSdaPin = 17;

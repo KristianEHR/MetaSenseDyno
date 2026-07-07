@@ -17,5 +17,6 @@ bool isRestartRequired();
 
 void setTorqueFeedForward(float torque);
 float torqueFeedForward();
+bool isEnergyMeasuring();
 
 } // namespace MetaSense::DynoStateMachine

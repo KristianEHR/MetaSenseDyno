@@ -1,8 +1,15 @@
 #pragma once
 
+#include <cstdint>
+
 namespace MetaSense::Settings {
 
 extern float filterAlpha;
+extern float loadAvgN;
+extern float loadAvgN2;
+extern uint8_t loadFilterMode;
+extern uint16_t loadCellGain;
+extern uint16_t loadCellRateSps;
 extern float kp;
 extern float ki;
 extern bool usePot3Kp;

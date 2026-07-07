@@ -24,6 +24,11 @@
 #define NAU7802_PU_CTRL_OSCS  0x40  // System clock source select
 #define NAU7802_PU_CTRL_AVDDS 0x80  // AVDD source select
 
+// CTRL2 calibration-related bits
+#define NAU7802_CTRL2_CALMOD_MASK 0x03
+#define NAU7802_CTRL2_CALS        0x04
+#define NAU7802_CTRL2_CAL_ERROR   0x08
+
 // Gain enum
 typedef enum _gains {
   NAU7802_GAIN_1  = 0,
@@ -45,10 +50,23 @@ typedef enum _sample_rates {
   NAU7802_RATE_320SPS = 7
 } NAU7802_SampleRate;
 
-// Calibration mode (stubbed for now)
+// Internal LDO output voltage select (CTRL1 bits [5:3])
+typedef enum _ldo_values {
+  NAU7802_LDO_2V4 = 7,
+  NAU7802_LDO_2V7 = 6,
+  NAU7802_LDO_3V0 = 5,
+  NAU7802_LDO_3V3 = 4,
+  NAU7802_LDO_3V6 = 3,
+  NAU7802_LDO_3V9 = 2,
+  NAU7802_LDO_4V2 = 1,
+  NAU7802_LDO_4V5 = 0
+} NAU7802_LDO;
+
+// Calibration mode
 typedef enum _calib_mode {
-  NAU7802_CALIB_OFFSET = 0,
-  NAU7802_CALIB_GAIN   = 1
+  NAU7802_CALMOD_INTERNAL = 0,
+  NAU7802_CALMOD_OFFSET   = 2,
+  NAU7802_CALMOD_GAIN     = 3
 } NAU7802_Calibration;
 
 class Adafruit_NAU7802 {
@@ -62,10 +80,13 @@ public:
 
   void setGain(NAU7802_Gain gain);
   void setRate(NAU7802_SampleRate rate);
+  bool setLDO(NAU7802_LDO ldo);
+  bool calibrate(NAU7802_Calibration mode, uint16_t timeout_ms = 1000);
+  bool resetAndPowerUp();
 
   // Optional: expose raw register access if you want later
-  uint8_t readRegister(uint8_t reg);
-  void writeRegister(uint8_t reg, uint8_t value);
+  uint8_t readRegister(uint8_t reg, bool *ok = nullptr);
+  bool writeRegister(uint8_t reg, uint8_t value);
 
 private:
   TwoWire *_wire;

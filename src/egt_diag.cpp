@@ -6,7 +6,7 @@ namespace {
 
 constexpr uint8_t kSdaPin = 17;
 constexpr uint8_t kSclPin = 18;
-constexpr uint32_t kI2cClockHz = 25000;
+constexpr uint32_t kI2cClockHz = 50000;
 constexpr uint16_t kI2cTimeoutMs = 50;
 constexpr uint16_t kInitSettleDelayMs = 300;
 constexpr uint8_t kPreferredAddr = 0x67;

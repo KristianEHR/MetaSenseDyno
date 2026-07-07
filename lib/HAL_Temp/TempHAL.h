@@ -23,4 +23,5 @@ private:
     bool ready = false;
     uint8_t activeAddress = 0;
     uint8_t lastAckAddress = 0;
+    uint8_t consecutiveReadFailures = 0;
 };

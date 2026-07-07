@@ -6,7 +6,7 @@ namespace MetaSense {
 
 class ModbusPublisher {
 public:
-    bool begin(uint16_t port = 503, uint16_t regCount = 21);
+    bool begin(uint16_t port = 503, uint16_t regCount = 30);
     void update();
 
 private:

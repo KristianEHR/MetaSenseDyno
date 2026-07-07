@@ -59,6 +59,8 @@ struct Telemetry {
     float kw = 0.0f;
     float humidity = 0.0f;
     float eTorque = 0.0f;
+    float massflowM3h = 0.0f;
+    float lambdaValue = 1.0f;
     float climateCF = 1.0f;   // climate correction factor (normalised to 1013.25 hPa / 20°C / 0% RH)
     DynoMode mode = DynoMode::Standard;
 

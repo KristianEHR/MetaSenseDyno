@@ -243,6 +243,11 @@ float lastRunEnergyMJ()
     return lastRunEnergy;
 }
 
+bool isEnergyMeasuring()
+{
+    return measuringMJ;
+}
+
 bool isRunFinished()
 {
     return runFinished;
