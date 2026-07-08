@@ -63,6 +63,7 @@ void LeafCan::decodeFrame(const twai_message_t &msg,
         case 0x1DA: // MotorSpeed
             if (dlc >= 4U) {
                 fb.rpm = decodeMotorSpeed(d);
+                fb.rpm_update_ms = now_ms;
                 fb.last_update_ms = now_ms;
             }
             break;
@@ -70,6 +71,7 @@ void LeafCan::decodeFrame(const twai_message_t &msg,
         case 0x1DB: // MotorTorque
             if (dlc >= 4U) {
                 fb.torque_nm = decodeMotorTorque(d);
+                fb.torque_update_ms = now_ms;
                 fb.last_update_ms = now_ms;
             }
             break;
@@ -77,6 +79,7 @@ void LeafCan::decodeFrame(const twai_message_t &msg,
         case 0x1DC: // InverterTemps
             if (dlc >= 3U) {
                 decodeTemps(d, fb.inverter_temp, fb.stator_temp, fb.coolant_temp);
+                fb.temps_update_ms = now_ms;
                 fb.last_update_ms = now_ms;
             }
             break;
@@ -84,6 +87,7 @@ void LeafCan::decodeFrame(const twai_message_t &msg,
         case 0x1D4: // InverterStatus
             if (dlc >= 1U) {
                 decodeStatus(d, fb.ready, fb.fault, fb.warning, fb.limp);
+                fb.status_update_ms = now_ms;
                 fb.last_update_ms = now_ms;
             }
             break;
@@ -107,5 +111,9 @@ void LeafCan::reset(LeafInvFeedback &fb)
     fb.warning = false;
     fb.limp = false;
 
+    fb.rpm_update_ms = 0;
+    fb.torque_update_ms = 0;
+    fb.temps_update_ms = 0;
+    fb.status_update_ms = 0;
     fb.last_update_ms = 0;
 }

@@ -1,3 +1,4 @@
+
 #include "LoadCellHAL.h"
 
 bool LoadCellHAL::begin() {

@@ -18,6 +18,10 @@ struct LeafInvFeedback
     bool warning;
     bool limp;
 
+    uint32_t rpm_update_ms;
+    uint32_t torque_update_ms;
+    uint32_t temps_update_ms;
+    uint32_t status_update_ms;
     uint32_t last_update_ms; // Last valid frame timestamp (system ms)
 };
 
