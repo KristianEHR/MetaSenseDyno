@@ -1128,7 +1128,7 @@
     // Chart handle.
     let modalDynoChart = null;
     // Keep UI updates bounded so stale websocket frames do not create visible lag.
-    const kUiMinDataFrameMs = 33;
+    const kUiMinDataFrameMs = 16;
     const kUiSlowPanelMinFrameMs = 200;
     const kRunChartMinUpdateMs = 120;
     let lastUiDataFrameMs = 0;
@@ -2448,11 +2448,20 @@
             const peakEGTValue = Number.isFinite(Number(telemetry.peakEGT)) ? Number(telemetry.peakEGT) : 0;
             
             const dynoMode = String(telemetry.dyno_mode || "").toLowerCase();
-            const engineTorque = Number.isFinite(Number(telemetry.torque)) ? Number(telemetry.torque) : 0;
+            const dynoEngineTorque = Number.isFinite(Number(telemetry.torque)) ? Number(telemetry.torque) : 0;
             const brakeTorque = Number.isFinite(Number(telemetry.brakeTorque)) ? Number(telemetry.brakeTorque) : 0;
+            const leafTorque = Number.isFinite(Number(telemetry.leaf_torque)) ? Number(telemetry.leaf_torque) : NaN;
+            const leafLastUpdateMs = Number(telemetry.leaf_last_update_ms);
+            const heartbeatMs = Number(telemetry.heartbeat_ms);
+            const leafTorqueFresh = Number.isFinite(leafTorque) &&
+              Number.isFinite(leafLastUpdateMs) &&
+              Number.isFinite(heartbeatMs) &&
+              (heartbeatMs >= leafLastUpdateMs) &&
+              ((heartbeatMs - leafLastUpdateMs) <= 500);
+            const engineTorque = leafTorqueFresh ? leafTorque : dynoEngineTorque;
 
             // E_torque display follows explicit telemetry when available, else engine torque.
-            const eTorque = Number.isFinite(Number(telemetry.e_torque)) ? Number(telemetry.e_torque) : engineTorque;
+            const eTorque = Number.isFinite(Number(telemetry.e_torque)) ? Number(telemetry.e_torque) : dynoEngineTorque;
             document.getElementById("gearRatioValue").textContent = eTorque.toFixed(2);
             // Update Energy display
             if (shouldUpdateSlowPanel) {
@@ -2488,7 +2497,9 @@
             }
             
             // Update ratio indicator with PI demand and active torque source.
-            const torqueSourceLabel = (dynoMode === "inertia") ? "Inertia" : "Load cell";
+            const torqueSourceLabel = showEngineTorque
+              ? (leafTorqueFresh ? "Inverter CAN" : ((dynoMode === "inertia") ? "Inertia" : "Dyno model"))
+              : "Load cell";
             if (eTorque !== null && showEngineTorque) {
               document.getElementById("ratioIndicator").textContent = `(E_torque: ${eTorque.toFixed(2)}Nm | source: ${torqueSourceLabel})`;
             } else {
@@ -2502,7 +2513,7 @@
               document.getElementById("rpmSetpointDisplay").textContent = Math.round(telemetry.rpm_target);
             }
             
-            // Torque gauge follows selected mode toggle without remapping torque channels.
+            // Engine Torque mode prefers fresh inverter CAN torque; Brake Torque stays on dyno/load-cell torque.
             const torqueValue = showEngineTorque ? engineTorque : brakeTorque;
             updateGauge("torque", torqueValue, maxVals.torque, "torqueText", 1);
             
