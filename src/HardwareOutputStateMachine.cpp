@@ -24,9 +24,14 @@ OutputState pendingState = OutputState::INIT;
 uint32_t pendingStateSinceMs = 0;
 constexpr uint32_t kRelaySwitchDelayMs = 20;
 constexpr uint32_t kStateDebounceMs = 50;
+constexpr uint32_t kInitPrechargeTimeoutMs = 2000;
 constexpr float kIdleSetpointZeroThresholdRpm = 50.0f;
 bool inverterStatusInitialized = false;
 bool hvArmedLatched = false;
+bool initPrechargeActive = false;
+bool initPrechargeCompleted = false;
+bool initPrechargeSucceeded = false;
+uint32_t initPrechargeStartMs = 0;
 bool vcuRelayOverrideEnabled = false;
 bool vcuRbPlusCommand = false;
 bool vcuPrechargeCommand = false;
@@ -93,6 +98,15 @@ void setupActuatorPwmChannel(int pin, int channel)
     ledcWrite(channel, 0);
 }
 
+void setupThrottlePwmChannel(int pin, int channel)
+{
+    ledcSetup(channel,
+              MetaSense::Globals::kThrottlePwmFrequencyHz,
+              MetaSense::Globals::kThrottlePwmResolutionBits);
+    ledcAttachPin(pin, channel);
+    ledcWrite(channel, 0);
+}
+
 void writeActuatorChannel(int channel, float percent)
 {
     percent = constrain(percent, 0.0f, 100.0f);
@@ -101,15 +115,16 @@ void writeActuatorChannel(int channel, float percent)
     ledcWrite(channel, pwm);
 }
 
-void writeThrottleServo(float percent)
+void writeThrottleDutyPwm(float percent)
 {
     percent = constrain(percent, 0.0f, 100.0f);
 
-    const float pulseUs = MetaSense::Globals::kServoPulseMinUs +
-        (percent / 100.0f) * (MetaSense::Globals::kServoPulseMaxUs - MetaSense::Globals::kServoPulseMinUs);
-    const float periodUs = 1000000.0f / static_cast<float>(MetaSense::Globals::kServoPwmFrequencyHz);
-    const int maxPwm = pwmMaxValue(MetaSense::Globals::kServoPwmResolutionBits);
-    const int pwm = static_cast<int>((pulseUs / periodUs) * static_cast<float>(maxPwm));
+    const float outMin = MetaSense::Globals::kThrottlePwmMinPercent;
+    const float outMax = MetaSense::Globals::kThrottlePwmMaxPercent;
+    const float mapped = outMin + (percent / 100.0f) * (outMax - outMin);
+    const float constrained = constrain(mapped, 0.0f, 100.0f);
+    const int maxPwm = pwmMaxValue(MetaSense::Globals::kThrottlePwmResolutionBits);
+    const int pwm = static_cast<int>(constrained * static_cast<float>(maxPwm) / 100.0f);
 
     ledcWrite(MetaSense::Globals::kThrottlePwmChannel, constrain(pwm, 0, maxPwm));
 }
@@ -176,6 +191,16 @@ void setRelayOutputs(bool rbMinusOn, bool sssrOn, bool rbPlusOn = false, bool pr
     cmd.rbPlusOn = vcuRelayOverrideEnabled ? vcuRbPlusCommand : rbPlusOn;
     cmd.prechargeOn = vcuRelayOverrideEnabled ? vcuPrechargeCommand : prechargeOn;
 
+    // Precharge ownership is centralized to the INIT precharge sequence only.
+    if (!initPrechargeActive) {
+        cmd.prechargeOn = false;
+    }
+
+    // Safety interlock: precharge path is only valid while RB+ is open.
+    if (cmd.prechargeOn) {
+        cmd.rbPlusOn = false;
+    }
+
     applyRelayCommand(cmd);
 }
 
@@ -234,22 +259,70 @@ void setStateLed(OutputState hwState)
     strip.show();
 }
 
+void updateInitPrechargeSequence(OutputState nextState,
+                                 bool inverterReady,
+                                 bool inverterFault,
+                                 uint32_t now)
+{
+    if (inverterFault) {
+        initPrechargeActive = false;
+        initPrechargeSucceeded = false;
+        return;
+    }
+
+    if (initPrechargeCompleted) {
+        initPrechargeActive = false;
+        return;
+    }
+
+    if (nextState == OutputState::INIT) {
+        if (!initPrechargeActive) {
+            initPrechargeActive = true;
+            initPrechargeStartMs = now;
+        }
+
+        if (inverterReady) {
+            initPrechargeActive = false;
+            initPrechargeCompleted = true;
+            initPrechargeSucceeded = true;
+        } else if ((now - initPrechargeStartMs) >= kInitPrechargeTimeoutMs) {
+            initPrechargeActive = false;
+            initPrechargeCompleted = true;
+            initPrechargeSucceeded = true;
+        }
+    } else {
+        // INIT phase finished; precharge must not be asserted elsewhere.
+        initPrechargeActive = false;
+        initPrechargeCompleted = true;
+    }
+}
+
 void applyOutputs(OutputState nextState,
                   OutputState prevState,
                   float engineThrottlePercent,
                   float primaryBrakePercent,
-                  bool inverterReady)
+                  bool inverterReady,
+                  bool inverterFault)
 {
     (void)prevState;
-    writeThrottleServo(engineThrottlePercent);
+    writeThrottleDutyPwm(engineThrottlePercent);
+
+    if (inverterFault) {
+        setRelayOutputs(false, false, false, false);
+        writePrimaryBrakeSplit(nextState, primaryBrakePercent);
+        setStateLed(nextState);
+        return;
+    }
+
     hvArmedLatched = inverterReady;
 
-    const bool rbPlusHold = hvArmedLatched && nextState != OutputState::INIT;
-    const bool prechargeActive = (nextState == OutputState::MOTOR) && !hvArmedLatched;
+    // Once precharge succeeds, latch RB+ on until an inverter fault clears all relays.
+    const bool rbPlusHold = initPrechargeSucceeded || (hvArmedLatched && nextState != OutputState::INIT);
+    const bool prechargeActive = initPrechargeActive;
 
     switch (nextState) {
     case OutputState::INIT:
-        setRelayOutputs(false, false);
+        setRelayOutputs(false, true, false, prechargeActive);
         writePrimaryBrakeSplit(OutputState::INIT, 0.0f);
         break;
 
@@ -264,7 +337,7 @@ void applyOutputs(OutputState nextState,
         break;
 
     case OutputState::MOTOR:
-        setRelayOutputs(false, true, rbPlusHold, prechargeActive);
+        setRelayOutputs(true, true, rbPlusHold, prechargeActive);
         writePrimaryBrakeSplit(OutputState::MOTOR, primaryBrakePercent);
         break;
 
@@ -288,8 +361,8 @@ void begin()
     strip.clear();
     strip.show();
 
-    setupServoPwmChannel(MetaSense::Globals::kThrottlePin,
-                         MetaSense::Globals::kThrottlePwmChannel);
+    setupThrottlePwmChannel(MetaSense::Globals::kThrottlePin,
+                            MetaSense::Globals::kThrottlePwmChannel);
     setupActuatorPwmChannel(MetaSense::Globals::kBrakePin,
                             MetaSense::Globals::kBrakePwmChannel);
     setupActuatorPwmChannel(MetaSense::Globals::kThrottleVcuPin,
@@ -323,12 +396,16 @@ void begin()
     state = OutputState::INIT;
     pendingState = state;
     pendingStateSinceMs = millis();
+    initPrechargeActive = false;
+    initPrechargeCompleted = false;
+    initPrechargeSucceeded = false;
+    initPrechargeStartMs = 0;
     setStateLed(state);
 }
 
 void writeThrottle(float percent)
 {
-    writeThrottleServo(percent);
+    writeThrottleDutyPwm(percent);
 }
 
 void writeBrake(float percent)
@@ -346,7 +423,8 @@ void update(float engineThrottlePercent,
             float rpm,
             float primaryBrakePercent,
             bool inverterStatusReady,
-            bool inverterReady)
+            bool inverterReady,
+            bool inverterFault)
 {
     const OutputState prevState = state;
     OutputState candidateState = state;
@@ -358,11 +436,9 @@ void update(float engineThrottlePercent,
 
     if (!inverterStatusInitialized) {
         candidateState = OutputState::INIT;
-    } else if (!idleSetpointZero && !inverterReady) {
-        // Do not enter IDLE until the RPM setpoint POT is returned to zero.
-        candidateState = OutputState::INIT;
     } else if (!inverterReady) {
-        candidateState = OutputState::IDLE;
+        // Keep the bring-up test parked in INIT until inverter-ready is observed.
+        candidateState = OutputState::INIT;
     } else if (idleSetpointZero && rpm <= 200.0f) {
         candidateState = OutputState::IDLE;
     } else if (setPoint >= 200.0f && setPoint <= 1500.0f) {
@@ -385,7 +461,9 @@ void update(float engineThrottlePercent,
         pendingStateSinceMs = now;
     }
 
-    applyOutputs(state, prevState, engineThrottlePercent, primaryBrakePercent, inverterReady);
+    updateInitPrechargeSequence(state, inverterReady, inverterFault, now);
+
+    applyOutputs(state, prevState, engineThrottlePercent, primaryBrakePercent, inverterReady, inverterFault);
 }
 
 void setStateStart()
@@ -418,7 +496,7 @@ void setStateIdle()
 void setStateMotorDyno()
 {
     state = OutputState::MOTOR;
-    setRelayOutputs(false, true, hvArmedLatched);
+    setRelayOutputs(true, true, hvArmedLatched);
     setStateLed(state);
 }
 
@@ -467,7 +545,13 @@ void applyVcuSimRelayOutputs(bool rbPlusOn, bool prechargeOn, bool ssrOn, bool r
     cmd.rbMinusOn = rbMinusOn;
     cmd.ssrOn = ssrOn;
     cmd.rbPlusOn = rbPlusOn;
-    cmd.prechargeOn = prechargeOn;
+    cmd.prechargeOn = initPrechargeActive ? prechargeOn : false;
+
+    // Keep simulation path aligned with production HV relay interlock.
+    if (cmd.prechargeOn) {
+        cmd.rbPlusOn = false;
+    }
+
     applyRelayCommand(cmd);
 }
 
@@ -484,6 +568,11 @@ bool isSsrActive()
 bool isPrechargeActive()
 {
     return digitalRead(MetaSense::Globals::kPrechargeRelayPin) == HIGH;
+}
+
+bool isPrechargeSucceeded()
+{
+    return initPrechargeSucceeded;
 }
 
 } // namespace MetaSense::HardwareOutputStateMachine

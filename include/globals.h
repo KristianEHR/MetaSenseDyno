@@ -43,6 +43,24 @@ constexpr int kThrottlePwmChannel = 0;
 constexpr int kBrakePwmChannel = 2;
 constexpr int kDynoThrottlePwmChannel = 4;
 
+#ifndef METASENSE_THROTTLE_PWM_FREQUENCY_HZ
+#define METASENSE_THROTTLE_PWM_FREQUENCY_HZ 250
+#endif
+#ifndef METASENSE_THROTTLE_PWM_RESOLUTION_BITS
+#define METASENSE_THROTTLE_PWM_RESOLUTION_BITS 12
+#endif
+#ifndef METASENSE_THROTTLE_PWM_MIN_PERCENT
+#define METASENSE_THROTTLE_PWM_MIN_PERCENT 0.0f
+#endif
+#ifndef METASENSE_THROTTLE_PWM_MAX_PERCENT
+#define METASENSE_THROTTLE_PWM_MAX_PERCENT 100.0f
+#endif
+
+constexpr int kThrottlePwmFrequencyHz = METASENSE_THROTTLE_PWM_FREQUENCY_HZ;
+constexpr int kThrottlePwmResolutionBits = METASENSE_THROTTLE_PWM_RESOLUTION_BITS;
+constexpr float kThrottlePwmMinPercent = METASENSE_THROTTLE_PWM_MIN_PERCENT;
+constexpr float kThrottlePwmMaxPercent = METASENSE_THROTTLE_PWM_MAX_PERCENT;
+
 constexpr int kServoPwmFrequencyHz = 50;
 constexpr int kServoPwmResolutionBits = 14;
 constexpr int kServoPulseMinUs = 1000;
