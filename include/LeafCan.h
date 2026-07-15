@@ -23,6 +23,12 @@ struct LeafInvFeedback
     uint32_t temps_update_ms;
     uint32_t status_update_ms;
     uint32_t last_update_ms; // Last valid frame timestamp (system ms)
+
+    // Per-ID decode counters for diagnostics.
+    uint32_t rpm_frames;
+    uint32_t torque_frames;
+    uint32_t temps_frames;
+    uint32_t status_frames;
 };
 
 namespace LeafCan

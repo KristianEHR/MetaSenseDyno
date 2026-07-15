@@ -40,6 +40,34 @@
 #define METASENSE_VCU_SIM_MODE 0
 #endif
 
+#ifndef METASENSE_LEAF_CAN_RX_ENABLED
+#define METASENSE_LEAF_CAN_RX_ENABLED 1
+#endif
+
+#ifndef METASENSE_LEAF_CAN_TX_ENABLED
+#define METASENSE_LEAF_CAN_TX_ENABLED 0
+#endif
+
+#ifndef METASENSE_LEAF_CAN_LISTEN_ONLY
+#define METASENSE_LEAF_CAN_LISTEN_ONLY 0
+#endif
+
+#ifndef METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS
+#define METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS 0
+#endif
+
+#ifndef METASENSE_LEAF_CAN_TX_PIN
+#define METASENSE_LEAF_CAN_TX_PIN 4
+#endif
+
+#ifndef METASENSE_LEAF_CAN_RX_PIN
+#define METASENSE_LEAF_CAN_RX_PIN 5
+#endif
+
+#ifndef METASENSE_LEAF_CAN_BITRATE_KBPS
+#define METASENSE_LEAF_CAN_BITRATE_KBPS 500
+#endif
+
 namespace MetaSense::HardwareOutputStateMachine {
 void setVcuRelayOverride(bool enabled, bool rbPlus, bool precharge, bool ssr, bool rbMinus);
 }
@@ -499,6 +527,35 @@ void logWifiConfiguration()
     Serial0.printf("[BOOT]  - OTA auth: %s\n", otaAuthConfigured ? "enabled" : "disabled");
 }
 
+void logBuildProfile()
+{
+    Serial.printf("[BOOT] Build profile: vcu_gpio=%d, vcu_sim=%d, hv_vcu_owner=%d\n",
+                  VCU_switch != 0 ? 1 : 0,
+                  METASENSE_VCU_SIM_MODE != 0 ? 1 : 0,
+                  METASENSE_VCU_OWNS_HV_RPLUS_PRECHARGE != 0 ? 1 : 0);
+    Serial0.printf("[BOOT] Build profile: vcu_gpio=%d, vcu_sim=%d, hv_vcu_owner=%d\n",
+                   VCU_switch != 0 ? 1 : 0,
+                   METASENSE_VCU_SIM_MODE != 0 ? 1 : 0,
+                   METASENSE_VCU_OWNS_HV_RPLUS_PRECHARGE != 0 ? 1 : 0);
+
+    Serial.printf("[BOOT] Build profile: leaf_can_rx=%d, leaf_can_tx=%d, can_listen_only=%d, can_bitrate_kbps=%d, can_tx_pin=%d, can_rx_pin=%d, leaf_sim_feedback=%d\n",
+                  METASENSE_LEAF_CAN_RX_ENABLED != 0 ? 1 : 0,
+                  METASENSE_LEAF_CAN_TX_ENABLED != 0 ? 1 : 0,
+                  METASENSE_LEAF_CAN_LISTEN_ONLY != 0 ? 1 : 0,
+                  METASENSE_LEAF_CAN_BITRATE_KBPS,
+                  METASENSE_LEAF_CAN_TX_PIN,
+                  METASENSE_LEAF_CAN_RX_PIN,
+                  METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS != 0 ? 1 : 0);
+    Serial0.printf("[BOOT] Build profile: leaf_can_rx=%d, leaf_can_tx=%d, can_listen_only=%d, can_bitrate_kbps=%d, can_tx_pin=%d, can_rx_pin=%d, leaf_sim_feedback=%d\n",
+                   METASENSE_LEAF_CAN_RX_ENABLED != 0 ? 1 : 0,
+                   METASENSE_LEAF_CAN_TX_ENABLED != 0 ? 1 : 0,
+                   METASENSE_LEAF_CAN_LISTEN_ONLY != 0 ? 1 : 0,
+                   METASENSE_LEAF_CAN_BITRATE_KBPS,
+                   METASENSE_LEAF_CAN_TX_PIN,
+                   METASENSE_LEAF_CAN_RX_PIN,
+                   METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS != 0 ? 1 : 0);
+}
+
 bool wifiCredentialsConfigured()
 {
     return strlen(ssid) > 0 && strcmp(ssid, "YOUR_SSID") != 0;
@@ -691,14 +748,14 @@ void networkTaskEntry(void* /*parameter*/)
                                                     nauInternalCalAttempts);
             const int rbPlusLevel = digitalRead(MetaSense::Globals::kRbPlusInputPin);
             Serial.printf("[BOOTSTATUS] vcu_mode=%s, vcu_ready=%d, rb_plus=%d, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u\n",
-                          MetaSense::Globals::kVcuSwitch ? "gpio" : "forced",
+                          "can_inverter_status",
                           vcuReady ? 1 : 0,
                           rbPlusLevel,
                           nauLdoConfigured ? 1 : 0,
                           nauInternalCalOk ? 1 : 0,
                           static_cast<unsigned>(nauInternalCalAttempts));
             Serial0.printf("[BOOTSTATUS] vcu_mode=%s, vcu_ready=%d, rb_plus=%d, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u\n",
-                           MetaSense::Globals::kVcuSwitch ? "gpio" : "forced",
+                           "can_inverter_status",
                            vcuReady ? 1 : 0,
                            rbPlusLevel,
                            nauLdoConfigured ? 1 : 0,
@@ -738,7 +795,7 @@ void networkTaskEntry(void* /*parameter*/)
                           wifiStatusToString(status),
                           ip.c_str(),
                           otaStarted ? "ready" : "not-ready",
-                          MetaSense::Globals::kVcuSwitch ? "gpio" : "forced",
+                          "can_inverter_status",
                           vcuReady ? 1 : 0,
                           rbPlusLevel,
                           torqueNm,
@@ -758,7 +815,7 @@ void networkTaskEntry(void* /*parameter*/)
                            wifiStatusToString(status),
                            ip.c_str(),
                            otaStarted ? "ready" : "not-ready",
-                           MetaSense::Globals::kVcuSwitch ? "gpio" : "forced",
+                           "can_inverter_status",
                            vcuReady ? 1 : 0,
                            rbPlusLevel,
                            torqueNm,
@@ -866,6 +923,7 @@ void setup()
     MetaSense::Settings::loadFromStorage();
     Serial.println("[BOOT] Settings loaded from storage (if available)");
     Serial0.println("[BOOT] Settings loaded from storage (if available)");
+    logBuildProfile();
     scanI2cBus();
     logWifiConfiguration();
 

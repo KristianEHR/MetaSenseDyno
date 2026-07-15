@@ -14,7 +14,7 @@ constexpr float kDefaultLoadAvgN = 5.0f;
 constexpr float kDefaultLoadAvgN2 = 5.0f;
 constexpr uint8_t kDefaultLoadFilterMode = 1;
 constexpr uint16_t kDefaultLoadCellGain = 128;
-constexpr uint16_t kDefaultLoadCellRateSps = 80;
+constexpr uint16_t kDefaultLoadCellRateSps = 320;
 constexpr float kDefaultKp = 0.073f;
 constexpr float kDefaultKi = 0.524f;
 constexpr float kLegacyDefaultKp = 0.02f;
@@ -25,6 +25,10 @@ constexpr float kDefaultMotorModeMaxRpm = 2000.0f;
 constexpr float kDefaultIdleTorqueNm = 4.0f;
 constexpr float kDefaultBrakeMaxTorqueNm = 200.0f;
 constexpr bool kDefaultForceVcuReadyForUiTest = false;
+#ifndef METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS
+#define METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS 0
+#endif
+constexpr bool kDefaultLeafSimFeedbackEnabled = (METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS != 0);
 
 constexpr float kDefaultMaxRPM = 18000.0f;
 constexpr float kDefaultMaxHP = 25.0f;
@@ -69,6 +73,7 @@ float motorModeMaxRpm = kDefaultMotorModeMaxRpm;
 float idleTorqueNm = kDefaultIdleTorqueNm;
 float brakeMaxTorqueNm = kDefaultBrakeMaxTorqueNm;
 bool forceVcuReadyForUiTest = kDefaultForceVcuReadyForUiTest;
+bool leafSimFeedbackEnabled = kDefaultLeafSimFeedbackEnabled;
 
 // Gauge display ranges
 float maxRPM          = kDefaultMaxRPM;
@@ -140,6 +145,7 @@ void resetToDefaults()
     idleTorqueNm = kDefaultIdleTorqueNm;
     brakeMaxTorqueNm = kDefaultBrakeMaxTorqueNm;
     forceVcuReadyForUiTest = kDefaultForceVcuReadyForUiTest;
+    leafSimFeedbackEnabled = kDefaultLeafSimFeedbackEnabled;
 
     maxRPM = kDefaultMaxRPM;
     maxHP = kDefaultMaxHP;
@@ -192,6 +198,10 @@ void loadFromStorage()
     idleTorqueNm = prefs.getFloat("idleTorque", idleTorqueNm);
     brakeMaxTorqueNm = prefs.getFloat("brakeMaxTq", brakeMaxTorqueNm);
     forceVcuReadyForUiTest = kDefaultForceVcuReadyForUiTest;
+    leafSimFeedbackEnabled = prefs.getBool("leafSimFb", leafSimFeedbackEnabled);
+    if (!kDefaultLeafSimFeedbackEnabled) {
+        leafSimFeedbackEnabled = false;
+    }
 
     // One-time migration: only bump unchanged legacy defaults to the
     // physics-based RPM-domain PI gains. Preserve user-tuned values.
@@ -306,6 +316,7 @@ void saveToStorage()
     prefs.putFloat("motorMaxRpm", motorModeMaxRpm);
     prefs.putFloat("idleTorque", idleTorqueNm);
     prefs.putFloat("brakeMaxTq", brakeMaxTorqueNm);
+    prefs.putBool("leafSimFb", leafSimFeedbackEnabled);
 
     prefs.putFloat("maxRPM", maxRPM);
     prefs.putFloat("maxHP", maxHP);

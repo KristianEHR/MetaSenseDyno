@@ -14,6 +14,12 @@ bool s_configured = false;
 LeafInvFeedback s_feedback{};
 Stats s_stats;
 
+bool isLeafStatusId(uint32_t id)
+{
+    return id == 0x1DA || id == 0x1DB || id == 0x1DC || id == 0x1D4 ||
+           id == 0x01A || id == 0x01B || id == 0x01C || id == 0x014;
+}
+
 bool ensureReady(uint32_t nowMs)
 {
     if (!s_configured) {
@@ -80,6 +86,14 @@ void poll(uint32_t nowMs)
     }
 
     s_stats.lastTwaiState = static_cast<uint8_t>(twaiStatus.state);
+    s_stats.twaiRxQueued = static_cast<uint32_t>(twaiStatus.msgs_to_rx);
+    s_stats.twaiTxQueued = static_cast<uint32_t>(twaiStatus.msgs_to_tx);
+    s_stats.twaiRxMissed = static_cast<uint32_t>(twaiStatus.rx_missed_count);
+    s_stats.twaiRxOverrun = static_cast<uint32_t>(twaiStatus.rx_overrun_count);
+    s_stats.twaiArbLost = static_cast<uint32_t>(twaiStatus.arb_lost_count);
+    s_stats.twaiBusError = static_cast<uint32_t>(twaiStatus.bus_error_count);
+    s_stats.twaiTxErrorCounter = static_cast<uint32_t>(twaiStatus.tx_error_counter);
+    s_stats.twaiRxErrorCounter = static_cast<uint32_t>(twaiStatus.rx_error_counter);
     if (twaiStatus.state == TWAI_STATE_BUS_OFF) {
         handleDriverFault(nowMs, true);
         return;
@@ -104,7 +118,26 @@ void poll(uint32_t nowMs)
 
         LeafCan::decodeFrame(msg, s_feedback, nowMs);
         s_stats.lastRxMs = nowMs;
+        s_stats.lastRxId = id;
         ++s_stats.rxFrames;
+        if (isLeafStatusId(id)) {
+            ++s_stats.rxLeafFrames;
+        } else {
+            ++s_stats.rxUnknownFrames;
+            if (id == 0x120U) {
+                ++s_stats.rx120Frames;
+                s_stats.last120Ms = nowMs;
+                s_stats.last120Len = len;
+                memset(s_stats.last120Data, 0, sizeof(s_stats.last120Data));
+                memcpy(s_stats.last120Data, data, len);
+            } else if (id == 0x55AU) {
+                ++s_stats.rx55aFrames;
+                s_stats.last55aMs = nowMs;
+                s_stats.last55aLen = len;
+                memset(s_stats.last55aData, 0, sizeof(s_stats.last55aData));
+                memcpy(s_stats.last55aData, data, len);
+            }
+        }
     }
 }
 

@@ -18,6 +18,7 @@ extern float motorModeMaxRpm;
 extern float idleTorqueNm;
 extern float brakeMaxTorqueNm;
 extern bool forceVcuReadyForUiTest;
+extern bool leafSimFeedbackEnabled;
 
 // Gauge display ranges (sent back in settings snapshot)
 extern float maxRPM;

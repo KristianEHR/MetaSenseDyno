@@ -5,7 +5,7 @@ bool LoadCellHAL::begin() {
     if (!nau.begin()) return false;
 
     nau.setGain(NAU7802_GAIN_128);
-    nau.setRate(NAU7802_RATE_80SPS);
+    nau.setRate(NAU7802_RATE_320SPS);
 
     ok = true;
     return true;

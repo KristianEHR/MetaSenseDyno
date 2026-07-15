@@ -112,6 +112,7 @@ String buildProfilePayload(bool includeTypeEnvelope)
     json += ",\"motorModeMaxRpm\":" + String(MetaSense::Settings::motorModeMaxRpm, 0);
     json += ",\"idleTorqueNm\":" + String(MetaSense::Settings::idleTorqueNm, 2);
     json += ",\"brakeMaxTorqueNm\":" + String(MetaSense::Settings::brakeMaxTorqueNm, 1);
+    json += ",\"leafSimFeedback\":" + String(MetaSense::Settings::leafSimFeedbackEnabled ? 1 : 0);
     json += ",\"pulsesPerRev\":" + String(MetaSense::Settings::pulsesPerRev, 2);
     json += ",\"pulsesPerRevDrum\":" + String(MetaSense::Settings::pulsesPerRevDrum, 2);
     json += ",\"rpmFilter\":" + String(MetaSense::Settings::filterAlpha, 3);
@@ -252,6 +253,17 @@ bool applyProfilePayload(const String& payload)
             MetaSense::Settings::brakeMaxTorqueNm = brakeMaxTorque;
         }
     }
+    if (!profile["leafSimFeedback"].isNull()) {
+        if (profile["leafSimFeedback"].is<bool>()) {
+            MetaSense::Settings::leafSimFeedbackEnabled = profile["leafSimFeedback"].as<bool>();
+        } else {
+            String flag = profile["leafSimFeedback"].as<String>();
+            flag.trim();
+            flag.toLowerCase();
+            MetaSense::Settings::leafSimFeedbackEnabled =
+                (flag == "1" || flag == "true" || flag == "on" || flag == "yes");
+        }
+    }
     if (!profile["tachoCal"].isNull()) MetaSense::Settings::setTachoCal(profile["tachoCal"].as<float>());
     if (!profile["rpmTarget"].isNull()) MetaSense::Settings::setRpmTarget(profile["rpmTarget"].as<float>());
     if (!profile["rpmStart"].isNull()) MetaSense::Settings::setRpmStart(profile["rpmStart"].as<float>());
@@ -356,6 +368,7 @@ void sendSettingsSnapshot()
     json += ",\"idleTorqueNm\":" + String(MetaSense::Settings::idleTorqueNm, 2);
     json += ",\"brakeMaxTorqueNm\":" + String(MetaSense::Settings::brakeMaxTorqueNm, 1);
     json += ",\"forceVcuReadyForUiTest\":" + String(MetaSense::Settings::forceVcuReadyForUiTest ? 1 : 0);
+    json += ",\"leafSimFeedback\":" + String(MetaSense::Settings::leafSimFeedbackEnabled ? 1 : 0);
     json += ",\"pulsesPerRev\":" + String(MetaSense::Settings::pulsesPerRev, 2);
     json += ",\"rpmFilter\":" + String(MetaSense::Settings::filterAlpha, 3);
     json += ",\"loadAvgN\":" + String(MetaSense::Settings::loadAvgN, 0);
@@ -448,7 +461,6 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
         }
         return;
     }
-
     #pragma GCC diagnostic push
 #   pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     StaticJsonDocument<256> doc;
@@ -866,6 +878,12 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
             flag.trim();
             flag.toLowerCase();
             MetaSense::Settings::forceVcuReadyForUiTest =
+                (flag == "1" || flag == "true" || flag == "on" || flag == "yes");
+        } else if (key == "leafSimFeedback") {
+            String flag = val;
+            flag.trim();
+            flag.toLowerCase();
+            MetaSense::Settings::leafSimFeedbackEnabled =
                 (flag == "1" || flag == "true" || flag == "on" || flag == "yes");
         } else if (key == "pulsesPerRev") {
             MetaSense::Settings::pulsesPerRev = (fval > 0.0f) ? fval : MetaSense::Settings::pulsesPerRev;

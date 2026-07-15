@@ -1,5 +1,9 @@
 #include "LeafCan.h"
 
+#ifndef METASENSE_LEAF_VARIANT_120_55A
+#define METASENSE_LEAF_VARIANT_120_55A 0
+#endif
+
 static inline float decodeMotorSpeed(const uint8_t *d)
 {
     // BO_ 0x1DA MotorSpeed
@@ -32,6 +36,17 @@ static inline void decodeTemps(const uint8_t *d,
     coolant = static_cast<float>(d[2]) - 40.0f;
 }
 
+static inline void decodeTempsOffset1(const uint8_t *d,
+                                      float &inv,
+                                      float &stator,
+                                      float &coolant)
+{
+    // Variant observed on this inverter: 0x55A packs three temp bytes at [1..3].
+    inv = static_cast<float>(d[1]) - 40.0f;
+    stator = static_cast<float>(d[2]) - 40.0f;
+    coolant = static_cast<float>(d[3]) - 40.0f;
+}
+
 static inline void decodeStatus(const uint8_t *d,
                                 bool &ready,
                                 bool &fault,
@@ -60,37 +75,67 @@ void LeafCan::decodeFrame(const twai_message_t &msg,
 
     switch (id)
     {
-        case 0x1DA: // MotorSpeed
+        case 0x1DA: // MotorSpeed (primary)
+        case 0x01A: // MotorSpeed (short-ID variant)
             if (dlc >= 4U) {
                 fb.rpm = decodeMotorSpeed(d);
                 fb.rpm_update_ms = now_ms;
                 fb.last_update_ms = now_ms;
+                ++fb.rpm_frames;
             }
             break;
 
-        case 0x1DB: // MotorTorque
+        case 0x1DB: // MotorTorque (primary)
+        case 0x01B: // MotorTorque (short-ID variant)
             if (dlc >= 4U) {
                 fb.torque_nm = decodeMotorTorque(d);
                 fb.torque_update_ms = now_ms;
                 fb.last_update_ms = now_ms;
+                ++fb.torque_frames;
             }
             break;
 
-        case 0x1DC: // InverterTemps
+        case 0x1DC: // InverterTemps (primary)
+        case 0x01C: // InverterTemps (short-ID variant)
             if (dlc >= 3U) {
                 decodeTemps(d, fb.inverter_temp, fb.stator_temp, fb.coolant_temp);
                 fb.temps_update_ms = now_ms;
                 fb.last_update_ms = now_ms;
+                ++fb.temps_frames;
             }
             break;
 
-        case 0x1D4: // InverterStatus
+        case 0x1D4: // InverterStatus (primary)
+        case 0x014: // InverterStatus (short-ID variant)
             if (dlc >= 1U) {
                 decodeStatus(d, fb.ready, fb.fault, fb.warning, fb.limp);
                 fb.status_update_ms = now_ms;
                 fb.last_update_ms = now_ms;
+                ++fb.status_frames;
             }
             break;
+
+#if METASENSE_LEAF_VARIANT_120_55A
+        case 0x120: // Variant torque-like frame (bytes [2..3], big-endian, 0.1 Nm)
+            if (dlc >= 4U) {
+                const int16_t raw = static_cast<int16_t>(
+                    (static_cast<uint16_t>(d[2]) << 8) | static_cast<uint16_t>(d[3]));
+                fb.torque_nm = static_cast<float>(raw) * 0.1f;
+                fb.torque_update_ms = now_ms;
+                fb.last_update_ms = now_ms;
+                ++fb.torque_frames;
+            }
+            break;
+
+        case 0x55A: // Variant temps frame (bytes [1..3], +40 C offset)
+            if (dlc >= 4U) {
+                decodeTempsOffset1(d, fb.inverter_temp, fb.stator_temp, fb.coolant_temp);
+                fb.temps_update_ms = now_ms;
+                fb.last_update_ms = now_ms;
+                ++fb.temps_frames;
+            }
+            break;
+#endif
 
         default:
             // Ignore other IDs.
@@ -116,4 +161,9 @@ void LeafCan::reset(LeafInvFeedback &fb)
     fb.temps_update_ms = 0;
     fb.status_update_ms = 0;
     fb.last_update_ms = 0;
+
+    fb.rpm_frames = 0;
+    fb.torque_frames = 0;
+    fb.temps_frames = 0;
+    fb.status_frames = 0;
 }
