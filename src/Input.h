@@ -26,6 +26,7 @@ namespace MetaSense::Input {
                         float& climateCf);
     float currentKpLive();
     bool isVcuReady();
+    const char* vcuReadySource();
     void setUiModeHintTrend(bool trendMode);
     bool isUiModeHintTrend();
     void getLoadCellInitStatus(bool& ldoConfigured, bool& internalCalOk, uint8_t& internalCalAttempts);

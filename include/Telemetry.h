@@ -72,6 +72,11 @@ struct Telemetry {
     // Leaf inverter CAN telemetry (captured in parallel with analog/I2C sources).
     float leaf_rpm = 0.0f;
     float leaf_torqueNm = 0.0f;
+    float leaf_torqueDemandNm = 0.0f;
+    float leaf_torqueErrorNm = 0.0f;
+    float leaf_torqueErrorPct = 0.0f;
+    uint16_t leaf_torqueTrackMs = 0;
+    bool leaf_torqueTrackPending = false;
     float leaf_invTempC = 0.0f;
     float leaf_statorTempC = 0.0f;
     float leaf_coolantTempC = 0.0f;
