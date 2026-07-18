@@ -170,6 +170,7 @@ static uint32_t lastCanEventLogMs = 0;
 static uint32_t lastCanAltDiagMs = 0;
 static uint32_t lastCanAlt120FramesLogged = 0;
 static uint32_t lastCanAlt55aFramesLogged = 0;
+static uint32_t lastCanUnknownFramesLogged = 0;
 #endif
 static uint32_t lastCanBusOffSeen = 0;
 static uint32_t lastCanStatusQueryFailuresSeen = 0;
@@ -184,6 +185,7 @@ static const uint32_t CAN_TX_PERIOD_MS = 10;
 static const uint32_t CAN_RX_CHECK_PERIOD_MS = 20;
 static const uint32_t CAN_RX_TARGET_MAX_AGE_MS = 250;
 static const uint32_t CAN_RX_MISSING_LOG_PERIOD_MS = 5000;
+static const uint32_t CAN_0X55B_DIAG_LOG_PERIOD_MS = 1000;
 static const uint32_t CAN_EVENT_LOG_MIN_PERIOD_MS = 5000;
 #if defined(METASENSE_LEAF_VCM_DIAGNOSTICS) && (METASENSE_LEAF_VCM_DIAGNOSTICS != 0)
 static const uint32_t CAN_ALT_DIAG_LOG_PERIOD_MS = 5000;
@@ -251,10 +253,33 @@ static uint32_t s_leafPreStatusLastMs = 0;
 static uint32_t s_leafRxDiagLastMs = 0;
 static uint32_t s_leafRxWarnLastMs = 0;
 static uint32_t s_leafRxAwaitPartnerLastMs = 0;
+static uint32_t s_leaf0x55bDiagLastMs = 0;
 static uint32_t s_leafTxGapTestCycleStartMs = 0;
 static bool s_leafTxGapTestActive = false;
 static bool s_leafTxGapTestLoggedStart = false;
 static bool s_leafTxGapTestLoggedEnd = false;
+
+struct Leaf55bVisibleSnapshot {
+    uint32_t id = 0U;
+    uint32_t frames = 0U;
+    uint32_t updateMs = 0U;
+    const uint8_t* raw = nullptr;
+};
+
+Leaf55bVisibleSnapshot visibleLeaf55bSnapshot(const LeafInvFeedback& leafFbDiag)
+{
+    Leaf55bVisibleSnapshot snapshot;
+    if (leafFbDiag.id55b_frames != 0U) {
+        snapshot.id = leafFbDiag.id55b_last_id;
+        snapshot.frames = leafFbDiag.id55b_frames;
+        snapshot.updateMs = leafFbDiag.id55b_update_ms;
+        snapshot.raw = leafFbDiag.id55b_raw;
+        return snapshot;
+    }
+
+    snapshot.raw = leafFbDiag.id55b_raw;
+    return snapshot;
+}
 
 constexpr uint32_t kLeafVcmCanOnlineDetectMs = 500;
 constexpr uint32_t kLeafVcmFeedbackTimeoutMs = 250;
@@ -1699,10 +1724,21 @@ void pollLeafCanFrames(uint32_t nowMs)
 #if METASENSE_LEAF_CAN_RX_ENABLED
     static bool canConfigured = false;
     static bool canReadyLogged = false;
+    static uint32_t lastPollDiagMs = 0;
+    const uint32_t POLL_DIAG_MS = 10000; // Every 10 seconds
 
     if (!canConfigured) {
         MetaSense::CANBus::configure(kLeafCanConfig);
         canConfigured = true;
+        Serial.println("[INPUT-CAN] CAN configured");
+        Serial0.println("[INPUT-CAN] CAN configured");
+    }
+    
+    // Diagnostic: log that polling is happening
+    if (lastPollDiagMs == 0U || (nowMs - lastPollDiagMs) >= POLL_DIAG_MS) {
+        lastPollDiagMs = nowMs;
+        Serial.printf("[INPUT-CAN-POLL] calling CANBus::poll at %lu ms\n", 
+                      static_cast<unsigned long>(nowMs));
     }
 
     MetaSense::CANBus::poll(nowMs);
@@ -2012,6 +2048,8 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         ? (data.loadKg * 9.82f) * armMeters
         : 0.0f;
     const LeafInvFeedback& leafFbDiag = MetaSense::CANBus::feedback();
+    const Leaf55bVisibleSnapshot visible55b = visibleLeaf55bSnapshot(leafFbDiag);
+    const uint32_t visible55bAgeMs = elapsedMsSafe(nowMs, visible55b.updateMs);
 
     json = "{\"type\":\"data\",";
 
@@ -2087,11 +2125,29 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         json += "\"leaf_1da_rpm\":" + String(leafFbDiag.rpm, 0) + ",";
         json += "\"leaf_1da_clock\":" + String(static_cast<unsigned long>(leafFbDiag.mg_clock)) + ",";
         json += "\"leaf_1da_err\":" + String(static_cast<unsigned long>(leafFbDiag.mg_error_codes)) + ",";
+        json += "\"leaf_1da_err_b0\":" + String((leafFbDiag.mg_error_codes >> 0) & 0x01U) + ",";
+        json += "\"leaf_1da_err_b1\":" + String((leafFbDiag.mg_error_codes >> 1) & 0x01U) + ",";
+        json += "\"leaf_1da_err_b2\":" + String((leafFbDiag.mg_error_codes >> 2) & 0x01U) + ",";
+        json += "\"leaf_1da_err_b3\":" + String((leafFbDiag.mg_error_codes >> 3) & 0x01U) + ",";
+        json += "\"leaf_1da_err_b4\":" + String((leafFbDiag.mg_error_codes >> 4) & 0x01U) + ",";
+        json += "\"leaf_1da_err_b5\":" + String((leafFbDiag.mg_error_codes >> 5) & 0x01U) + ",";
+        json += "\"leaf_tx_gap_test\":" + String(s_leafTxGapTestActive ? 1 : 0) + ",";
         json += "\"leaf_1da_crc\":" + String(static_cast<unsigned long>(leafFbDiag.crc_1da)) + ",";
         json += "\"leaf_id1da_frames\":" + String(static_cast<unsigned long>(leafFbDiag.rpm_frames)) + ",";
         json += "\"leaf_id1dc_frames\":" + String(static_cast<unsigned long>(leafFbDiag.temps_frames)) + ",";
         json += "\"leaf_id1da_age_ms\":" + String(static_cast<unsigned long>(elapsedMsSafe(nowMs, leafFbDiag.rpm_update_ms))) + ",";
         json += "\"leaf_id1dc_age_ms\":" + String(static_cast<unsigned long>(elapsedMsSafe(nowMs, leafFbDiag.temps_update_ms))) + ",";
+        json += "\"leaf_55b_id\":" + String(static_cast<unsigned long>(visible55b.id)) + ",";
+        json += "\"leaf_55b_frames\":" + String(static_cast<unsigned long>(visible55b.frames)) + ",";
+        json += "\"leaf_55b_age_ms\":" + String(static_cast<unsigned long>(visible55bAgeMs)) + ",";
+        json += "\"leaf_55b_b0\":" + String(static_cast<unsigned long>(visible55b.raw[0])) + ",";
+        json += "\"leaf_55b_b1\":" + String(static_cast<unsigned long>(visible55b.raw[1])) + ",";
+        json += "\"leaf_55b_b2\":" + String(static_cast<unsigned long>(visible55b.raw[2])) + ",";
+        json += "\"leaf_55b_b3\":" + String(static_cast<unsigned long>(visible55b.raw[3])) + ",";
+        json += "\"leaf_55b_b4\":" + String(static_cast<unsigned long>(visible55b.raw[4])) + ",";
+        json += "\"leaf_55b_b5\":" + String(static_cast<unsigned long>(visible55b.raw[5])) + ",";
+        json += "\"leaf_55b_b6\":" + String(static_cast<unsigned long>(visible55b.raw[6])) + ",";
+        json += "\"leaf_55b_b7\":" + String(static_cast<unsigned long>(visible55b.raw[7])) + ",";
         json += "\"leaf_inv_temp\":" + String(data.leaf_invTempC, 1) + ",";
         json += "\"leaf_stator_temp\":" + String(data.leaf_statorTempC, 1) + ",";
         json += "\"leaf_coolant_temp\":" + String(data.leaf_coolantTempC, 1) + ",";
@@ -2794,7 +2850,6 @@ bool sendLeafTorqueCommand55B(float torqueDemandNm,
         const float previousCmd = s_leafLastSentTorqueNm;
         s_leafLastSentTorqueNm = torqueClamped;
         s_leafLastSentTorqueMs = nowMs;
-
         if (fabsf(torqueClamped - previousCmd) >= kLeafTorqueTrackStepNm) {
             s_leafTorqueTrackStartMs = nowMs;
             s_leafTorqueTrackTargetNm = torqueClamped;
@@ -2857,14 +2912,15 @@ void begin()
     s_leafRxDiagLastMs = 0;
     s_leafRxWarnLastMs = 0;
     s_leafRxAwaitPartnerLastMs = 0;
+    s_leaf0x55bDiagLastMs = 0;
     s_leafTxGapTestCycleStartMs = 0;
     s_leafTxGapTestActive = false;
     s_leafTxGapTestLoggedStart = false;
     s_leafTxGapTestLoggedEnd = false;
 #if defined(METASENSE_LEAF_VCM_DIAGNOSTICS) && (METASENSE_LEAF_VCM_DIAGNOSTICS != 0)
     lastCanAltDiagMs = 0;
-    lastCanAlt120FramesLogged = 0;
     lastCanAlt55aFramesLogged = 0;
+    lastCanUnknownFramesLogged = 0;
 #endif
     lastCanBusOffSeen = 0;
     lastCanStatusQueryFailuresSeen = 0;
@@ -3362,12 +3418,15 @@ void loop()
 #if defined(METASENSE_LEAF_VCM_DIAGNOSTICS) && (METASENSE_LEAF_VCM_DIAGNOSTICS != 0)
     if (s_leafPreStatusLastMs == 0U || (now - s_leafPreStatusLastMs) >= CAN_PRE_DIAG_LOG_PERIOD_MS) {
         const MetaSense::CANBus::Stats& canStatsDiag = MetaSense::CANBus::stats();
+        const Leaf55bVisibleSnapshot visible55b = visibleLeaf55bSnapshot(leafFbDiag);
+        const uint32_t visible55bAgeMs = elapsedMsSafe(now, visible55b.updateMs);
         const unsigned long feedbackAgeMs = static_cast<unsigned long>(elapsedMsSafe(now, lastCanLeafAnyUpdate));
         const unsigned long id1daAgeMs = static_cast<unsigned long>(elapsedMsSafe(now, leafFbDiag.rpm_update_ms));
         const unsigned long id1dbAgeMs = static_cast<unsigned long>(elapsedMsSafe(now, leafFbDiag.torque_update_ms));
         const unsigned long id1dcAgeMs = static_cast<unsigned long>(elapsedMsSafe(now, leafFbDiag.temps_update_ms));
         const unsigned long id1d4AgeMs = static_cast<unsigned long>(elapsedMsSafe(now, leafFbDiag.status_update_ms));
-        Serial.printf("[VCM-PRE] state=%s can_partner=%d can_ready=%d ssr=%d precharge=%d precharge_ok=%d vcu_ready=%d inv_ready=%d inv_fault=%d inv_warn=%d inv_limp=%d hv=%.1f feedback_ms=%lu id1DA=%lu(age=%lu) id1DB=%lu(age=%lu) id1DC=%lu(age=%lu) id1D4=%lu(age=%lu) rx=%lu leaf_rx=%lu unk_rx=%lu tx=%lu last_id=0x%03lX\n",
+        const unsigned long id55bAgeMs = static_cast<unsigned long>(visible55bAgeMs);
+        Serial.printf("[VCM-PRE] state=%s can_partner=%d can_ready=%d ssr=%d precharge=%d precharge_ok=%d vcu_ready=%d inv_ready=%d inv_fault=%d inv_warn=%d inv_limp=%d hv=%.1f feedback_ms=%lu id1DA=%lu(age=%lu) id1DB=%lu(age=%lu) id1DC=%lu(age=%lu) id1D4=%lu(age=%lu) id55B=%lu(age=%lu) rx=%lu leaf_rx=%lu unk_rx=%lu(last_unk_id=0x%03lX[%02X%02X%02X%02X]) rx55b=%lu rx05b=%lu rx50b=%lu tx=%lu last_id=0x%03lX\n",
                       leafVcmStateName(s_leafVcmState),
                       s_leafCanPartnerSeen ? 1 : 0,
                       MetaSense::CANBus::isReady() ? 1 : 0,
@@ -3389,45 +3448,66 @@ void loop()
                       id1dcAgeMs,
                       static_cast<unsigned long>(leafFbDiag.status_frames),
                       id1d4AgeMs,
+                      static_cast<unsigned long>(visible55b.frames),
+                      id55bAgeMs,
                       static_cast<unsigned long>(canStatsDiag.rxFrames),
                       static_cast<unsigned long>(canStatsDiag.rxLeafFrames),
                       static_cast<unsigned long>(canStatsDiag.rxUnknownFrames),
+                      static_cast<unsigned long>(canStatsDiag.lastUnknownId),
+                      canStatsDiag.lastUnknownData[0],
+                      canStatsDiag.lastUnknownData[1],
+                      canStatsDiag.lastUnknownData[2],
+                      canStatsDiag.lastUnknownData[3],
+                      static_cast<unsigned long>(canStatsDiag.rx55bFrames),
+                      static_cast<unsigned long>(canStatsDiag.rx05bFrames),
+                      static_cast<unsigned long>(canStatsDiag.rx50bFrames),
                       static_cast<unsigned long>(canStatsDiag.txFrames),
                       static_cast<unsigned long>(canStatsDiag.lastRxId));
-        Serial0.printf("[VCM-PRE] state=%s can_partner=%d can_ready=%d ssr=%d precharge=%d precharge_ok=%d vcu_ready=%d inv_ready=%d inv_fault=%d inv_warn=%d inv_limp=%d hv=%.1f feedback_ms=%lu id1DA=%lu(age=%lu) id1DB=%lu(age=%lu) id1DC=%lu(age=%lu) id1D4=%lu(age=%lu) rx=%lu leaf_rx=%lu unk_rx=%lu tx=%lu last_id=0x%03lX\n",
-                       leafVcmStateName(s_leafVcmState),
-                       s_leafCanPartnerSeen ? 1 : 0,
-                       MetaSense::CANBus::isReady() ? 1 : 0,
-                       ssrActiveForLeafTx ? 1 : 0,
-                       prechargeActiveForLeafTx ? 1 : 0,
-                       prechargeSucceededForLeafTx ? 1 : 0,
-                       tele.vcuReady ? 1 : 0,
-                       tele.leaf_invReady ? 1 : 0,
-                       tele.leaf_invFault ? 1 : 0,
-                       tele.leaf_invWarning ? 1 : 0,
-                       tele.leaf_invLimp ? 1 : 0,
-                       tele.vcuHvVoltage,
-                       feedbackAgeMs,
-                       static_cast<unsigned long>(leafFbDiag.rpm_frames),
-                       id1daAgeMs,
-                       static_cast<unsigned long>(leafFbDiag.torque_frames),
-                       id1dbAgeMs,
-                       static_cast<unsigned long>(leafFbDiag.temps_frames),
-                       id1dcAgeMs,
-                       static_cast<unsigned long>(leafFbDiag.status_frames),
-                       id1d4AgeMs,
-                       static_cast<unsigned long>(canStatsDiag.rxFrames),
-                       static_cast<unsigned long>(canStatsDiag.rxLeafFrames),
-                       static_cast<unsigned long>(canStatsDiag.rxUnknownFrames),
-                       static_cast<unsigned long>(canStatsDiag.txFrames),
-                       static_cast<unsigned long>(canStatsDiag.lastRxId));
+        Serial0.printf("[VCM-PRE] state=%s can_partner=%d can_ready=%d ssr=%d precharge=%d precharge_ok=%d vcu_ready=%d inv_ready=%d inv_fault=%d inv_warn=%d inv_limp=%d hv=%.1f feedback_ms=%lu id1DA=%lu(age=%lu) id1DB=%lu(age=%lu) id1DC=%lu(age=%lu) id1D4=%lu(age=%lu) id55B=%lu(age=%lu) rx=%lu leaf_rx=%lu unk_rx=%lu(last_unk_id=0x%03lX[%02X%02X%02X%02X]) rx55b=%lu rx05b=%lu rx50b=%lu tx=%lu last_id=0x%03lX\n",
+                        leafVcmStateName(s_leafVcmState),
+                        s_leafCanPartnerSeen ? 1 : 0,
+                        MetaSense::CANBus::isReady() ? 1 : 0,
+                        ssrActiveForLeafTx ? 1 : 0,
+                        prechargeActiveForLeafTx ? 1 : 0,
+                        prechargeSucceededForLeafTx ? 1 : 0,
+                        tele.vcuReady ? 1 : 0,
+                        tele.leaf_invReady ? 1 : 0,
+                        tele.leaf_invFault ? 1 : 0,
+                        tele.leaf_invWarning ? 1 : 0,
+                        tele.leaf_invLimp ? 1 : 0,
+                        tele.vcuHvVoltage,
+                        feedbackAgeMs,
+                        static_cast<unsigned long>(leafFbDiag.rpm_frames),
+                        id1daAgeMs,
+                        static_cast<unsigned long>(leafFbDiag.torque_frames),
+                        id1dbAgeMs,
+                        static_cast<unsigned long>(leafFbDiag.temps_frames),
+                        id1dcAgeMs,
+                        static_cast<unsigned long>(leafFbDiag.status_frames),
+                        id1d4AgeMs,
+                        static_cast<unsigned long>(visible55b.frames),
+                        id55bAgeMs,
+                        static_cast<unsigned long>(canStatsDiag.rxFrames),
+                        static_cast<unsigned long>(canStatsDiag.rxLeafFrames),
+                        static_cast<unsigned long>(canStatsDiag.rxUnknownFrames),
+                        static_cast<unsigned long>(canStatsDiag.lastUnknownId),
+                        canStatsDiag.lastUnknownData[0],
+                        canStatsDiag.lastUnknownData[1],
+                        canStatsDiag.lastUnknownData[2],
+                        canStatsDiag.lastUnknownData[3],
+                        static_cast<unsigned long>(canStatsDiag.rx55bFrames),
+                        static_cast<unsigned long>(canStatsDiag.rx05bFrames),
+                        static_cast<unsigned long>(canStatsDiag.rx50bFrames),
+                        static_cast<unsigned long>(canStatsDiag.txFrames),
+                        static_cast<unsigned long>(canStatsDiag.lastRxId));
         s_leafPreStatusLastMs = now;
     }
 #endif
 
     if (s_leafRxDiagLastMs == 0U || (now - s_leafRxDiagLastMs) >= CAN_RX_CHECK_PERIOD_MS) {
         const bool id1daFresh = (leafFbDiag.rpm_update_ms != 0U) &&
-                                (elapsedMsSafe(now, leafFbDiag.rpm_update_ms) <= CAN_RX_TARGET_MAX_AGE_MS);
+                    (elapsedMsSafe(now, leafFbDiag.rpm_update_ms) <= CAN_RX_TARGET_MAX_AGE_MS);
+        const Leaf55bVisibleSnapshot visible55b = visibleLeaf55bSnapshot(leafFbDiag);
 
         if (!id1daFresh) {
             if (!s_leafCanPartnerSeen) {
@@ -3450,54 +3530,99 @@ void loop()
             s_leafRxWarnLastMs = 0U;
         }
 
+        if (s_leaf0x55bDiagLastMs == 0U || (now - s_leaf0x55bDiagLastMs) >= CAN_0X55B_DIAG_LOG_PERIOD_MS) {
+            const float torqueDeltaLike1daNm = leafFbDiag.id55b_like1da_torque_nm - leafFbDiag.torque_nm;
+            const float rpmDeltaLike1da = leafFbDiag.id55b_like1da_rpm - leafFbDiag.rpm;
+            const unsigned long id55bAgeMs = static_cast<unsigned long>(elapsedMsSafe(now, visible55b.updateMs));
+            Serial.printf("[VCM-0x55B] fresh=%d id=0x%03lX frames=%lu age_ms=%lu raw=%02X %02X %02X %02X %02X %02X %02X %02X crc=0x%02X 55b_rpm=%.0f 1da_rpm=%.0f drpm=%.0f 55b_tq=%.1fNm 1da_tq=%.1fNm dtq=%.1fNm\n",
+                          visible55b.frames != 0U ? 1 : 0,
+                          static_cast<unsigned long>(visible55b.id),
+                          static_cast<unsigned long>(visible55b.frames),
+                          id55bAgeMs,
+                          static_cast<unsigned>(visible55b.raw[0]),
+                          static_cast<unsigned>(visible55b.raw[1]),
+                          static_cast<unsigned>(visible55b.raw[2]),
+                          static_cast<unsigned>(visible55b.raw[3]),
+                          static_cast<unsigned>(visible55b.raw[4]),
+                          static_cast<unsigned>(visible55b.raw[5]),
+                          static_cast<unsigned>(visible55b.raw[6]),
+                          static_cast<unsigned>(visible55b.raw[7]),
+                          static_cast<unsigned>(visible55b.raw[7]),
+                          leafFbDiag.id55b_like1da_rpm,
+                          leafFbDiag.rpm,
+                          rpmDeltaLike1da,
+                          leafFbDiag.id55b_like1da_torque_nm,
+                          leafFbDiag.torque_nm,
+                          torqueDeltaLike1daNm);
+            Serial0.printf("[VCM-0x55B] fresh=%d id=0x%03lX frames=%lu age_ms=%lu raw=%02X %02X %02X %02X %02X %02X %02X %02X crc=0x%02X 55b_rpm=%.0f 1da_rpm=%.0f drpm=%.0f 55b_tq=%.1fNm 1da_tq=%.1fNm dtq=%.1fNm\n",
+                           visible55b.frames != 0U ? 1 : 0,
+                           static_cast<unsigned long>(visible55b.id),
+                           static_cast<unsigned long>(visible55b.frames),
+                           id55bAgeMs,
+                           static_cast<unsigned>(visible55b.raw[0]),
+                           static_cast<unsigned>(visible55b.raw[1]),
+                           static_cast<unsigned>(visible55b.raw[2]),
+                           static_cast<unsigned>(visible55b.raw[3]),
+                           static_cast<unsigned>(visible55b.raw[4]),
+                           static_cast<unsigned>(visible55b.raw[5]),
+                           static_cast<unsigned>(visible55b.raw[6]),
+                           static_cast<unsigned>(visible55b.raw[7]),
+                           static_cast<unsigned>(visible55b.raw[7]),
+                           leafFbDiag.id55b_like1da_rpm,
+                           leafFbDiag.rpm,
+                           rpmDeltaLike1da,
+                           leafFbDiag.id55b_like1da_torque_nm,
+                           leafFbDiag.torque_nm,
+                           torqueDeltaLike1daNm);
+
+            const bool havePrimary55b = (leafFbDiag.id55b_primary_frames > 0U);
+            if (havePrimary55b) {
+                const unsigned long age55bMs = static_cast<unsigned long>(elapsedMsSafe(now, leafFbDiag.id55b_primary_update_ms));
+                Serial.printf("[VCM-55B-CMP] f55B=%lu(age=%lu,seen=1) f05B=%lu f50B=%lu\n",
+                              static_cast<unsigned long>(leafFbDiag.id55b_primary_frames),
+                              age55bMs,
+                              static_cast<unsigned long>(leafFbDiag.id05b_short_frames),
+                              static_cast<unsigned long>(leafFbDiag.id50b_alias_frames));
+                Serial0.printf("[VCM-55B-CMP] f55B=%lu(age=%lu,seen=1) f05B=%lu f50B=%lu\n",
+                               static_cast<unsigned long>(leafFbDiag.id55b_primary_frames),
+                               age55bMs,
+                               static_cast<unsigned long>(leafFbDiag.id05b_short_frames),
+                               static_cast<unsigned long>(leafFbDiag.id50b_alias_frames));
+            }
+            s_leaf0x55bDiagLastMs = now;
+        }
+
         s_leafRxDiagLastMs = now;
     }
 
 #if defined(METASENSE_LEAF_VCM_DIAGNOSTICS) && (METASENSE_LEAF_VCM_DIAGNOSTICS != 0)
     {
         const MetaSense::CANBus::Stats& canStatsAlt = MetaSense::CANBus::stats();
-        const bool altFramesChanged = (canStatsAlt.rx120Frames != lastCanAlt120FramesLogged) ||
-                                      (canStatsAlt.rx55aFrames != lastCanAlt55aFramesLogged);
+        const bool altFramesChanged = (canStatsAlt.rx55aFrames != lastCanAlt55aFramesLogged) ||
+                                      (canStatsAlt.rxUnknownFrames != lastCanUnknownFramesLogged);
         const bool altDiagDue = (lastCanAltDiagMs == 0U) ||
                                 ((now - lastCanAltDiagMs) >= CAN_ALT_DIAG_LOG_PERIOD_MS);
         if (altFramesChanged && altDiagDue) {
             const uint32_t dtMs = (lastCanAltDiagMs == 0U) ? 0U : (now - lastCanAltDiagMs);
-            const uint32_t d120 = canStatsAlt.rx120Frames - lastCanAlt120FramesLogged;
             const uint32_t d55a = canStatsAlt.rx55aFrames - lastCanAlt55aFramesLogged;
-            const float hz120 = (dtMs > 0U) ? (1000.0f * static_cast<float>(d120) / static_cast<float>(dtMs)) : 0.0f;
+            const uint32_t dUnk = canStatsAlt.rxUnknownFrames - lastCanUnknownFramesLogged;
             const float hz55a = (dtMs > 0U) ? (1000.0f * static_cast<float>(d55a) / static_cast<float>(dtMs)) : 0.0f;
+            const float hzUnk = (dtMs > 0U) ? (1000.0f * static_cast<float>(dUnk) / static_cast<float>(dtMs)) : 0.0f;
 
-            char payload120[3 * 8] = {0};
             char payload55a[3 * 8] = {0};
-            formatCanPayloadHex(canStatsAlt.last120Data,
-                                canStatsAlt.last120Len,
-                                payload120,
-                                sizeof(payload120));
             formatCanPayloadHex(canStatsAlt.last55aData,
                                 canStatsAlt.last55aLen,
                                 payload55a,
                                 sizeof(payload55a));
 
-            Serial.printf("[VCM-ALT] id120=%lu(d=%lu,%.1fHz,age=%lu,len=%u,data=%s) id55A=%lu(d=%lu,%.1fHz,age=%lu,len=%u,data=%s)\n",
-                          static_cast<unsigned long>(canStatsAlt.rx120Frames),
-                          static_cast<unsigned long>(d120),
-                          hz120,
-                          static_cast<unsigned long>(elapsedMsSafe(now, canStatsAlt.last120Ms)),
-                          static_cast<unsigned>(canStatsAlt.last120Len),
-                          payload120,
+            Serial.printf("[VCM-ALT] id55A=%lu(d=%lu,%.1fHz,age=%lu,len=%u,data=%s)\n",
                           static_cast<unsigned long>(canStatsAlt.rx55aFrames),
                           static_cast<unsigned long>(d55a),
                           hz55a,
                           static_cast<unsigned long>(elapsedMsSafe(now, canStatsAlt.last55aMs)),
                           static_cast<unsigned>(canStatsAlt.last55aLen),
                           payload55a);
-            Serial0.printf("[VCM-ALT] id120=%lu(d=%lu,%.1fHz,age=%lu,len=%u,data=%s) id55A=%lu(d=%lu,%.1fHz,age=%lu,len=%u,data=%s)\n",
-                           static_cast<unsigned long>(canStatsAlt.rx120Frames),
-                           static_cast<unsigned long>(d120),
-                           hz120,
-                           static_cast<unsigned long>(elapsedMsSafe(now, canStatsAlt.last120Ms)),
-                           static_cast<unsigned>(canStatsAlt.last120Len),
-                           payload120,
+            Serial0.printf("[VCM-ALT] id55A=%lu(d=%lu,%.1fHz,age=%lu,len=%u,data=%s)\n",
                            static_cast<unsigned long>(canStatsAlt.rx55aFrames),
                            static_cast<unsigned long>(d55a),
                            hz55a,
@@ -3505,8 +3630,11 @@ void loop()
                            static_cast<unsigned>(canStatsAlt.last55aLen),
                            payload55a);
 
-            lastCanAlt120FramesLogged = canStatsAlt.rx120Frames;
+            (void)dUnk;
+            (void)hzUnk;
+
             lastCanAlt55aFramesLogged = canStatsAlt.rx55aFrames;
+            lastCanUnknownFramesLogged = canStatsAlt.rxUnknownFrames;
             lastCanAltDiagMs = now;
         }
     }
@@ -3547,16 +3675,9 @@ void loop()
                 attemptDue &&
                 withinWindow &&
                 s_leafHandshakeAttemptCount < kLeafHandshakeMaxAttempts) {
-                s_leafHandshakeLastAttemptMs = now;
-                ++s_leafHandshakeAttemptCount;
-                const bool sent = MetaSense::Input::sendLeafTorqueCommand55B(0.0f,
-                                                                             false,
-                                                                             false,
-                                                                             false,
-                                                                             true);
-                if (sent) {
-                    ++s_leafHandshakeSentCount;
-                }
+                // RX-only sniffing mode: handshake TX disabled.
+                // Thunderstruck transmits 0x55B independently; we listen only.
+                // s_leafHandshakeSentCount remains 0.
             }
 
             if (s_leafHandshakeArmed &&
@@ -3731,7 +3852,9 @@ void loop()
 
         bool skipTxForGapTest = false;
 #if METASENSE_LEAF_TX_GAP_TEST_ENABLE
-        if (s_leafVcmState == LeafVcmBringupState::Ready) {
+        const bool id1daFreshForGapTest = (leafFbDiag.rpm_update_ms != 0U) &&
+                          (elapsedMsSafe(now, leafFbDiag.rpm_update_ms) <= CAN_RX_TARGET_MAX_AGE_MS);
+        if (id1daFreshForGapTest) {
             if (s_leafTxGapTestCycleStartMs == 0U) {
                 s_leafTxGapTestCycleStartMs = now;
                 s_leafTxGapTestActive = false;
@@ -3775,13 +3898,13 @@ void loop()
         }
 #endif
 
-        if (!skipTxForGapTest) {
-            (void)sendLeafTorqueCommand55B(torqueToSend,
-                                           readyBit,
-                                           hvOkBit,
-                                           brakeBit,
-                                           gearDriveBit);
-        }
+        // RX-only sniffing mode: 0x55B TX disabled.
+        // Master TX will be reintroduced during cleanup phase.
+        // (void)sendLeafTorqueCommand55B(torqueToSend,
+        //                                readyBit,
+        //                                hvOkBit,
+        //                                brakeBit,
+        //                                gearDriveBit);
 
         if (s_leafVcmState != prevLeafVcmState) {
             Serial.printf("[VCM-STATE] %s -> %s | can_ready=%d feedback_ms=%lu hv=%.1f vcu_ready=%d inv_ready=%d fault=%d\n",
@@ -3857,6 +3980,19 @@ void loop()
                            static_cast<unsigned long>(canStats.twaiBusError),
                            static_cast<unsigned long>(canStats.twaiTxErrorCounter),
                            static_cast<unsigned long>(canStats.twaiRxErrorCounter));
+            // Debug: show what unknown IDs are arriving
+            Serial.printf("[CAN-DBG] unk_id=0x%08lX rx55b=%lu rx05b=%lu rx50b=%lu rx55a=%lu\n",
+                          static_cast<unsigned long>(canStats.lastUnknownId),
+                          static_cast<unsigned long>(canStats.rx55bFrames),
+                          static_cast<unsigned long>(canStats.rx05bFrames),
+                          static_cast<unsigned long>(canStats.rx50bFrames),
+                          static_cast<unsigned long>(canStats.rx55aFrames));
+            Serial0.printf("[CAN-DBG] unk_id=0x%08lX rx55b=%lu rx05b=%lu rx50b=%lu rx55a=%lu\n",
+                           static_cast<unsigned long>(canStats.lastUnknownId),
+                           static_cast<unsigned long>(canStats.rx55bFrames),
+                           static_cast<unsigned long>(canStats.rx05bFrames),
+                           static_cast<unsigned long>(canStats.rx50bFrames),
+                           static_cast<unsigned long>(canStats.rx55aFrames));
             lastCanEventLogMs = now;
         }
 
@@ -3876,6 +4012,74 @@ void loop()
         lastCanDiagTwaiBusError = canStats.twaiBusError;
         lastCanDiagTwaiTxErr = canStats.twaiTxErrorCounter;
         lastCanDiagTwaiRxErr = canStats.twaiRxErrorCounter;
+    }
+
+    {
+        const MetaSense::CANBus::Stats& canStatsPhy = MetaSense::CANBus::stats();
+        static uint32_t lastCanPhyLogMs = 0U;
+        static uint32_t prevTec = 0U;
+        static uint32_t prevRec = 0U;
+        static uint32_t prevBusErr = 0U;
+        static uint32_t prevArbLost = 0U;
+        static uint32_t prevRxOverrun = 0U;
+        static bool canPhyInit = false;
+
+        if (!canPhyInit) {
+            prevTec = canStatsPhy.twaiTxErrorCounter;
+            prevRec = canStatsPhy.twaiRxErrorCounter;
+            prevBusErr = canStatsPhy.twaiBusError;
+            prevArbLost = canStatsPhy.twaiArbLost;
+            prevRxOverrun = canStatsPhy.twaiRxOverrun;
+            lastCanPhyLogMs = now;
+            canPhyInit = true;
+        }
+
+        if ((now - lastCanPhyLogMs) >= 1000U) {
+            const int32_t dTec = static_cast<int32_t>(canStatsPhy.twaiTxErrorCounter) -
+                                 static_cast<int32_t>(prevTec);
+            const int32_t dRec = static_cast<int32_t>(canStatsPhy.twaiRxErrorCounter) -
+                                 static_cast<int32_t>(prevRec);
+            const int32_t dBusErr = static_cast<int32_t>(canStatsPhy.twaiBusError) -
+                                    static_cast<int32_t>(prevBusErr);
+            const int32_t dArbLost = static_cast<int32_t>(canStatsPhy.twaiArbLost) -
+                                     static_cast<int32_t>(prevArbLost);
+            const int32_t dRxOverrun = static_cast<int32_t>(canStatsPhy.twaiRxOverrun) -
+                                       static_cast<int32_t>(prevRxOverrun);
+
+            Serial.printf("[CAN-PHY] tec=%lu rec=%lu dtec=%ld drec=%ld berr=%lu(d=%ld) arb_lost=%lu(d=%ld) rx_ovr=%lu(d=%ld) bus_off=%lu state=%u\n",
+                          static_cast<unsigned long>(canStatsPhy.twaiTxErrorCounter),
+                          static_cast<unsigned long>(canStatsPhy.twaiRxErrorCounter),
+                          static_cast<long>(dTec),
+                          static_cast<long>(dRec),
+                          static_cast<unsigned long>(canStatsPhy.twaiBusError),
+                          static_cast<long>(dBusErr),
+                          static_cast<unsigned long>(canStatsPhy.twaiArbLost),
+                          static_cast<long>(dArbLost),
+                          static_cast<unsigned long>(canStatsPhy.twaiRxOverrun),
+                          static_cast<long>(dRxOverrun),
+                          static_cast<unsigned long>(canStatsPhy.busOffEvents),
+                          static_cast<unsigned>(canStatsPhy.lastTwaiState));
+            Serial0.printf("[CAN-PHY] tec=%lu rec=%lu dtec=%ld drec=%ld berr=%lu(d=%ld) arb_lost=%lu(d=%ld) rx_ovr=%lu(d=%ld) bus_off=%lu state=%u\n",
+                           static_cast<unsigned long>(canStatsPhy.twaiTxErrorCounter),
+                           static_cast<unsigned long>(canStatsPhy.twaiRxErrorCounter),
+                           static_cast<long>(dTec),
+                           static_cast<long>(dRec),
+                           static_cast<unsigned long>(canStatsPhy.twaiBusError),
+                           static_cast<long>(dBusErr),
+                           static_cast<unsigned long>(canStatsPhy.twaiArbLost),
+                           static_cast<long>(dArbLost),
+                           static_cast<unsigned long>(canStatsPhy.twaiRxOverrun),
+                           static_cast<long>(dRxOverrun),
+                           static_cast<unsigned long>(canStatsPhy.busOffEvents),
+                           static_cast<unsigned>(canStatsPhy.lastTwaiState));
+
+            prevTec = canStatsPhy.twaiTxErrorCounter;
+            prevRec = canStatsPhy.twaiRxErrorCounter;
+            prevBusErr = canStatsPhy.twaiBusError;
+            prevArbLost = canStatsPhy.twaiArbLost;
+            prevRxOverrun = canStatsPhy.twaiRxOverrun;
+            lastCanPhyLogMs = now;
+        }
     }
 
     if (tele.recording) {

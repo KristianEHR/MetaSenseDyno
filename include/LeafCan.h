@@ -49,6 +49,33 @@ struct LeafInvFeedback
     uint8_t mg_clock;
     uint8_t mg_error_codes;
     uint8_t crc_1da;
+
+    // Thunderstruck TVCU 0x55B RX input decode.
+    float id55b_torque_demand_nm;
+    float id55b_like1da_rpm;
+    float id55b_like1da_torque_nm;
+    float id55b_like1da_input_voltage;
+    uint32_t id55b_update_ms;
+    uint32_t id55b_frames;
+    uint32_t id55b_last_id;
+    uint32_t id55b_primary_frames;
+    uint32_t id05b_short_frames;
+    uint32_t id50b_alias_frames;
+    uint32_t id55b_primary_update_ms;
+    uint8_t id55b_primary_raw[8];
+    uint8_t id55b_raw[8];
+    int16_t id55b_torque_raw_le;
+    int16_t id55b_torque_raw_be;
+    bool id55b_ready_cmd;
+    bool id55b_hv_ok_cmd;
+    bool id55b_gear_drive_cmd;
+    uint8_t id55b_like1da_clock;
+    uint8_t id55b_like1da_error_codes;
+    uint8_t id55b_like1da_crc;
+    uint8_t id55b_counter;
+    uint8_t id55b_checksum;
+    uint8_t id55b_checksum_calc;
+    bool id55b_checksum_ok;
 };
 
 namespace LeafCan

@@ -625,7 +625,7 @@
   bottom: 102px;
   left: 20px;
   z-index: 99;
-  width: min(320px, calc(100vw - 40px));
+  width: min(420px, calc(100vw - 16px));
   background: rgba(0, 0, 0, 0.72);
   border: 1px solid #4fc3f7;
   border-radius: 10px;
@@ -670,6 +670,17 @@
   font-variant-numeric: tabular-nums;
   font-family: Consolas, "Courier New", monospace;
   min-height: 1.2em;
+}
+
+.can-monitor-value-raw {
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+  font-size: 12px;
+  color: #dff7ff;
 }
 
 .can-monitor-status-row {
@@ -726,7 +737,8 @@
 @media (max-width: 900px) {
   .can-monitor {
     bottom: 102px;
-    left: 20px;
+    left: 8px;
+    width: calc(100vw - 16px);
   }
 }
 
@@ -780,12 +792,7 @@
 
   <div id="canMonitor" class="can-monitor" aria-live="polite">
     <div class="can-monitor-title">Leaf CAN Monitor</div>
-    <!--
-      Lean CAN monitor scope (intentionally limited):
-      - Supported RX families: 0x1DA (RPM) and 0x1DC (temps)
-      - Unsupported/omitted families on this setup: 0x1DB (torque) and 0x1D4 (status)
-      Keep this panel aligned with actually available frames to avoid dead telemetry paths.
-    -->
+    <!-- CAN monitor keeps fixed placeholders so operators can see expected IDs even before valid frames arrive. -->
     <div class="can-monitor-grid">
       <span class="can-monitor-label">Motor RPM</span>
       <span id="canMonRpm" class="can-monitor-value">---</span>
@@ -831,6 +838,15 @@
 
       <span class="can-monitor-label">ID1DC frames/age(ms)</span>
       <span id="canMonId1dc" class="can-monitor-value">---</span>
+
+      <span class="can-monitor-label">ID55B last seen ID</span>
+      <span id="canMon55bId" class="can-monitor-value">---</span>
+
+      <span class="can-monitor-label">ID55B frames/age(ms)</span>
+      <span id="canMon55bFramesAge" class="can-monitor-value">---</span>
+
+      <span class="can-monitor-label">ID55B raw B0..B7</span>
+      <span id="canMon55bRaw" class="can-monitor-value can-monitor-value-raw">---</span>
 
       <span class="can-monitor-label">FW Output State</span>
       <span id="canMonFwState" class="can-monitor-value">---</span>
@@ -1236,6 +1252,17 @@
       leaf_id1dc_frames: 0,
       leaf_id1da_age_ms: 0,
       leaf_id1dc_age_ms: 0,
+      leaf_55b_id: 0,
+      leaf_55b_frames: 0,
+      leaf_55b_age_ms: 0,
+      leaf_55b_b0: 0,
+      leaf_55b_b1: 0,
+      leaf_55b_b2: 0,
+      leaf_55b_b3: 0,
+      leaf_55b_b4: 0,
+      leaf_55b_b5: 0,
+      leaf_55b_b6: 0,
+      leaf_55b_b7: 0,
       leaf_inv_temp: 0,
       leaf_stator_temp: 0,
       leaf_coolant_temp: 0,
@@ -1262,8 +1289,6 @@
     function updateCanMonitor(telemetry) {
       if (!telemetry) return;
 
-      // Keep monitor fields tied to supported frame families only (1DA + 1DC).
-
       const rpm = Number(telemetry.leaf_rpm);
       const inv = Number(telemetry.leaf_inv_temp);
       const stat = Number(telemetry.leaf_stator_temp);
@@ -1280,6 +1305,19 @@
       const id1dcFrames = Number(telemetry.leaf_id1dc_frames);
       const id1daAgeMs = Number(telemetry.leaf_id1da_age_ms);
       const id1dcAgeMs = Number(telemetry.leaf_id1dc_age_ms);
+      const id55bLastId = Number(telemetry.leaf_55b_id);
+      const id55bFrames = Number(telemetry.leaf_55b_frames);
+      const id55bAgeMs = Number(telemetry.leaf_55b_age_ms);
+      const id55bRaw = [
+        Number(telemetry.leaf_55b_b0),
+        Number(telemetry.leaf_55b_b1),
+        Number(telemetry.leaf_55b_b2),
+        Number(telemetry.leaf_55b_b3),
+        Number(telemetry.leaf_55b_b4),
+        Number(telemetry.leaf_55b_b5),
+        Number(telemetry.leaf_55b_b6),
+        Number(telemetry.leaf_55b_b7)
+      ];
       const isSimMode = Number(telemetry.vcu_sim) === 1 || telemetry.vcu_sim === true;
 
       const setText = (id, text) => {
@@ -1288,6 +1326,12 @@
       };
       const fmt = (v, digits = 1) => (Number.isFinite(v) ? v.toFixed(digits) : "---");
       const fmtInt = (v) => (Number.isFinite(v) ? Math.round(v).toString() : "---");
+      const fmtHexByte = (v) => {
+        if (!Number.isFinite(v)) return "--";
+        const n = Math.max(0, Math.min(255, Math.round(v)));
+        return n.toString(16).toUpperCase().padStart(2, "0");
+      };
+      const fmtRaw8 = (values) => values.map(fmtHexByte).join(" ");
       const fmtBin6 = (v) => {
         if (!Number.isFinite(v)) return "---";
         const n = Math.max(0, Math.min(63, Math.round(v)));
@@ -1309,6 +1353,9 @@
       setText("canMonVcuTorque", fmt(vcuTorque, 2));
       setText("canMonId1da", `${Math.round(id1daFrames)} / ${Math.round(id1daAgeMs)}`);
       setText("canMonId1dc", `${Math.round(id1dcFrames)} / ${Math.round(id1dcAgeMs)}`);
+      setText("canMon55bId", Number.isFinite(id55bLastId) ? `0x${Math.max(0, Math.round(id55bLastId)).toString(16).toUpperCase()}` : "---");
+      setText("canMon55bFramesAge", `${fmtInt(id55bFrames)} / ${fmtInt(id55bAgeMs)}`);
+      setText("canMon55bRaw", fmtRaw8(id55bRaw));
       setText("canMonFwState", telemetry.fw_state || "---");
 
       const setFlag = (id, isOn, mode = "normal") => {

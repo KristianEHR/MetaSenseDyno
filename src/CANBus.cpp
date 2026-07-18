@@ -1,6 +1,7 @@
 #include "CANBus.h"
 
 #include <string.h>
+#include "HardwareSerial.h"
 
 #include "CanHAL.h"
 
@@ -17,7 +18,8 @@ Stats s_stats;
 bool isLeafStatusId(uint32_t id)
 {
     return id == 0x1DA || id == 0x1DB || id == 0x1DC || id == 0x1D4 ||
-           id == 0x01A || id == 0x01B || id == 0x01C || id == 0x014;
+           id == 0x01A || id == 0x01B || id == 0x01C || id == 0x014 ||
+           id == 0x55B || id == 0x05B || id == 0x50B;
 }
 
 bool ensureReady(uint32_t nowMs)
@@ -78,6 +80,9 @@ void poll(uint32_t nowMs)
         return;
     }
 
+    static uint32_t lastDiagMs = 0;
+    const uint32_t DIAG_PERIOD_MS = 5000;
+
     twai_status_info_t twaiStatus = {};
     if (!s_canHal.getStatus(twaiStatus)) {
         ++s_stats.statusQueryFailures;
@@ -102,6 +107,26 @@ void poll(uint32_t nowMs)
         handleDriverFault(nowMs, false);
         return;
     }
+    
+    // Periodic diagnostic: show queue status
+    if (lastDiagMs == 0U || (nowMs - lastDiagMs) >= DIAG_PERIOD_MS) {
+        lastDiagMs = nowMs;
+        Serial.printf("[CAN-POLL-DIAG] queued=%lu missed=%lu overrun=%lu arb_lost=%lu bus_err=%lu tx_err=%u rx_err=%u state=%u rx_frames_total=%lu leaf_frames=%lu unk_frames=%lu\n",
+                      static_cast<unsigned long>(twaiStatus.msgs_to_rx),
+                      static_cast<unsigned long>(twaiStatus.rx_missed_count),
+                      static_cast<unsigned long>(twaiStatus.rx_overrun_count),
+                      static_cast<unsigned long>(twaiStatus.arb_lost_count),
+                      static_cast<unsigned long>(twaiStatus.bus_error_count),
+                      static_cast<unsigned>(twaiStatus.tx_error_counter),
+                      static_cast<unsigned>(twaiStatus.rx_error_counter),
+                      static_cast<unsigned>(twaiStatus.state),
+                      static_cast<unsigned long>(s_stats.rxFrames),
+                      static_cast<unsigned long>(s_stats.rxLeafFrames),
+                      static_cast<unsigned long>(s_stats.rxUnknownFrames));
+    }
+
+    uint32_t framesThisPoll = 0;
+    uint32_t extFramesThisPoll = 0;
 
     for (uint8_t i = 0; i < s_config.maxFramesPerPoll; ++i) {
         uint32_t id = 0;
@@ -110,6 +135,8 @@ void poll(uint32_t nowMs)
         if (!s_canHal.receive(id, data, len)) {
             break;
         }
+        
+        ++framesThisPoll;
 
         twai_message_t msg = {};
         msg.identifier = id;
@@ -120,17 +147,46 @@ void poll(uint32_t nowMs)
         s_stats.lastRxMs = nowMs;
         s_stats.lastRxId = id;
         ++s_stats.rxFrames;
+        
+        // Track both IDs explicitly to disambiguate 0x55B vs 0x05B bus variants.
+        if (id == 0x55BU || id == 0x05BU || id == 0x50BU) {
+            if (id == 0x55BU) {
+                ++s_stats.rx55bFrames;
+            } else if (id == 0x05BU) {
+                ++s_stats.rx05bFrames;
+            } else {
+                ++s_stats.rx50bFrames;
+            }
+            s_stats.last55bMs = nowMs;
+            s_stats.last55bLen = len;
+            Serial.printf("[CAN-55B-RX] id=0x%03lX len=%u data=%02X %02X %02X %02X\n",
+                          static_cast<unsigned long>(id),
+                          static_cast<unsigned>(len),
+                          static_cast<unsigned>(data[0]),
+                          static_cast<unsigned>(data[1]),
+                          static_cast<unsigned>(data[2]),
+                          static_cast<unsigned>(data[3]));
+        }
+        
+        // Log ALL arriving frames for debugging
+        Serial.printf("[CAN-FRAME-RX] id=0x%03lX len=%u data=%02X %02X %02X %02X\n",
+                      static_cast<unsigned long>(id),
+                      static_cast<unsigned>(len),
+                      static_cast<unsigned>(data[0]),
+                      static_cast<unsigned>(data[1]),
+                      static_cast<unsigned>(data[2]),
+                      static_cast<unsigned>(data[3]));
+        
         if (isLeafStatusId(id)) {
             ++s_stats.rxLeafFrames;
         } else {
             ++s_stats.rxUnknownFrames;
-            if (id == 0x120U) {
-                ++s_stats.rx120Frames;
-                s_stats.last120Ms = nowMs;
-                s_stats.last120Len = len;
-                memset(s_stats.last120Data, 0, sizeof(s_stats.last120Data));
-                memcpy(s_stats.last120Data, data, len);
-            } else if (id == 0x55AU) {
+            s_stats.lastUnknownMs = nowMs;
+            s_stats.lastUnknownId = id;
+            s_stats.lastUnknownLen = len;
+            memset(s_stats.lastUnknownData, 0, sizeof(s_stats.lastUnknownData));
+            memcpy(s_stats.lastUnknownData, data, len);
+            if (id == 0x55AU) {
                 ++s_stats.rx55aFrames;
                 s_stats.last55aMs = nowMs;
                 s_stats.last55aLen = len;
@@ -138,6 +194,10 @@ void poll(uint32_t nowMs)
                 memcpy(s_stats.last55aData, data, len);
             }
         }
+    }
+    
+    if (lastDiagMs == 0U || (nowMs - lastDiagMs) >= DIAG_PERIOD_MS) {
+        Serial.printf("[CAN-POLL-FRAME-COUNT] this_poll=%lu ext_frames=%lu\n", static_cast<unsigned long>(framesThisPoll), static_cast<unsigned long>(extFramesThisPoll));
     }
 }
 

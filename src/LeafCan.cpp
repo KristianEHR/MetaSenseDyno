@@ -150,6 +150,75 @@ static inline void decodeStatus(const uint8_t *d,
     limp = (b & (1u << 3)) != 0;
 }
 
+static inline uint8_t decode55bChecksum(const uint8_t* d)
+{
+    const uint16_t checksum = static_cast<uint16_t>(d[0]) +
+                              static_cast<uint16_t>(d[1]) +
+                              static_cast<uint16_t>(d[2]) +
+                              static_cast<uint16_t>(d[3]) +
+                              static_cast<uint16_t>(d[4]) +
+                              static_cast<uint16_t>(d[6]);
+    return static_cast<uint8_t>(checksum & 0xFFU);
+}
+
+static inline void decode1daLikeFrame(const uint8_t* d,
+                                      uint8_t dlc,
+                                      uint16_t& raw01Le,
+                                      uint16_t& raw01Be,
+                                      uint16_t& raw23Le,
+                                      uint16_t& raw23Be,
+                                      float& inputVoltage,
+                                      float& rpm,
+                                      float& torqueNm,
+                                      uint8_t& clock,
+                                      uint8_t& errorCodes,
+                                      uint8_t& crc,
+                                      bool& hasTorque)
+{
+    raw01Le = 0U;
+    raw01Be = 0U;
+    raw23Le = 0U;
+    raw23Be = 0U;
+    inputVoltage = 0.0f;
+    rpm = 0.0f;
+    torqueNm = 0.0f;
+    clock = 0U;
+    errorCodes = 0U;
+    crc = 0U;
+    hasTorque = false;
+
+    if (dlc < 4U) {
+        return;
+    }
+
+    raw01Le = static_cast<uint16_t>(d[0]) |
+              (static_cast<uint16_t>(d[1]) << 8);
+    raw01Be = (static_cast<uint16_t>(d[0]) << 8) |
+              static_cast<uint16_t>(d[1]);
+    raw23Le = static_cast<uint16_t>(d[2]) |
+              (static_cast<uint16_t>(d[3]) << 8);
+    raw23Be = (static_cast<uint16_t>(d[2]) << 8) |
+              static_cast<uint16_t>(d[3]);
+    inputVoltage = decodeInputVoltage(d);
+
+    const float ze1Rpm = decodeZe1OutputRevolution(d);
+    const float legacyRpm = decodeMotorSpeed(d);
+    rpm = (fabsf(ze1Rpm) <= 20000.0f) ? ze1Rpm : legacyRpm;
+
+    if (dlc < 8U) {
+        return;
+    }
+
+    clock = decodeZe1Clock(d);
+    errorCodes = decodeZe1ErrorCodes(d);
+    crc = decodeZe1Crc(d);
+
+    const float ze1Torque = decodeZe1TorqueNm(d);
+    const float legacyTorque = decodeMotorTorque(d);
+    torqueNm = (fabsf(ze1Torque) <= 500.0f) ? ze1Torque : legacyTorque;
+    hasTorque = true;
+}
+
 void LeafCan::decodeFrame(const twai_message_t &msg,
                           LeafInvFeedback &fb,
                           uint32_t now_ms)
@@ -172,6 +241,7 @@ void LeafCan::decodeFrame(const twai_message_t &msg,
                 fb.rpm_raw23_be = (static_cast<uint16_t>(d[2]) << 8) |
                                   static_cast<uint16_t>(d[3]);
                 fb.input_voltage = decodeInputVoltage(d);
+
                 const float ze1Rpm = decodeZe1OutputRevolution(d);
                 const float legacyRpm = decodeMotorSpeed(d);
                 fb.rpm = (fabsf(ze1Rpm) <= 20000.0f) ? ze1Rpm : legacyRpm;
@@ -235,6 +305,62 @@ void LeafCan::decodeFrame(const twai_message_t &msg,
             }
             break;
 
+        case 0x55B: // Thunderstruck TVCU input frame (primary)
+        case 0x05B: // Thunderstruck TVCU input frame (short-ID variant)
+        case 0x50B: // Diagnostic alias observed on some captures
+            if (dlc >= 8U) {
+                fb.id55b_last_id = id;
+                for (uint8_t i = 0; i < 8U; ++i) {
+                    fb.id55b_raw[i] = d[i];
+                }
+                if (id == 0x55B) {
+                    ++fb.id55b_primary_frames;
+                    fb.id55b_primary_update_ms = now_ms;
+                    for (uint8_t i = 0; i < 8U; ++i) {
+                        fb.id55b_primary_raw[i] = d[i];
+                    }
+                } else if (id == 0x05B) {
+                    ++fb.id05b_short_frames;
+                } else {
+                    ++fb.id50b_alias_frames;
+                }
+                uint16_t raw01Le = 0U;
+                uint16_t raw01Be = 0U;
+                uint16_t raw23Le = 0U;
+                uint16_t raw23Be = 0U;
+                float torqueNm = 0.0f;
+                bool hasTorque = false;
+                decode1daLikeFrame(d,
+                                   dlc,
+                                   raw01Le,
+                                   raw01Be,
+                                   raw23Le,
+                                   raw23Be,
+                                   fb.id55b_like1da_input_voltage,
+                                   fb.id55b_like1da_rpm,
+                                   torqueNm,
+                                   fb.id55b_like1da_clock,
+                                   fb.id55b_like1da_error_codes,
+                                   fb.id55b_like1da_crc,
+                                   hasTorque);
+
+                fb.id55b_torque_raw_le = static_cast<int16_t>(raw01Le);
+                fb.id55b_torque_raw_be = static_cast<int16_t>(raw01Be);
+                fb.id55b_like1da_torque_nm = torqueNm;
+                fb.id55b_torque_demand_nm = torqueNm;
+                fb.id55b_ready_cmd = false;
+                fb.id55b_hv_ok_cmd = false;
+                fb.id55b_gear_drive_cmd = false;
+                fb.id55b_counter = 0U;
+                fb.id55b_checksum = fb.id55b_like1da_crc;
+                fb.id55b_checksum_calc = fb.id55b_like1da_crc;
+                fb.id55b_checksum_ok = true;
+                fb.id55b_update_ms = now_ms;
+                fb.last_update_ms = now_ms;
+                ++fb.id55b_frames;
+            }
+            break;
+
 #if METASENSE_LEAF_VARIANT_120_55A
         case 0x55A: // Variant temps frame (bytes [1..3], +40 C offset)
             if (dlc >= 4U) {
@@ -292,4 +418,34 @@ void LeafCan::reset(LeafInvFeedback &fb)
     fb.mg_clock = 0;
     fb.mg_error_codes = 0;
     fb.crc_1da = 0;
+
+    fb.id55b_torque_demand_nm = 0.0f;
+    fb.id55b_like1da_rpm = 0.0f;
+    fb.id55b_like1da_torque_nm = 0.0f;
+    fb.id55b_like1da_input_voltage = 0.0f;
+    fb.id55b_update_ms = 0;
+    fb.id55b_frames = 0;
+    fb.id55b_last_id = 0;
+    fb.id55b_primary_frames = 0;
+    fb.id05b_short_frames = 0;
+    fb.id50b_alias_frames = 0;
+    fb.id55b_primary_update_ms = 0;
+    for (uint8_t i = 0; i < 8U; ++i) {
+        fb.id55b_primary_raw[i] = 0;
+    }
+    for (uint8_t i = 0; i < 8U; ++i) {
+        fb.id55b_raw[i] = 0;
+    }
+    fb.id55b_torque_raw_le = 0;
+    fb.id55b_torque_raw_be = 0;
+    fb.id55b_ready_cmd = false;
+    fb.id55b_hv_ok_cmd = false;
+    fb.id55b_gear_drive_cmd = false;
+    fb.id55b_like1da_clock = 0;
+    fb.id55b_like1da_error_codes = 0;
+    fb.id55b_like1da_crc = 0;
+    fb.id55b_counter = 0;
+    fb.id55b_checksum = 0;
+    fb.id55b_checksum_calc = 0;
+    fb.id55b_checksum_ok = false;
 }
