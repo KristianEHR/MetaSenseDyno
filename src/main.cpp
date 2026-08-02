@@ -96,7 +96,7 @@ constexpr uint16_t kI2cTimeoutMs = 50;
 #define METASENSE_CONTROL_PERIOD_MS 10
 #endif
 #ifndef METASENSE_HEARTBEAT_PERIOD_MS
-#define METASENSE_HEARTBEAT_PERIOD_MS 5000
+#define METASENSE_HEARTBEAT_PERIOD_MS 2000
 #endif
 constexpr uint32_t kControlPeriodMs = METASENSE_CONTROL_PERIOD_MS;
 constexpr uint32_t kModbusPeriodMs = 50;

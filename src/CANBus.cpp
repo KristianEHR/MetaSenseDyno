@@ -5,6 +5,30 @@
 
 #include "CanHAL.h"
 
+#ifndef METASENSE_CAN_LOG_KEY_FRAMES
+#define METASENSE_CAN_LOG_KEY_FRAMES 0
+#endif
+
+#ifndef METASENSE_CAN_LOG_ALL_FRAMES
+#define METASENSE_CAN_LOG_ALL_FRAMES 0
+#endif
+
+#ifndef METASENSE_CAN_LOG_55B_RAW
+#define METASENSE_CAN_LOG_55B_RAW 0
+#endif
+
+#ifndef METASENSE_CAN_LOG_11A_CHANGES
+#define METASENSE_CAN_LOG_11A_CHANGES 0
+#endif
+
+#ifndef METASENSE_CAN_LOG_120_CHANGES
+#define METASENSE_CAN_LOG_120_CHANGES 1
+#endif
+
+#ifndef METASENSE_CAN_ID_SCAN
+#define METASENSE_CAN_ID_SCAN 1
+#endif
+
 namespace MetaSense::CANBus {
 
 namespace {
@@ -15,11 +39,171 @@ bool s_configured = false;
 LeafInvFeedback s_feedback{};
 Stats s_stats;
 
-bool isLeafStatusId(uint32_t id)
+#if METASENSE_CAN_ID_SCAN
+struct UnknownIdScanEntry {
+    uint32_t id = 0xFFFFFFFFU;
+    uint32_t frames = 0U;
+    uint32_t changes = 0U;
+    uint32_t extFrames = 0U;
+    uint32_t lastMs = 0U;
+    uint8_t lastLen = 0U;
+    uint8_t lastData[8] = {0U};
+};
+
+constexpr size_t kUnknownIdScanSlots = 20U;
+UnknownIdScanEntry s_unknownIdScan[kUnknownIdScanSlots];
+
+static bool isTempTripletPlausible(const uint8_t* d, uint8_t start)
 {
-    return id == 0x1DA || id == 0x1DB || id == 0x1DC || id == 0x1D4 ||
-           id == 0x01A || id == 0x01B || id == 0x01C || id == 0x014 ||
-           id == 0x55B || id == 0x05B || id == 0x50B;
+    const float t0 = static_cast<float>(d[start + 0U]) - 40.0f;
+    const float t1 = static_cast<float>(d[start + 1U]) - 40.0f;
+    const float t2 = static_cast<float>(d[start + 2U]) - 40.0f;
+    return (t0 > -35.0f && t0 < 180.0f) &&
+           (t1 > -35.0f && t1 < 180.0f) &&
+           (t2 > -35.0f && t2 < 180.0f);
+}
+
+static void noteUnknownId(uint32_t id, const uint8_t* data, uint8_t len, uint32_t nowMs, bool isExtended)
+{
+    // Exclude only strict accepted IDs; keep everything else visible for hunt.
+    if (id == 0x1DAU || id == 0x55AU) {
+        return;
+    }
+
+    size_t slot = kUnknownIdScanSlots;
+    size_t freeSlot = kUnknownIdScanSlots;
+    size_t minSlot = 0U;
+    uint32_t minFrames = 0xFFFFFFFFU;
+
+    for (size_t i = 0; i < kUnknownIdScanSlots; ++i) {
+        if (s_unknownIdScan[i].frames > 0U && s_unknownIdScan[i].id == id) {
+            slot = i;
+            break;
+        }
+        if (freeSlot == kUnknownIdScanSlots && s_unknownIdScan[i].frames == 0U) {
+            freeSlot = i;
+        }
+        if (s_unknownIdScan[i].frames < minFrames) {
+            minFrames = s_unknownIdScan[i].frames;
+            minSlot = i;
+        }
+    }
+
+    if (slot == kUnknownIdScanSlots) {
+        slot = (freeSlot != kUnknownIdScanSlots) ? freeSlot : minSlot;
+        s_unknownIdScan[slot] = UnknownIdScanEntry{};
+        s_unknownIdScan[slot].id = id;
+    }
+
+    UnknownIdScanEntry& entry = s_unknownIdScan[slot];
+    if (entry.frames > 0U && (entry.lastLen != len || memcmp(entry.lastData, data, len) != 0)) {
+        ++entry.changes;
+    }
+    ++entry.frames;
+    if (isExtended) {
+        ++entry.extFrames;
+    }
+    entry.lastMs = nowMs;
+    entry.lastLen = len;
+    memset(entry.lastData, 0, sizeof(entry.lastData));
+    memcpy(entry.lastData, data, len);
+}
+
+static void printUnknownIdScan(uint32_t nowMs)
+{
+    uint64_t best[kUnknownIdScanSlots] = {0U};
+    size_t bestIdx[kUnknownIdScanSlots] = {0U};
+    size_t bestCount = 0U;
+
+    for (size_t i = 0; i < kUnknownIdScanSlots; ++i) {
+        const uint32_t frames = s_unknownIdScan[i].frames;
+        if (frames == 0U) {
+            continue;
+        }
+        const uint64_t score = (static_cast<uint64_t>(s_unknownIdScan[i].changes) << 32) |
+                               static_cast<uint64_t>(frames);
+        size_t pos = bestCount;
+        while (pos > 0U && score > best[pos - 1U]) {
+            if (pos < kUnknownIdScanSlots) {
+                best[pos] = best[pos - 1U];
+                bestIdx[pos] = bestIdx[pos - 1U];
+            }
+            --pos;
+        }
+        if (pos < kUnknownIdScanSlots) {
+            best[pos] = score;
+            bestIdx[pos] = i;
+            if (bestCount < kUnknownIdScanSlots) {
+                ++bestCount;
+            }
+        }
+    }
+
+    const size_t toPrint = (bestCount < 6U) ? bestCount : 6U;
+    if (toPrint == 0U) {
+        Serial.printf("[CAN-ID-HUNT] no_candidates unknown_total=%lu\n",
+                      static_cast<unsigned long>(s_stats.rxUnknownFrames));
+        return;
+    }
+
+    for (size_t i = 0; i < toPrint; ++i) {
+        const UnknownIdScanEntry& e = s_unknownIdScan[bestIdx[i]];
+        char tempHint[24] = "none";
+        if (e.lastLen >= 3U && isTempTripletPlausible(e.lastData, 0U)) {
+            strcpy(tempHint, "off0");
+        }
+        if (e.lastLen >= 4U && isTempTripletPlausible(e.lastData, 1U)) {
+            if (strcmp(tempHint, "none") == 0) {
+                strcpy(tempHint, "off1");
+            } else {
+                strcat(tempHint, "+1");
+            }
+        }
+
+        Serial.printf("[CAN-ID-HUNT] id=0x%03lX frames=%lu changes=%lu ext=%lu age=%lu len=%u data=%02X %02X %02X %02X temp_hint=%s\n",
+                      static_cast<unsigned long>(e.id),
+                      static_cast<unsigned long>(e.frames),
+                  static_cast<unsigned long>(e.changes),
+                  static_cast<unsigned long>(e.extFrames),
+                      static_cast<unsigned long>(nowMs - e.lastMs),
+                      static_cast<unsigned>(e.lastLen),
+                      static_cast<unsigned>(e.lastData[0]),
+                      static_cast<unsigned>(e.lastData[1]),
+                      static_cast<unsigned>(e.lastData[2]),
+                      static_cast<unsigned>(e.lastData[3]),
+                      tempHint);
+    }
+}
+#endif
+
+bool isAcceptedLeafId(uint32_t id)
+{
+    return id == 0x1DAU || id == 0x55AU;
+}
+
+uint8_t changedMask(const uint8_t* prev, uint8_t prevLen, const uint8_t* curr, uint8_t currLen)
+{
+    if (currLen == 0U) {
+        return 0U;
+    }
+
+    if (prevLen != currLen) {
+        return (currLen >= 8U) ? 0xFFU : static_cast<uint8_t>((1U << currLen) - 1U);
+    }
+
+    uint8_t mask = 0U;
+    for (uint8_t i = 0U; i < currLen; ++i) {
+        if (prev[i] != curr[i]) {
+            mask |= static_cast<uint8_t>(1U << i);
+        }
+    }
+    return mask;
+}
+
+uint32_t normalizeLeafIdForDecode(uint32_t id)
+{
+    // Strict mode: decode only exact on-bus IDs (no alias/sibling normalization).
+    return id;
 }
 
 bool ensureReady(uint32_t nowMs)
@@ -81,7 +265,23 @@ void poll(uint32_t nowMs)
     }
 
     static uint32_t lastDiagMs = 0;
+    static uint32_t lastRateMs = 0;
+    static uint32_t lastUnknownScanMs = 0;
+    static uint32_t lastUnknownAtScan = 0;
+    static uint32_t lastRx1daFrames = 0;
+    static uint32_t lastRx1dcFrames = 0;
+    static uint32_t lastRx55bFrames = 0;
+    static uint32_t lastRx1dbFrames = 0;
+    static uint32_t lastRx11aFrames = 0;
+    static uint32_t lastRxUnknownFrames = 0;
+    static uint32_t lastRxStdFrames = 0;
+    static uint32_t lastRxExtFrames = 0;
+    static uint32_t last11aChangeLogMs = 0;
+    static uint32_t last55bLogMs = 0;
+    static uint8_t last55bLogLen = 0;
+    static uint8_t last55bLogData[8] = {0};
     const uint32_t DIAG_PERIOD_MS = 5000;
+    const uint32_t RATE_PERIOD_MS = 2000;
 
     twai_status_info_t twaiStatus = {};
     if (!s_canHal.getStatus(twaiStatus)) {
@@ -127,39 +327,174 @@ void poll(uint32_t nowMs)
 
     uint32_t framesThisPoll = 0;
     uint32_t extFramesThisPoll = 0;
+    static uint32_t id120LogDecimator = 0;
 
     for (uint8_t i = 0; i < s_config.maxFramesPerPoll; ++i) {
         uint32_t id = 0;
         uint8_t len = 0;
         uint8_t data[8] = {0};
-        if (!s_canHal.receive(id, data, len)) {
+        bool isExtended = false;
+        if (!s_canHal.receive(id, data, len, isExtended)) {
             break;
         }
         
+        if (isExtended) {
+            ++s_stats.rxExtFrames;
+            ++extFramesThisPoll;
+        } else {
+            ++s_stats.rxStdFrames;
+        }
+
         ++framesThisPoll;
 
+        const uint32_t decodeId = normalizeLeafIdForDecode(id);
+
         twai_message_t msg = {};
-        msg.identifier = id;
+        msg.identifier = decodeId;
         msg.data_length_code = len;
         memcpy(msg.data, data, len);
 
-        LeafCan::decodeFrame(msg, s_feedback, nowMs);
+        if (decodeId == 0x55AU) {
+            ++s_stats.rx55aFrames;
+            s_stats.last55aMs = nowMs;
+            s_stats.last55aLen = len;
+            memset(s_stats.last55aData, 0, sizeof(s_stats.last55aData));
+            memcpy(s_stats.last55aData, data, len);
+        }
+        if (id == 0x55BU || id == 0x50BU || id == 0x05BU) {
+            ++s_stats.rx55bFrames;
+            const uint32_t prev55bMs = s_stats.last55bMs;
+            s_stats.last55bSrcId = id;
+            s_stats.last55bMs = nowMs;
+            s_stats.last55bLen = len;
+            memset(s_stats.last55bData, 0, sizeof(s_stats.last55bData));
+            memcpy(s_stats.last55bData, data, len);
+
+#if METASENSE_CAN_LOG_55B_RAW
+            const bool payloadChanged = (len != last55bLogLen) ||
+                                        (memcmp(last55bLogData, data, len) != 0);
+            const bool logDue = (last55bLogMs == 0U) || ((nowMs - last55bLogMs) >= 1000U);
+            if (payloadChanged || logDue) {
+                Serial.printf("[CAN-55X-RAW] id=0x%03lX n=%lu age=%lu len=%u data=%02X %02X %02X %02X %02X %02X %02X %02X\n",
+                              static_cast<unsigned long>(id),
+                              static_cast<unsigned long>(s_stats.rx55bFrames),
+                              static_cast<unsigned long>((prev55bMs == 0U) ? 0U : (nowMs - prev55bMs)),
+                              static_cast<unsigned>(len),
+                              static_cast<unsigned>(data[0]),
+                              static_cast<unsigned>(data[1]),
+                              static_cast<unsigned>(data[2]),
+                              static_cast<unsigned>(data[3]),
+                              static_cast<unsigned>(data[4]),
+                              static_cast<unsigned>(data[5]),
+                              static_cast<unsigned>(data[6]),
+                              static_cast<unsigned>(data[7]));
+                last55bLogMs = nowMs;
+                last55bLogLen = len;
+                memset(last55bLogData, 0, sizeof(last55bLogData));
+                memcpy(last55bLogData, data, len);
+            }
+#endif
+        }
+
+        if (isAcceptedLeafId(decodeId)) {
+            LeafCan::decodeFrame(msg, s_feedback, nowMs);
+            ++s_stats.rxLeafFrames;
+            if (decodeId == 0x1DAU) {
+                ++s_stats.rx1daFrames;
+            } else if (decodeId == 0x1DCU) {
+                ++s_stats.rx1dcFrames;
+            }
+        } else {
+            // Strict RX policy: 0x120 is our command family context, not accepted RX telemetry.
+            const bool treatAsUnknown = (id != 0x120U);
+            if (treatAsUnknown) {
+                ++s_stats.rxUnknownFrames;
+            }
+#if METASENSE_CAN_ID_SCAN
+            if (treatAsUnknown) {
+                noteUnknownId(id, data, len, nowMs, isExtended);
+            }
+#endif
+            if (id == 0x1DBU) {
+                ++s_stats.rx1dbFrames;
+            }
+            if (id == 0x11AU) {
+                const uint8_t deltaMask = changedMask(s_stats.last11aData,
+                                                      s_stats.last11aLen,
+                                                      data,
+                                                      len);
+                s_stats.last11aChangeMask = deltaMask;
+                if (s_stats.rx11aFrames > 0U && deltaMask != 0U) {
+                    ++s_stats.rx11aChanges;
+                }
+                s_stats.agg11aChangeMask |= deltaMask;
+                for (uint8_t b = 0U; b < len && b < 8U; ++b) {
+                    if ((deltaMask & static_cast<uint8_t>(1U << b)) != 0U) {
+                        ++s_stats.byteChg11a[b];
+                    }
+                }
+#if METASENSE_CAN_LOG_11A_CHANGES
+                if (deltaMask != 0U && (last11aChangeLogMs == 0U || (nowMs - last11aChangeLogMs) >= 100U)) {
+                    Serial.printf("[CAN-11A-CHG] n=%lu chg=%lu mask=0x%02X data=%02X %02X %02X %02X %02X %02X %02X %02X\n",
+                                  static_cast<unsigned long>(s_stats.rx11aFrames + 1U),
+                                  static_cast<unsigned long>(s_stats.rx11aChanges),
+                                  static_cast<unsigned>(deltaMask),
+                                  static_cast<unsigned>(data[0]),
+                                  static_cast<unsigned>(data[1]),
+                                  static_cast<unsigned>(data[2]),
+                                  static_cast<unsigned>(data[3]),
+                                  static_cast<unsigned>(data[4]),
+                                  static_cast<unsigned>(data[5]),
+                                  static_cast<unsigned>(data[6]),
+                                  static_cast<unsigned>(data[7]));
+                    last11aChangeLogMs = nowMs;
+                }
+#endif
+                ++s_stats.rx11aFrames;
+                s_stats.last11aMs = nowMs;
+                s_stats.last11aLen = len;
+                memset(s_stats.last11aData, 0, sizeof(s_stats.last11aData));
+                memcpy(s_stats.last11aData, data, len);
+            }
+            if (id == 0x05BU) {
+                ++s_stats.rx05bFrames;
+            }
+            if (id == 0x50BU) {
+                ++s_stats.rx50bFrames;
+            }
+            if (treatAsUnknown) {
+                s_stats.lastUnknownMs = nowMs;
+                s_stats.lastUnknownId = id;
+                s_stats.lastUnknownLen = len;
+                memset(s_stats.lastUnknownData, 0, sizeof(s_stats.lastUnknownData));
+                memcpy(s_stats.lastUnknownData, data, len);
+            }
+        }
         s_stats.lastRxMs = nowMs;
         s_stats.lastRxId = id;
         ++s_stats.rxFrames;
         
-        // Track both IDs explicitly to disambiguate 0x55B vs 0x05B bus variants.
-        if (id == 0x55BU || id == 0x05BU || id == 0x50BU) {
-            if (id == 0x55BU) {
-                ++s_stats.rx55bFrames;
-            } else if (id == 0x05BU) {
-                ++s_stats.rx05bFrames;
-            } else {
-                ++s_stats.rx50bFrames;
-            }
-            s_stats.last55bMs = nowMs;
-            s_stats.last55bLen = len;
-            Serial.printf("[CAN-55B-RX] id=0x%03lX len=%u data=%02X %02X %02X %02X\n",
+        // Optional raw passive sniff log for the two canonical frames of interest.
+    #if METASENSE_CAN_LOG_KEY_FRAMES
+        if (id == 0x1DAU || id == 0x55AU) {
+            Serial.printf("[CAN-RX-RAW] id=0x%03lX len=%u data=%02X %02X %02X %02X %02X %02X %02X %02X\n",
+                  static_cast<unsigned long>(id),
+                  static_cast<unsigned>(len),
+                  static_cast<unsigned>(data[0]),
+                  static_cast<unsigned>(data[1]),
+                  static_cast<unsigned>(data[2]),
+                  static_cast<unsigned>(data[3]),
+                  static_cast<unsigned>(data[4]),
+                  static_cast<unsigned>(data[5]),
+                  static_cast<unsigned>(data[6]),
+                  static_cast<unsigned>(data[7]));
+        }
+    #endif
+
+        // Optional full-frame log. Keep unknown visibility while decimating 0x120 spam.
+    #if METASENSE_CAN_LOG_ALL_FRAMES
+        if (id != 0x120U || ((++id120LogDecimator % 128U) == 0U)) {
+            Serial.printf("[CAN-FRAME-RX] id=0x%03lX len=%u data=%02X %02X %02X %02X\n",
                           static_cast<unsigned long>(id),
                           static_cast<unsigned>(len),
                           static_cast<unsigned>(data[0]),
@@ -167,38 +502,60 @@ void poll(uint32_t nowMs)
                           static_cast<unsigned>(data[2]),
                           static_cast<unsigned>(data[3]));
         }
+    #endif
         
-        // Log ALL arriving frames for debugging
-        Serial.printf("[CAN-FRAME-RX] id=0x%03lX len=%u data=%02X %02X %02X %02X\n",
-                      static_cast<unsigned long>(id),
-                      static_cast<unsigned>(len),
-                      static_cast<unsigned>(data[0]),
-                      static_cast<unsigned>(data[1]),
-                      static_cast<unsigned>(data[2]),
-                      static_cast<unsigned>(data[3]));
-        
-        if (isLeafStatusId(id)) {
-            ++s_stats.rxLeafFrames;
-        } else {
-            ++s_stats.rxUnknownFrames;
-            s_stats.lastUnknownMs = nowMs;
-            s_stats.lastUnknownId = id;
-            s_stats.lastUnknownLen = len;
-            memset(s_stats.lastUnknownData, 0, sizeof(s_stats.lastUnknownData));
-            memcpy(s_stats.lastUnknownData, data, len);
-            if (id == 0x55AU) {
-                ++s_stats.rx55aFrames;
-                s_stats.last55aMs = nowMs;
-                s_stats.last55aLen = len;
-                memset(s_stats.last55aData, 0, sizeof(s_stats.last55aData));
-                memcpy(s_stats.last55aData, data, len);
-            }
-        }
     }
     
     if (lastDiagMs == 0U || (nowMs - lastDiagMs) >= DIAG_PERIOD_MS) {
         Serial.printf("[CAN-POLL-FRAME-COUNT] this_poll=%lu ext_frames=%lu\n", static_cast<unsigned long>(framesThisPoll), static_cast<unsigned long>(extFramesThisPoll));
     }
+
+    if (lastRateMs == 0U || (nowMs - lastRateMs) >= RATE_PERIOD_MS) {
+        const uint32_t dtMs = (lastRateMs == 0U) ? RATE_PERIOD_MS : (nowMs - lastRateMs);
+        const uint32_t d1da = s_stats.rx1daFrames - lastRx1daFrames;
+        const uint32_t d55b = s_stats.rx55bFrames - lastRx55bFrames;
+        const uint32_t d1db = s_stats.rx1dbFrames - lastRx1dbFrames;
+        const uint32_t d11a = s_stats.rx11aFrames - lastRx11aFrames;
+        const uint32_t dunk = s_stats.rxUnknownFrames - lastRxUnknownFrames;
+        const uint32_t dstd = s_stats.rxStdFrames - lastRxStdFrames;
+        const uint32_t dext = s_stats.rxExtFrames - lastRxExtFrames;
+
+        const float hz1da = (dtMs > 0U) ? (1000.0f * static_cast<float>(d1da) / static_cast<float>(dtMs)) : 0.0f;
+        const float hz55b = (dtMs > 0U) ? (1000.0f * static_cast<float>(d55b) / static_cast<float>(dtMs)) : 0.0f;
+        const float hz1db = (dtMs > 0U) ? (1000.0f * static_cast<float>(d1db) / static_cast<float>(dtMs)) : 0.0f;
+        const float hz11a = (dtMs > 0U) ? (1000.0f * static_cast<float>(d11a) / static_cast<float>(dtMs)) : 0.0f;
+        const float hzStd = (dtMs > 0U) ? (1000.0f * static_cast<float>(dstd) / static_cast<float>(dtMs)) : 0.0f;
+        const float hzExt = (dtMs > 0U) ? (1000.0f * static_cast<float>(dext) / static_cast<float>(dtMs)) : 0.0f;
+
+        Serial.printf("[CAN-RATE] std=%lu(%.1fHz) ext=%lu(%.1fHz) 1DA=%lu(%.1fHz) 1DB=%lu(%.1fHz) legacy(55X=%lu(%.1fHz),11A=%lu(%.1fHz)) unk=%lu\n",
+                      static_cast<unsigned long>(s_stats.rxStdFrames), hzStd,
+                      static_cast<unsigned long>(s_stats.rxExtFrames), hzExt,
+                      static_cast<unsigned long>(s_stats.rx1daFrames), hz1da,
+                  static_cast<unsigned long>(s_stats.rx1dbFrames), hz1db,
+                  static_cast<unsigned long>(s_stats.rx55bFrames), hz55b,
+                  static_cast<unsigned long>(s_stats.rx11aFrames), hz11a,
+                      static_cast<unsigned long>(s_stats.rxUnknownFrames));
+
+        lastRateMs = nowMs;
+        lastRx1daFrames = s_stats.rx1daFrames;
+        lastRx55bFrames = s_stats.rx55bFrames;
+        lastRx1dbFrames = s_stats.rx1dbFrames;
+        lastRx11aFrames = s_stats.rx11aFrames;
+        lastRxUnknownFrames = s_stats.rxUnknownFrames;
+        lastRxStdFrames = s_stats.rxStdFrames;
+        lastRxExtFrames = s_stats.rxExtFrames;
+        (void)dunk;
+    }
+
+#if METASENSE_CAN_ID_SCAN
+    if (lastUnknownScanMs == 0U || (nowMs - lastUnknownScanMs) >= 5000U) {
+        if (s_stats.rxUnknownFrames != lastUnknownAtScan) {
+            printUnknownIdScan(nowMs);
+            lastUnknownAtScan = s_stats.rxUnknownFrames;
+        }
+        lastUnknownScanMs = nowMs;
+    }
+#endif
 }
 
 bool send(uint32_t id, const uint8_t* data, uint8_t len)

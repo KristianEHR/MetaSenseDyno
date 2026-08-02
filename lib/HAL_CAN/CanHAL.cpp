@@ -48,21 +48,14 @@ bool CanHAL::begin(int txPin, int rxPin) {
 #error Unsupported METASENSE_LEAF_CAN_BITRATE_KBPS. Use one of: 125, 250, 500, 1000.
 #endif
     
-    // Try a more selective filter: accept only the frames we care about
-    // In particular, ensure 0x55B can be received even if previously a TX ID
-#if METASENSE_LEAF_CAN_LISTEN_ONLY
-    // Listen-only mode: use a filter that explicitly includes 0x55B, 0x1DA, 0x1DC, 0x1D4, etc.
-    // This avoids TX object ownership issues by explicitly listing RX IDs
-    twai_filter_config_t f_config = {
-        .acceptance_code = 0x00000000,  // Match any ID
-        .acceptance_mask = 0x00000000,  // No masking = accept all
-        .single_filter = false
-    };
-    Serial.printf("[CAN-INIT] LISTEN_ONLY mode with explicit RX filter\n");
-#else
+    // Keep RX filtering permissive in both modes so protocol bring-up can sniff
+    // every frame family (1DA/1DB/1DC/1D4/55B/50B and any variants).
     twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
-    Serial.printf("[CAN-INIT] NORMAL mode\n");
-#endif
+    if (METASENSE_LEAF_CAN_LISTEN_ONLY) {
+        Serial.printf("[CAN-INIT] LISTEN_ONLY mode\n");
+    } else {
+        Serial.printf("[CAN-INIT] NORMAL mode\n");
+    }
     
     Serial.printf("[CAN-INIT] mode=%d rx_pin=%d tx_pin=%d filter=ACCEPT_ALL\n", 
                   static_cast<int>(mode), rxPin, txPin);
@@ -120,7 +113,7 @@ bool CanHAL::send(uint32_t id, const uint8_t* data, uint8_t len) {
 #endif
 }
 
-bool CanHAL::receive(uint32_t& id, uint8_t* data, uint8_t& len) {
+bool CanHAL::receive(uint32_t& id, uint8_t* data, uint8_t& len, bool& isExtended) {
     if (!started_) {
         return false;
     }
@@ -135,8 +128,8 @@ bool CanHAL::receive(uint32_t& id, uint8_t* data, uint8_t& len) {
     }
     memcpy(data, msg.data, len);
     
-    // Diagnostic: Check for extended frame bit or other issues
-    bool isExtended = (msg.flags & TWAI_MSG_FLAG_EXTD) != 0;
+    // Surface standard vs extended distribution to upper layers.
+    isExtended = (msg.flags & TWAI_MSG_FLAG_EXTD) != 0;
     if (id == 0x55BU || (isExtended && id == 0x55BU)) {
         Serial.printf("[HAL-RX-55B] id=0x%03lX flags=0x%02X dlc=%u extd=%d\n", 
                       static_cast<unsigned long>(id),

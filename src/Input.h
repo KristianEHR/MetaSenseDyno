@@ -38,6 +38,12 @@ namespace MetaSense::Input {
     void updateCanTorque(float torqueNm);
     void updateCanTemps(float inverterTempC, float statorTempC, float coolantTempC);
     void updateCanStatus(bool ready, bool fault, bool warning, bool limp);
+    bool sendLeafTorqueCommand120(float torqueDemandNm,
+                                  bool inverterReadyBit,
+                                  bool hvOkBit,
+                                  bool brakeBit,
+                                  bool gearDriveBit);
+    // Legacy compatibility wrapper: forwards to sendLeafTorqueCommand120.
     bool sendLeafTorqueCommand55B(float torqueDemandNm,
                                   bool inverterReadyBit,
                                   bool hvOkBit,

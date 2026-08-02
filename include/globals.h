@@ -24,6 +24,10 @@ extern const bool kVcuSwitch;
 #define METASENSE_GPIO_THROTTLE_PIN 47
 #endif
 
+#ifndef METASENSE_GPIO_START_REQUEST_PIN
+#define METASENSE_GPIO_START_REQUEST_PIN 37
+#endif
+
 constexpr int kOnboardLedPin = 48;
 constexpr int kOnboardLedCount = 1;
 constexpr int kI2cSdaPin = 17;
@@ -33,6 +37,7 @@ constexpr int kThrottlePin = METASENSE_GPIO_THROTTLE_PIN;
 constexpr int kBrakePin = 40;
 constexpr int kThrottleVcuPin = 41;
 constexpr int kRampSwitchPin = 35;
+constexpr int kStartRequestPin = METASENSE_GPIO_START_REQUEST_PIN;
 constexpr int kRbPlusInputPin = 36;
 constexpr int kRbPlusRelayPin = METASENSE_GPIO_RBPLUS_PIN;
 constexpr int kPrechargeRelayPin = METASENSE_GPIO_PRECHARGE_PIN;
@@ -74,5 +79,10 @@ static_assert(kThrottlePin != kRbMinusFetPin, "Throttle pin overlaps RB- relay p
 static_assert(kThrottlePin != kRbPlusRelayPin, "Throttle pin overlaps RB+ relay pin");
 static_assert(kThrottlePin != kPrechargeRelayPin, "Throttle pin overlaps precharge relay pin");
 static_assert(kThrottlePin != kSssrPin, "Throttle pin overlaps SSR relay pin");
+static_assert(kStartRequestPin != kRampSwitchPin, "Start-request pin overlaps ramp switch pin");
+static_assert(kStartRequestPin != kRbPlusRelayPin, "Start-request pin overlaps RB+ relay pin");
+static_assert(kStartRequestPin != kPrechargeRelayPin, "Start-request pin overlaps precharge relay pin");
+static_assert(kStartRequestPin != kRbMinusFetPin, "Start-request pin overlaps RB- relay pin");
+static_assert(kStartRequestPin != kSssrPin, "Start-request pin overlaps SSR relay pin");
 
 } // namespace MetaSense::Globals

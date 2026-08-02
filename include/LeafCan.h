@@ -33,7 +33,16 @@ struct LeafInvFeedback
     uint32_t torque_primary_frames;
     uint32_t torque_variant_frames;
     uint32_t temps_frames;
+    uint32_t temps_1da_frames;
+    uint32_t temps_1dc_frames;
+    uint32_t temps_55a_frames;
     uint32_t status_frames;
+
+    // Explicit 0x55A DBC temperature channels (deg C).
+    float id55a_motor_temp_c;
+    float id55a_com_board_temp_c;
+    float id55a_igbt_temp_c;
+    float id55a_driver_board_temp_c;
 
     // Raw decode candidates for on-target frame mapping diagnostics.
     uint16_t rpm_raw01_le;
@@ -49,11 +58,20 @@ struct LeafInvFeedback
     uint8_t mg_clock;
     uint8_t mg_error_codes;
     uint8_t crc_1da;
+    uint8_t id1da_raw[8]; // Raw 8-byte payload of last 0x1DA/0x01A frame
+    float id1da_ze1_rpm;  // ZE1 Motorola-decoded RPM candidate
+    float id1da_leg_rpm;  // Legacy LE word RPM candidate
+    float id1da_ze1_tq;   // ZE1 Motorola-decoded torque candidate (Nm)
+    float id1da_leg_tq;   // Legacy LE word torque candidate (Nm)
 
     // Thunderstruck TVCU 0x55B RX input decode.
     float id55b_torque_demand_nm;
     float id55b_like1da_rpm;
     float id55b_like1da_torque_nm;
+    float id55b_ze1_rpm;  // ZE1 Motorola-decoded RPM candidate
+    float id55b_leg_rpm;  // Legacy LE word RPM candidate
+    float id55b_ze1_tq;   // ZE1 Motorola-decoded torque candidate (Nm)
+    float id55b_leg_tq;   // Legacy LE word torque candidate (Nm)
     float id55b_like1da_input_voltage;
     uint32_t id55b_update_ms;
     uint32_t id55b_frames;

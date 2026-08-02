@@ -1,0 +1,20 @@
+ M .vscode/tasks.json
+ M backups/rollback_untracked.txt
+ M data/index.html
+ M include/CANBus.h
+ M include/LeafCan.h
+ M include/globals.h
+ M lib/HAL_CAN/CanHAL.cpp
+ M lib/HAL_CAN/CanHAL.h
+ M platformio.ini
+ M src/CANBus.cpp
+ M src/HardwareOutputStateMachine.cpp
+ M src/HardwareOutputStateMachine.h
+ M src/Input.cpp
+ M src/Input.h
+ M src/LeafCan.cpp
+ M src/Settings.cpp
+ M src/main.cpp
+?? backups/restore_20260728_000142/
+?? backups/restore_20260802_051442/
+?? backups/restore_latest.txt

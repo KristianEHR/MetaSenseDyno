@@ -1,5 +1,7 @@
 backups/rollback_base.txt
 backups/rollback_before_step1.patch
+backups/rollback_crc_concluded_2026-07-27.md
+backups/rollback_crc_only_2026-07-27.patch
 backups/rollback_status.txt
 backups/rollback_untracked.txt
 data/captures.html

@@ -141,6 +141,188 @@
 			]
 		},
 		{
+			"label": "Build (esp32s3-USB-120-compare)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-USB-120-compare"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$platformio"
+			]
+		},
+		{
+			"label": "Upload (esp32s3-USB-120-compare)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-USB-120-compare",
+				"-t",
+				"upload"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$platformio"
+			]
+		},
+		{
+			"label": "Build (esp32s3-ota-120-compare)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-ota-120-compare"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$platformio"
+			]
+		},
+		{
+			"label": "Upload (esp32s3-ota-120-compare)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-ota-120-compare",
+				"-t",
+				"upload"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$platformio"
+			]
+		},
+		{
+			"label": "Build (esp32s3-ota-120-compare-sign)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-ota-120-compare-sign"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$platformio"
+			]
+		},
+		{
+			"label": "Upload (esp32s3-ota-120-compare-sign)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-ota-120-compare-sign",
+				"-t",
+				"upload"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$platformio"
+			]
+		},
+		{
+			"label": "Build (esp32s3-ota-120-compare-sign-neutral)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-ota-120-compare-sign-neutral"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$platformio"
+			]
+		},
+		{
+			"label": "Upload (esp32s3-ota-120-compare-sign-neutral)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-ota-120-compare-sign-neutral",
+				"-t",
+				"upload"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$platformio"
+			]
+		},
+		{
+			"label": "Build (esp32s3-ota-120-compare-quadrant)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-ota-120-compare-quadrant"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$platformio"
+			]
+		},
+		{
+			"label": "Upload (esp32s3-ota-120-compare-quadrant)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-ota-120-compare-quadrant",
+				"-t",
+				"upload"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$platformio"
+			]
+		},
+		{
+			"label": "Upload Filesystem (esp32s3-USB-120-compare)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-USB-120-compare",
+				"-t",
+				"uploadfs"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$platformio"
+			]
+		},
+		{
+			"label": "Upload Filesystem (esp32s3-ota-120-compare)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-ota-120-compare",
+				"-t",
+				"uploadfs"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$platformio"
+			]
+		},
+		{
 			"label": "Upload Filesystem (esp32s3-USB)",
 			"type": "shell",
 			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",

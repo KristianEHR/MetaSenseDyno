@@ -1,0 +1,3 @@
+restore_dir=c:\PlatformIO\MetaSense-DYNO\backups\restore_20260802_051442
+base_commit=26fa766
+created=2026-08-02T05:14:42

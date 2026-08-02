@@ -13,15 +13,14 @@ namespace {
 #endif
 
 #ifndef METASENSE_PRECHARGE_TEST_ACCEPT_TIMEOUT
-#if defined(METASENSE_VCU_SIM_MODE) && (METASENSE_VCU_SIM_MODE != 0)
+// Allow the precharge dwell to complete even if the inverter does not publish
+// a READY bit yet. That keeps the output state machine from stalling in INIT.
 #define METASENSE_PRECHARGE_TEST_ACCEPT_TIMEOUT 1
-#else
-#define METASENSE_PRECHARGE_TEST_ACCEPT_TIMEOUT 0
-#endif
 #endif
 
 enum class OutputState {
     INIT,
+    START,
     IDLE,
     MOTOR,
     DYNO
@@ -32,9 +31,13 @@ OutputState pendingState = OutputState::INIT;
 uint32_t pendingStateSinceMs = 0;
 constexpr uint32_t kRelaySwitchDelayMs = 20;
 constexpr uint32_t kStateDebounceMs = 50;
+constexpr uint32_t kInitPrereqStableMs = 500;
 constexpr uint32_t kInitPrechargeMinMs = 2500;
+constexpr uint32_t kStartSetpointWaitMs = 15000;
 constexpr float kInitPrechargeHvReadyV = 300.0f;
-constexpr float kIdleSetpointZeroThresholdRpm = 500.0f;
+constexpr float kStartFallbackHvLowV = 200.0f;
+constexpr float kIdleSetpointZeroThresholdRpm = 0.0f;
+constexpr float kDynoModeEntryRpm = 500.0f;
 constexpr float kIdleEntryMaxRpm = 500.0f;
 constexpr float kRpmHysteresisBandRpm = 100.0f;
 bool inverterStatusInitialized = false;
@@ -45,6 +48,10 @@ bool initPrechargeSucceeded = false;
 bool initPrechargeFailed = false;
 bool prestartWarnPrinted = false;
 uint32_t initPrechargeStartMs = 0;
+uint32_t initReadySinceMs = 0;
+uint32_t startSetpointWaitStartMs = 0;
+const char* startGateReasonText = "boot";
+bool startResetRequestPending = false;
 bool vcuRelayOverrideEnabled = false;
 bool vcuRbPlusCommand = false;
 bool vcuPrechargeCommand = false;
@@ -59,6 +66,10 @@ struct RelayCommand {
 };
 
 RelayCommand activeRelayCommand{};
+bool relayInvariantMismatchLatched = false;
+uint32_t relayInvariantLastLogMs = 0;
+uint32_t relayInvariantMismatchCount = 0;
+constexpr uint32_t kRelayInvariantLogPeriodMs = 1000;
 
 Adafruit_NeoPixel strip(MetaSense::Globals::kOnboardLedCount,
                         MetaSense::Globals::kOnboardLedPin,
@@ -69,6 +80,8 @@ const char* outputStateName(OutputState hwState)
     switch (hwState) {
     case OutputState::INIT:
         return "INIT";
+    case OutputState::START:
+        return "START";
     case OutputState::IDLE:
         return "IDLE";
     case OutputState::MOTOR:
@@ -149,6 +162,82 @@ bool relayCommandEquals(const RelayCommand& a, const RelayCommand& b)
         a.prechargeOn == b.prechargeOn;
 }
 
+void logRelayInvariant(OutputState hwState,
+                       const RelayCommand& expected,
+                       const RelayCommand& actual,
+                       uint32_t now)
+{
+    ++relayInvariantMismatchCount;
+    Serial.printf("[HWSM][GUARD] mismatch=%lu state=%s exp(RB-=%d SSR=%d RB+=%d PRE=%d) act(RB-=%d SSR=%d RB+=%d PRE=%d)\\n",
+                  static_cast<unsigned long>(relayInvariantMismatchCount),
+                  outputStateName(hwState),
+                  expected.rbMinusOn ? 1 : 0,
+                  expected.ssrOn ? 1 : 0,
+                  expected.rbPlusOn ? 1 : 0,
+                  expected.prechargeOn ? 1 : 0,
+                  actual.rbMinusOn ? 1 : 0,
+                  actual.ssrOn ? 1 : 0,
+                  actual.rbPlusOn ? 1 : 0,
+                  actual.prechargeOn ? 1 : 0);
+    Serial0.printf("[HWSM][GUARD] mismatch=%lu state=%s exp(RB-=%d SSR=%d RB+=%d PRE=%d) act(RB-=%d SSR=%d RB+=%d PRE=%d)\\n",
+                   static_cast<unsigned long>(relayInvariantMismatchCount),
+                   outputStateName(hwState),
+                   expected.rbMinusOn ? 1 : 0,
+                   expected.ssrOn ? 1 : 0,
+                   expected.rbPlusOn ? 1 : 0,
+                   expected.prechargeOn ? 1 : 0,
+                   actual.rbMinusOn ? 1 : 0,
+                   actual.ssrOn ? 1 : 0,
+                   actual.rbPlusOn ? 1 : 0,
+                   actual.prechargeOn ? 1 : 0);
+    relayInvariantLastLogMs = now;
+}
+
+void checkRelayInvariant(OutputState hwState, uint32_t now)
+{
+    RelayCommand expected{};
+    bool hasExpectation = false;
+
+    switch (hwState) {
+    case OutputState::IDLE:
+        // IDLE contract: brake side closed, SSR open, RB+ follows precharge success latch.
+        expected.rbMinusOn = true;
+        expected.ssrOn = false;
+        expected.rbPlusOn = initPrechargeSucceeded;
+        expected.prechargeOn = false;
+        hasExpectation = true;
+        break;
+    case OutputState::MOTOR:
+        // MOTOR contract: SSR closed, RB- open, RB+ follows precharge success latch.
+        expected.rbMinusOn = false;
+        expected.ssrOn = true;
+        expected.rbPlusOn = initPrechargeSucceeded;
+        expected.prechargeOn = false;
+        hasExpectation = true;
+        break;
+    default:
+        relayInvariantMismatchLatched = false;
+        return;
+    }
+
+    if (!hasExpectation) {
+        return;
+    }
+
+    const bool mismatch = !relayCommandEquals(activeRelayCommand, expected);
+    if (!mismatch) {
+        relayInvariantMismatchLatched = false;
+        return;
+    }
+
+    const bool logNow = !relayInvariantMismatchLatched ||
+        (now - relayInvariantLastLogMs) >= kRelayInvariantLogPeriodMs;
+    if (logNow) {
+        logRelayInvariant(hwState, expected, activeRelayCommand, now);
+    }
+    relayInvariantMismatchLatched = true;
+}
+
 void applyRelayCommand(const RelayCommand& target)
 {
     if (relayCommandEquals(activeRelayCommand, target)) {
@@ -187,14 +276,16 @@ void setRelayOutputs(bool rbMinusOn, bool sssrOn, bool rbPlusOn = false, bool pr
 {
     RelayCommand cmd{};
     cmd.rbMinusOn = vcuRelayOverrideEnabled ? vcuRbMinusCommand : rbMinusOn;
-    cmd.ssrOn = vcuRelayOverrideEnabled ? vcuSsrCommand : sssrOn;
+
+    const bool requestedSsrOn = vcuRelayOverrideEnabled ? vcuSsrCommand : sssrOn;
+    cmd.ssrOn = requestedSsrOn;
 
     // New HV relay pins are owned by VCU path when override is enabled.
     cmd.rbPlusOn = vcuRelayOverrideEnabled ? vcuRbPlusCommand : rbPlusOn;
     cmd.prechargeOn = vcuRelayOverrideEnabled ? vcuPrechargeCommand : prechargeOn;
 
-    // Precharge ownership is centralized to the INIT precharge sequence only.
-    if (state != OutputState::INIT || !initPrechargeActive) {
+    // Precharge ownership is centralized to the START precharge sequence only.
+    if (state != OutputState::START || !initPrechargeActive) {
         cmd.prechargeOn = false;
     }
 
@@ -212,6 +303,10 @@ void writePrimaryBrakeSplit(OutputState hwState, float signedPercent)
 
     switch (hwState) {
     case OutputState::INIT:
+        writeActuatorChannel(MetaSense::Globals::kBrakePwmChannel, 0.0f);
+        writeActuatorChannel(MetaSense::Globals::kDynoThrottlePwmChannel, 0.0f);
+        break;
+    case OutputState::START:
         writeActuatorChannel(MetaSense::Globals::kBrakePwmChannel, 0.0f);
         writeActuatorChannel(MetaSense::Globals::kDynoThrottlePwmChannel, 0.0f);
         break;
@@ -240,6 +335,9 @@ void setStateLed(OutputState hwState)
 
     switch (hwState) {
     case OutputState::INIT:
+        color = strip.Color(255, 255, 255);
+        break;
+    case OutputState::START:
         color = strip.Color(255, 200, 0);
         break;
     case OutputState::IDLE:
@@ -257,21 +355,11 @@ void setStateLed(OutputState hwState)
     strip.show();
 }
 
-void updateInitPrechargeSequence(OutputState nextState,
-                                 float inverterHvVoltage,
-                                 bool inverterReady,
-                                 bool inverterFault,
-                                 uint32_t now)
+void updateStartPrechargeSequence(float setPoint,
+                                  float inverterHvVoltage,
+                                  bool inverterFault,
+                                  uint32_t now)
 {
-    if (inverterFault) {
-        initPrechargeActive = false;
-        initPrechargeCompleted = false;
-        initPrechargeSucceeded = false;
-        initPrechargeFailed = false;
-        prestartWarnPrinted = false;
-        return;
-    }
-
     if (initPrechargeFailed) {
         initPrechargeActive = false;
         return;
@@ -282,44 +370,40 @@ void updateInitPrechargeSequence(OutputState nextState,
         return;
     }
 
-    if (nextState == OutputState::INIT) {
-        if (!initPrechargeActive) {
-            initPrechargeActive = true;
-            initPrechargeStartMs = now;
-        }
-
-        const uint32_t elapsedMs = now - initPrechargeStartMs;
-        const bool minDwellElapsed = elapsedMs >= kInitPrechargeMinMs;
-        const bool hvReady = inverterHvVoltage >= kInitPrechargeHvReadyV;
-
-        if (hvReady || (minDwellElapsed && inverterReady)) {
-            initPrechargeActive = false;
-            initPrechargeCompleted = true;
-            initPrechargeSucceeded = true;
-            initPrechargeFailed = false;
-            prestartWarnPrinted = false;
-        } else if (minDwellElapsed) {
-#if METASENSE_PRECHARGE_TEST_ACCEPT_TIMEOUT
-            initPrechargeActive = false;
-            initPrechargeCompleted = true;
-            initPrechargeSucceeded = true;
-            initPrechargeFailed = false;
-            prestartWarnPrinted = false;
-#else
-            initPrechargeActive = false;
-            initPrechargeCompleted = true;
-            initPrechargeSucceeded = false;
-            initPrechargeFailed = true;
-            if (!prestartWarnPrinted) {
-                Serial.println("[HWSM][PRESTART_WARN] Precharge timeout: HV did not reach 300V in 2500ms; VCU_INIT halted");
-                Serial0.println("[HWSM][PRESTART_WARN] Precharge timeout: HV did not reach 300V in 2500ms; VCU_INIT halted");
-                prestartWarnPrinted = true;
-            }
-#endif
-        }
-    } else {
-        // Outside INIT, precharge must be deasserted. Do not auto-complete the sequence here.
+    // Enforce START precharge only at zero setpoint.
+    const bool startCondition = setPoint <= kIdleSetpointZeroThresholdRpm;
+    if (!startCondition) {
         initPrechargeActive = false;
+        return;
+    }
+
+    if (!initPrechargeActive) {
+        initPrechargeActive = true;
+        initPrechargeStartMs = now;
+        return;
+    }
+
+    const uint32_t elapsedMs = now - initPrechargeStartMs;
+    if (elapsedMs >= kInitPrechargeMinMs) {
+        initPrechargeActive = false;
+        initPrechargeCompleted = true;
+
+        const bool hvReady = inverterHvVoltage >= kInitPrechargeHvReadyV;
+        const bool faultFree = !inverterFault;
+        initPrechargeSucceeded = hvReady && faultFree;
+        initPrechargeFailed = !initPrechargeSucceeded;
+
+        if (!initPrechargeSucceeded && !prestartWarnPrinted) {
+            Serial.printf("[HWSM][PRESTART_WARN] START precharge complete but not armed: hv=%.1fV fault=%d (need hv>=%.1f and fault=0)\n",
+                          inverterHvVoltage,
+                          inverterFault ? 1 : 0,
+                          kInitPrechargeHvReadyV);
+            Serial0.printf("[HWSM][PRESTART_WARN] START precharge complete but not armed: hv=%.1fV fault=%d (need hv>=%.1f and fault=0)\n",
+                           inverterHvVoltage,
+                           inverterFault ? 1 : 0,
+                           kInitPrechargeHvReadyV);
+            prestartWarnPrinted = true;
+        }
     }
 }
 
@@ -333,17 +417,10 @@ void applyOutputs(OutputState nextState,
     (void)prevState;
     writeThrottleDutyPwm(engineThrottlePercent);
 
-    if (inverterFault) {
-        setRelayOutputs(false, false, false, false);
-        writePrimaryBrakeSplit(nextState, primaryBrakePercent);
-        setStateLed(nextState);
-        return;
-    }
-
     if (initPrechargeFailed) {
         setRelayOutputs(false, false, false, false);
-        writePrimaryBrakeSplit(OutputState::INIT, 0.0f);
-        setStateLed(OutputState::INIT);
+        writePrimaryBrakeSplit(OutputState::START, 0.0f);
+        setStateLed(OutputState::START);
         return;
     }
 
@@ -355,9 +432,15 @@ void applyOutputs(OutputState nextState,
 
     switch (nextState) {
     case OutputState::INIT:
-        // Once init precharge completes, RB+ is allowed to come up even if we are still parked in INIT.
-        setRelayOutputs(false, true, initPrechargeSucceeded, prechargeActive);
+        // INIT contract: firmware/hardware bring-up complete, keep relays OFF.
+        setRelayOutputs(false, false, false, false);
         writePrimaryBrakeSplit(OutputState::INIT, 0.0f);
+        break;
+
+    case OutputState::START:
+        // START contract: all relays OFF except timed precharge window.
+        setRelayOutputs(false, prechargeActive, false, prechargeActive);
+        writePrimaryBrakeSplit(OutputState::START, 0.0f);
         break;
 
     case OutputState::IDLE:
@@ -456,7 +539,9 @@ void update(float engineThrottlePercent,
             float inverterHvVoltage,
             bool inverterStatusReady,
             bool inverterReady,
-            bool inverterFault)
+            bool inverterFault,
+            bool canTelemetryReady,
+            bool sensorsReady)
 {
     const OutputState prevState = state;
     OutputState candidateState = state;
@@ -470,37 +555,133 @@ void update(float engineThrottlePercent,
         : (rpm <= idleEnterRpm);
     const bool idleCondition = idleSetpointZero && idleRpmCondition;
 
-    const bool dynoSetpointEligible = setPoint > kIdleSetpointZeroThresholdRpm;
-    const float dynoEnterRpm = setPoint + kRpmHysteresisBandRpm;
-    const float dynoExitRpm = setPoint - kRpmHysteresisBandRpm;
+    const float dynoEnterRpm = kDynoModeEntryRpm + kRpmHysteresisBandRpm;
+    const float dynoExitRpm = kDynoModeEntryRpm - kRpmHysteresisBandRpm;
     const bool dynoRpmCondition = (state == OutputState::DYNO)
         ? (rpm >= dynoExitRpm)
         : (rpm >= dynoEnterRpm);
-    const bool dynoCondition = dynoSetpointEligible && dynoRpmCondition;
+    const bool dynoCondition = dynoRpmCondition;
+    const bool motorSetpointCondition = setPoint > kIdleSetpointZeroThresholdRpm;
 
     if (inverterStatusReady) {
         inverterStatusInitialized = true;
     }
 
-    if (!inverterStatusInitialized) {
-        candidateState = OutputState::INIT;
-    } else if (initPrechargeFailed) {
-        candidateState = OutputState::INIT;
-    } else if (!initPrechargeCompleted) {
-        // Keep INIT latched until precharge sequence reaches a terminal result.
-        candidateState = OutputState::INIT;
-    } else if (!inverterReady) {
-        // Keep the bring-up test parked in INIT until inverter-ready is observed.
-        candidateState = OutputState::INIT;
-    } else if (idleCondition) {
-        candidateState = OutputState::IDLE;
-    } else if (dynoCondition) {
-        candidateState = OutputState::DYNO;
-    } else {
-        candidateState = OutputState::MOTOR;
+    const uint32_t now = millis();
+    bool forceStartByRequest = false;
+    if (startResetRequestPending) {
+        startResetRequestPending = false;
+        forceStartByRequest = true;
+
+        // Start-button reset: clear START sequencing latches and retry from START.
+        initPrechargeActive = false;
+        initPrechargeCompleted = false;
+        initPrechargeSucceeded = false;
+        initPrechargeFailed = false;
+        prestartWarnPrinted = false;
+        initPrechargeStartMs = 0;
+        startSetpointWaitStartMs = 0;
     }
 
-    const uint32_t now = millis();
+    const bool initPrereqNow = canTelemetryReady && sensorsReady;
+    if (initPrereqNow) {
+        if (initReadySinceMs == 0U) {
+            initReadySinceMs = now;
+        }
+    } else {
+        initReadySinceMs = 0U;
+    }
+    const bool initPrereqStable = (initReadySinceMs != 0U) &&
+                                  ((now - initReadySinceMs) >= kInitPrereqStableMs);
+
+    const bool hvTooLowForRun = inverterHvVoltage < kStartFallbackHvLowV;
+    if (hvTooLowForRun) {
+        initPrechargeActive = false;
+        startSetpointWaitStartMs = 0;
+    }
+    if (hvTooLowForRun && state != OutputState::START) {
+        initPrechargeActive = false;
+        initPrechargeCompleted = false;
+        initPrechargeSucceeded = false;
+        initPrechargeFailed = false;
+        prestartWarnPrinted = false;
+        initPrechargeStartMs = 0;
+        startSetpointWaitStartMs = 0;
+    }
+
+    if (state == OutputState::START && !hvTooLowForRun) {
+        updateStartPrechargeSequence(setPoint, inverterHvVoltage, inverterFault, now);
+    } else {
+        initPrechargeActive = false;
+    }
+
+    if (forceStartByRequest) {
+        candidateState = OutputState::START;
+    } else if (state == OutputState::INIT) {
+        // INIT is the full firmware/hardware bring-up phase.
+        // Auto-promote to START once prerequisites are stably ready.
+        // A start-button request can still force START immediately.
+        candidateState = initPrereqStable ? OutputState::START : OutputState::INIT;
+    } else if (hvTooLowForRun || inverterFault) {
+        candidateState = OutputState::START;
+    } else if (state == OutputState::START && !initPrechargeSucceeded) {
+        candidateState = OutputState::START;
+    } else if (state == OutputState::START) {
+        // START exit policy: after precharge gate passes, allow up to 15s
+        // for setpoint > 0 to move into MOTOR; otherwise fall back to IDLE.
+        if (motorSetpointCondition) {
+            startSetpointWaitStartMs = 0;
+            candidateState = OutputState::MOTOR;
+        } else {
+            if (startSetpointWaitStartMs == 0U) {
+                startSetpointWaitStartMs = now;
+            }
+            const bool startWaitExpired = (now - startSetpointWaitStartMs) >= kStartSetpointWaitMs;
+            candidateState = startWaitExpired ? OutputState::IDLE : OutputState::START;
+        }
+    } else if (dynoCondition) {
+        candidateState = OutputState::DYNO;
+    } else if (motorSetpointCondition) {
+        candidateState = OutputState::MOTOR;
+    } else if (idleCondition) {
+        candidateState = OutputState::IDLE;
+    } else {
+        candidateState = OutputState::IDLE;
+    }
+
+    // Operator-facing reason why START is currently held, or why run path is open.
+    if (forceStartByRequest) {
+        startGateReasonText = "start_button";
+    } else if (state == OutputState::INIT) {
+        startGateReasonText = initPrereqStable ? "init_to_start" : "init_wait_prereq";
+    } else if (hvTooLowForRun) {
+        startGateReasonText = "hv_low";
+    } else if (inverterFault) {
+        startGateReasonText = "fault";
+    } else if (state == OutputState::START && !initPrechargeSucceeded) {
+        if (initPrechargeFailed) {
+            startGateReasonText = "precharge_failed";
+        } else if (setPoint > kIdleSetpointZeroThresholdRpm) {
+            startGateReasonText = "wait_setpoint_zero";
+        } else if (initPrechargeActive) {
+            startGateReasonText = "precharge_active";
+        } else {
+            startGateReasonText = "precharge_pending";
+        }
+    } else if (state == OutputState::START) {
+        if (motorSetpointCondition) {
+            startGateReasonText = "start_exit_motor";
+        } else if (startSetpointWaitStartMs == 0U) {
+            startGateReasonText = "wait_setpoint_positive";
+        } else if ((now - startSetpointWaitStartMs) >= kStartSetpointWaitMs) {
+            startGateReasonText = "start_timeout_idle";
+        } else {
+            startGateReasonText = "wait_setpoint_positive";
+        }
+    } else {
+        startGateReasonText = "open";
+    }
+
     if (candidateState != pendingState) {
         pendingState = candidateState;
         pendingStateSinceMs = now;
@@ -508,18 +689,35 @@ void update(float engineThrottlePercent,
 
     if (pendingState != state && (now - pendingStateSinceMs) >= kStateDebounceMs) {
         state = pendingState;
+        Serial.printf("[HWSM] state=%s gate=%d completed=%d active=%d start=%lu now=%lu\n",
+                      outputStateName(state),
+                      initPrechargeSucceeded ? 1 : 0,
+                      initPrechargeCompleted ? 1 : 0,
+                      initPrechargeActive ? 1 : 0,
+                      static_cast<unsigned long>(initPrechargeStartMs),
+                      static_cast<unsigned long>(now));
+        Serial0.printf("[HWSM] state=%s gate=%d completed=%d active=%d start=%lu now=%lu\n",
+                       outputStateName(state),
+                       initPrechargeSucceeded ? 1 : 0,
+                       initPrechargeCompleted ? 1 : 0,
+                       initPrechargeActive ? 1 : 0,
+                       static_cast<unsigned long>(initPrechargeStartMs),
+                       static_cast<unsigned long>(now));
     } else if (pendingState == state) {
         pendingStateSinceMs = now;
     }
 
-    updateInitPrechargeSequence(state, inverterHvVoltage, inverterReady, inverterFault, now);
+    if (state != OutputState::START) {
+        startSetpointWaitStartMs = 0;
+    }
 
     applyOutputs(state, prevState, engineThrottlePercent, primaryBrakePercent, inverterReady, inverterFault);
+    checkRelayInvariant(state, now);
 }
 
 void setStateIdle()
 {
-    state = inverterStatusInitialized ? OutputState::IDLE : OutputState::INIT;
+    state = initPrechargeSucceeded ? OutputState::IDLE : OutputState::START;
     if (state == OutputState::IDLE) {
         setRelayOutputs(true, false, initPrechargeSucceeded);
     } else {
@@ -535,6 +733,11 @@ void setStateMotorDyno()
     state = OutputState::MOTOR;
     setRelayOutputs(false, true, initPrechargeSucceeded);
     setStateLed(state);
+}
+
+void requestStartReset()
+{
+    startResetRequestPending = true;
 }
 
 bool isMotorState()
@@ -556,6 +759,11 @@ void stop()
 const char* stateName()
 {
     return outputStateName(state);
+}
+
+const char* startGateReason()
+{
+    return startGateReasonText;
 }
 
 bool isRbPlusActive()
@@ -582,7 +790,7 @@ void applyVcuSimRelayOutputs(bool rbPlusOn, bool prechargeOn, bool ssrOn, bool r
     cmd.rbMinusOn = rbMinusOn;
     cmd.ssrOn = ssrOn;
     cmd.rbPlusOn = rbPlusOn;
-    cmd.prechargeOn = (state == OutputState::INIT && initPrechargeActive) ? prechargeOn : false;
+    cmd.prechargeOn = (state == OutputState::START && initPrechargeActive) ? prechargeOn : false;
 
     // Keep simulation path aligned with production HV relay interlock.
     if (cmd.prechargeOn) {

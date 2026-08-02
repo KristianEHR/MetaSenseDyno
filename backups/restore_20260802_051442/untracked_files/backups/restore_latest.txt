@@ -1,0 +1,3 @@
+restore_dir=backups/restore_20260728_000142
+base_commit=26fa766d58a0a31c35869b1964160493c5911898
+created=2026-07-28 00:02:13

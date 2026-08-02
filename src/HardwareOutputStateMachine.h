@@ -15,16 +15,20 @@ void update(float engineThrottlePercent,
             float inverterHvVoltage,
             bool inverterStatusReady,
             bool inverterReady,
-            bool inverterFault);
+            bool inverterFault,
+            bool canTelemetryReady,
+            bool sensorsReady);
 
 void setStateIdle();
 void setStateMotorDyno();
+void requestStartReset();
 
 bool isMotorState();
 bool isIdleState();
 
 void stop();
 const char* stateName();
+const char* startGateReason();
 
 bool isRbPlusActive();
 void setVcuRelayOverride(bool enabled, bool rbPlus, bool precharge, bool ssr, bool rbMinus);

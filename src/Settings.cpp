@@ -199,7 +199,9 @@ void loadFromStorage()
     brakeMaxTorqueNm = prefs.getFloat("brakeMaxTq", brakeMaxTorqueNm);
     forceVcuReadyForUiTest = kDefaultForceVcuReadyForUiTest;
     leafSimFeedbackEnabled = prefs.getBool("leafSimFb", leafSimFeedbackEnabled);
-    if (!kDefaultLeafSimFeedbackEnabled) {
+    if (kDefaultLeafSimFeedbackEnabled) {
+        leafSimFeedbackEnabled = true;
+    } else {
         leafSimFeedbackEnabled = false;
     }
 
