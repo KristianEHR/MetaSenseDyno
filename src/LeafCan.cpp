@@ -220,17 +220,6 @@ static inline void decodeStatus(const uint8_t *d,
     limp = directLimp || shiftedLimp;
 }
 
-static inline uint8_t decode55bChecksum(const uint8_t* d)
-{
-    const uint16_t checksum = static_cast<uint16_t>(d[0]) +
-                              static_cast<uint16_t>(d[1]) +
-                              static_cast<uint16_t>(d[2]) +
-                              static_cast<uint16_t>(d[3]) +
-                              static_cast<uint16_t>(d[4]) +
-                              static_cast<uint16_t>(d[6]);
-    return static_cast<uint8_t>(checksum & 0xFFU);
-}
-
 static inline void decode1daLikeFrame(const uint8_t* d,
                                       uint8_t dlc,
                                       uint16_t& raw01Le,
@@ -467,38 +456,4 @@ void LeafCan::reset(LeafInvFeedback &fb)
     fb.id1da_leg_rpm = 0.0f;
     fb.id1da_ze1_tq = 0.0f;
     fb.id1da_leg_tq = 0.0f;
-
-    fb.id55b_torque_demand_nm = 0.0f;
-    fb.id55b_like1da_rpm = 0.0f;
-    fb.id55b_like1da_torque_nm = 0.0f;
-    fb.id55b_like1da_input_voltage = 0.0f;
-    fb.id55b_ze1_rpm = 0.0f;
-    fb.id55b_leg_rpm = 0.0f;
-    fb.id55b_ze1_tq  = 0.0f;
-    fb.id55b_leg_tq  = 0.0f;
-    fb.id55b_update_ms = 0;
-    fb.id55b_frames = 0;
-    fb.id55b_last_id = 0;
-    fb.id55b_primary_frames = 0;
-    fb.id05b_short_frames = 0;
-    fb.id50b_alias_frames = 0;
-    fb.id55b_primary_update_ms = 0;
-    for (uint8_t i = 0; i < 8U; ++i) {
-        fb.id55b_primary_raw[i] = 0;
-    }
-    for (uint8_t i = 0; i < 8U; ++i) {
-        fb.id55b_raw[i] = 0;
-    }
-    fb.id55b_torque_raw_le = 0;
-    fb.id55b_torque_raw_be = 0;
-    fb.id55b_ready_cmd = false;
-    fb.id55b_hv_ok_cmd = false;
-    fb.id55b_gear_drive_cmd = false;
-    fb.id55b_like1da_clock = 0;
-    fb.id55b_like1da_error_codes = 0;
-    fb.id55b_like1da_crc = 0;
-    fb.id55b_counter = 0;
-    fb.id55b_checksum = 0;
-    fb.id55b_checksum_calc = 0;
-    fb.id55b_checksum_ok = false;
 }

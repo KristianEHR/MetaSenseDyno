@@ -13,16 +13,8 @@
 #define METASENSE_CAN_LOG_ALL_FRAMES 0
 #endif
 
-#ifndef METASENSE_CAN_LOG_55B_RAW
-#define METASENSE_CAN_LOG_55B_RAW 0
-#endif
-
 #ifndef METASENSE_CAN_LOG_11A_CHANGES
 #define METASENSE_CAN_LOG_11A_CHANGES 0
-#endif
-
-#ifndef METASENSE_CAN_LOG_120_CHANGES
-#define METASENSE_CAN_LOG_120_CHANGES 1
 #endif
 
 #ifndef METASENSE_CAN_ID_SCAN
@@ -269,17 +261,14 @@ void poll(uint32_t nowMs)
     static uint32_t lastUnknownScanMs = 0;
     static uint32_t lastUnknownAtScan = 0;
     static uint32_t lastRx1daFrames = 0;
+    static uint32_t lastRx1d4CmdFrames = 0;
     static uint32_t lastRx1dcFrames = 0;
-    static uint32_t lastRx55bFrames = 0;
     static uint32_t lastRx1dbFrames = 0;
     static uint32_t lastRx11aFrames = 0;
     static uint32_t lastRxUnknownFrames = 0;
     static uint32_t lastRxStdFrames = 0;
     static uint32_t lastRxExtFrames = 0;
     static uint32_t last11aChangeLogMs = 0;
-    static uint32_t last55bLogMs = 0;
-    static uint8_t last55bLogLen = 0;
-    static uint8_t last55bLogData[8] = {0};
     const uint32_t DIAG_PERIOD_MS = 5000;
     const uint32_t RATE_PERIOD_MS = 2000;
 
@@ -327,8 +316,6 @@ void poll(uint32_t nowMs)
 
     uint32_t framesThisPoll = 0;
     uint32_t extFramesThisPoll = 0;
-    static uint32_t id120LogDecimator = 0;
-
     for (uint8_t i = 0; i < s_config.maxFramesPerPoll; ++i) {
         uint32_t id = 0;
         uint8_t len = 0;
@@ -361,39 +348,17 @@ void poll(uint32_t nowMs)
             memset(s_stats.last55aData, 0, sizeof(s_stats.last55aData));
             memcpy(s_stats.last55aData, data, len);
         }
-        if (id == 0x55BU || id == 0x50BU || id == 0x05BU) {
-            ++s_stats.rx55bFrames;
-            const uint32_t prev55bMs = s_stats.last55bMs;
-            s_stats.last55bSrcId = id;
-            s_stats.last55bMs = nowMs;
-            s_stats.last55bLen = len;
-            memset(s_stats.last55bData, 0, sizeof(s_stats.last55bData));
-            memcpy(s_stats.last55bData, data, len);
-
-#if METASENSE_CAN_LOG_55B_RAW
-            const bool payloadChanged = (len != last55bLogLen) ||
-                                        (memcmp(last55bLogData, data, len) != 0);
-            const bool logDue = (last55bLogMs == 0U) || ((nowMs - last55bLogMs) >= 1000U);
-            if (payloadChanged || logDue) {
-                Serial.printf("[CAN-55X-RAW] id=0x%03lX n=%lu age=%lu len=%u data=%02X %02X %02X %02X %02X %02X %02X %02X\n",
-                              static_cast<unsigned long>(id),
-                              static_cast<unsigned long>(s_stats.rx55bFrames),
-                              static_cast<unsigned long>((prev55bMs == 0U) ? 0U : (nowMs - prev55bMs)),
-                              static_cast<unsigned>(len),
-                              static_cast<unsigned>(data[0]),
-                              static_cast<unsigned>(data[1]),
-                              static_cast<unsigned>(data[2]),
-                              static_cast<unsigned>(data[3]),
-                              static_cast<unsigned>(data[4]),
-                              static_cast<unsigned>(data[5]),
-                              static_cast<unsigned>(data[6]),
-                              static_cast<unsigned>(data[7]));
-                last55bLogMs = nowMs;
-                last55bLogLen = len;
-                memset(last55bLogData, 0, sizeof(last55bLogData));
-                memcpy(last55bLogData, data, len);
-            }
-#endif
+        if (id == 0x1D4U) {
+            ++s_stats.rx1d4SniffFrames;
+            s_stats.last1d4SniffMs = nowMs;
+            s_stats.last1d4SniffLen = len;
+            memset(s_stats.last1d4SniffData, 0, sizeof(s_stats.last1d4SniffData));
+            memcpy(s_stats.last1d4SniffData, data, len);
+            ++s_stats.rx1d4CmdFrames;
+            s_stats.last1d4CmdMs = nowMs;
+            s_stats.last1d4CmdLen = len;
+            memset(s_stats.last1d4CmdData, 0, sizeof(s_stats.last1d4CmdData));
+            memcpy(s_stats.last1d4CmdData, data, len);
         }
 
         if (isAcceptedLeafId(decodeId)) {
@@ -401,19 +366,17 @@ void poll(uint32_t nowMs)
             ++s_stats.rxLeafFrames;
             if (decodeId == 0x1DAU) {
                 ++s_stats.rx1daFrames;
+                s_stats.last1daMs = nowMs;
+                s_stats.last1daLen = len;
+                memset(s_stats.last1daData, 0, sizeof(s_stats.last1daData));
+                memcpy(s_stats.last1daData, data, len);
             } else if (decodeId == 0x1DCU) {
                 ++s_stats.rx1dcFrames;
             }
         } else {
-            // Strict RX policy: 0x120 is our command family context, not accepted RX telemetry.
-            const bool treatAsUnknown = (id != 0x120U);
-            if (treatAsUnknown) {
-                ++s_stats.rxUnknownFrames;
-            }
+            ++s_stats.rxUnknownFrames;
 #if METASENSE_CAN_ID_SCAN
-            if (treatAsUnknown) {
-                noteUnknownId(id, data, len, nowMs, isExtended);
-            }
+            noteUnknownId(id, data, len, nowMs, isExtended);
 #endif
             if (id == 0x1DBU) {
                 ++s_stats.rx1dbFrames;
@@ -456,19 +419,11 @@ void poll(uint32_t nowMs)
                 memset(s_stats.last11aData, 0, sizeof(s_stats.last11aData));
                 memcpy(s_stats.last11aData, data, len);
             }
-            if (id == 0x05BU) {
-                ++s_stats.rx05bFrames;
-            }
-            if (id == 0x50BU) {
-                ++s_stats.rx50bFrames;
-            }
-            if (treatAsUnknown) {
-                s_stats.lastUnknownMs = nowMs;
-                s_stats.lastUnknownId = id;
-                s_stats.lastUnknownLen = len;
-                memset(s_stats.lastUnknownData, 0, sizeof(s_stats.lastUnknownData));
-                memcpy(s_stats.lastUnknownData, data, len);
-            }
+            s_stats.lastUnknownMs = nowMs;
+            s_stats.lastUnknownId = id;
+            s_stats.lastUnknownLen = len;
+            memset(s_stats.lastUnknownData, 0, sizeof(s_stats.lastUnknownData));
+            memcpy(s_stats.lastUnknownData, data, len);
         }
         s_stats.lastRxMs = nowMs;
         s_stats.lastRxId = id;
@@ -491,17 +446,15 @@ void poll(uint32_t nowMs)
         }
     #endif
 
-        // Optional full-frame log. Keep unknown visibility while decimating 0x120 spam.
+        // Optional full-frame log.
     #if METASENSE_CAN_LOG_ALL_FRAMES
-        if (id != 0x120U || ((++id120LogDecimator % 128U) == 0U)) {
-            Serial.printf("[CAN-FRAME-RX] id=0x%03lX len=%u data=%02X %02X %02X %02X\n",
-                          static_cast<unsigned long>(id),
-                          static_cast<unsigned>(len),
-                          static_cast<unsigned>(data[0]),
-                          static_cast<unsigned>(data[1]),
-                          static_cast<unsigned>(data[2]),
-                          static_cast<unsigned>(data[3]));
-        }
+        Serial.printf("[CAN-FRAME-RX] id=0x%03lX len=%u data=%02X %02X %02X %02X\n",
+                      static_cast<unsigned long>(id),
+                      static_cast<unsigned>(len),
+                      static_cast<unsigned>(data[0]),
+                      static_cast<unsigned>(data[1]),
+                      static_cast<unsigned>(data[2]),
+                      static_cast<unsigned>(data[3]));
     #endif
         
     }
@@ -513,7 +466,7 @@ void poll(uint32_t nowMs)
     if (lastRateMs == 0U || (nowMs - lastRateMs) >= RATE_PERIOD_MS) {
         const uint32_t dtMs = (lastRateMs == 0U) ? RATE_PERIOD_MS : (nowMs - lastRateMs);
         const uint32_t d1da = s_stats.rx1daFrames - lastRx1daFrames;
-        const uint32_t d55b = s_stats.rx55bFrames - lastRx55bFrames;
+        const uint32_t d1d4cmd = s_stats.rx1d4CmdFrames - lastRx1d4CmdFrames;
         const uint32_t d1db = s_stats.rx1dbFrames - lastRx1dbFrames;
         const uint32_t d11a = s_stats.rx11aFrames - lastRx11aFrames;
         const uint32_t dunk = s_stats.rxUnknownFrames - lastRxUnknownFrames;
@@ -521,24 +474,24 @@ void poll(uint32_t nowMs)
         const uint32_t dext = s_stats.rxExtFrames - lastRxExtFrames;
 
         const float hz1da = (dtMs > 0U) ? (1000.0f * static_cast<float>(d1da) / static_cast<float>(dtMs)) : 0.0f;
-        const float hz55b = (dtMs > 0U) ? (1000.0f * static_cast<float>(d55b) / static_cast<float>(dtMs)) : 0.0f;
+        const float hz1d4cmd = (dtMs > 0U) ? (1000.0f * static_cast<float>(d1d4cmd) / static_cast<float>(dtMs)) : 0.0f;
         const float hz1db = (dtMs > 0U) ? (1000.0f * static_cast<float>(d1db) / static_cast<float>(dtMs)) : 0.0f;
         const float hz11a = (dtMs > 0U) ? (1000.0f * static_cast<float>(d11a) / static_cast<float>(dtMs)) : 0.0f;
         const float hzStd = (dtMs > 0U) ? (1000.0f * static_cast<float>(dstd) / static_cast<float>(dtMs)) : 0.0f;
         const float hzExt = (dtMs > 0U) ? (1000.0f * static_cast<float>(dext) / static_cast<float>(dtMs)) : 0.0f;
 
-        Serial.printf("[CAN-RATE] std=%lu(%.1fHz) ext=%lu(%.1fHz) 1DA=%lu(%.1fHz) 1DB=%lu(%.1fHz) legacy(55X=%lu(%.1fHz),11A=%lu(%.1fHz)) unk=%lu\n",
+        Serial.printf("[CAN-RATE] std=%lu(%.1fHz) ext=%lu(%.1fHz) 1DA=%lu(%.1fHz) 1D4cmd=%lu(%.1fHz) 1DB=%lu(%.1fHz) legacy11A=%lu(%.1fHz) unk=%lu\n",
                       static_cast<unsigned long>(s_stats.rxStdFrames), hzStd,
                       static_cast<unsigned long>(s_stats.rxExtFrames), hzExt,
                       static_cast<unsigned long>(s_stats.rx1daFrames), hz1da,
+                      static_cast<unsigned long>(s_stats.rx1d4CmdFrames), hz1d4cmd,
                   static_cast<unsigned long>(s_stats.rx1dbFrames), hz1db,
-                  static_cast<unsigned long>(s_stats.rx55bFrames), hz55b,
                   static_cast<unsigned long>(s_stats.rx11aFrames), hz11a,
                       static_cast<unsigned long>(s_stats.rxUnknownFrames));
 
         lastRateMs = nowMs;
         lastRx1daFrames = s_stats.rx1daFrames;
-        lastRx55bFrames = s_stats.rx55bFrames;
+        lastRx1d4CmdFrames = s_stats.rx1d4CmdFrames;
         lastRx1dbFrames = s_stats.rx1dbFrames;
         lastRx11aFrames = s_stats.rx11aFrames;
         lastRxUnknownFrames = s_stats.rxUnknownFrames;
@@ -573,6 +526,25 @@ bool send(uint32_t id, const uint8_t* data, uint8_t len)
     const bool sent = s_canHal.send(id, data, len);
     if (sent) {
         ++s_stats.txFrames;
+        if (id == 0x1D4U && data != nullptr) {
+            ++s_stats.tx1d4Frames;
+            s_stats.last1d4TxMs = millis();
+            s_stats.last1d4TxLen = (len <= sizeof(s_stats.last1d4TxData))
+                ? len
+                : static_cast<uint8_t>(sizeof(s_stats.last1d4TxData));
+            memset(s_stats.last1d4TxData, 0, sizeof(s_stats.last1d4TxData));
+            memcpy(s_stats.last1d4TxData, data, s_stats.last1d4TxLen);
+
+            // Some installations do not receive local TX loopback. Mirror last
+            // transmitted 0x1D4 command into monitor stats so UI CRC/bytes stay visible.
+            ++s_stats.rx1d4CmdFrames;
+            s_stats.last1d4CmdMs = millis();
+            s_stats.last1d4CmdLen = (len <= sizeof(s_stats.last1d4CmdData))
+                ? len
+                : static_cast<uint8_t>(sizeof(s_stats.last1d4CmdData));
+            memset(s_stats.last1d4CmdData, 0, sizeof(s_stats.last1d4CmdData));
+            memcpy(s_stats.last1d4CmdData, data, s_stats.last1d4CmdLen);
+        }
         s_stats.txFailureLatched = false;
     } else {
         if (!s_stats.txFailureLatched) {

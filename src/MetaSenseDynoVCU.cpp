@@ -67,38 +67,15 @@ void MetaSenseDynoVCU::update(uint32_t now_ms,
     dynoTorqueDemandNm_ = updatePiLoop(rpm_setpoint, rpm_meas, dtSec);
     lastUpdateMs_ = now_ms;
 
-    // Match relay intent to selected operating region:
-    // Idle  : setpoint <= 50 rpm
-    // Motor : 50..1500 rpm (SSR powers inverter bus here)
-    // Dyno  : >1500 rpm
-    const bool motorSelected =
-        (rpm_setpoint > kIdleSetpointMaxRpm) &&
-        (rpm_setpoint <= kMotorSetpointMaxRpm);
-
-    // Force all HV outputs off outside Motor-selected path or when inverter 12V is not present.
-    if (!inverter_12v_on || !motorSelected) {
-        hvArmed_ = false;
-        prechargeStartMs_ = now_ms;
-        ssr_ = false;
-        rb_plus_ = false;
-        precharge_ = false;
-    } else {
-        // SSR must be asserted first in motor precharge sequence.
-        ssr_ = true;
-
-        if (!hvArmed_) {
-            const bool prechargeDoneByTime = (now_ms - prechargeStartMs_) >= kPrechargeDurationMs;
-            const bool prechargeDoneByVoltage = hv_voltage >= kHvReadyVoltageV;
-            if (prechargeDoneByTime || prechargeDoneByVoltage) {
-                hvArmed_ = true;
-            }
-        }
-
-        rb_plus_ = hvArmed_;
-        precharge_ = !hvArmed_;
-    }
-
-    // R- ownership remains in existing state machine for now.
+    // Keep the VCU relay outputs inert. The hardware state machine owns the
+    // actual relay state so the RSS/RB-minus mutual exclusion is enforced in one place.
+    (void)hv_voltage;
+    (void)inverter_12v_on;
+    hvArmed_ = false;
+    prechargeStartMs_ = now_ms;
+    ssr_ = false;
+    rb_plus_ = false;
+    precharge_ = false;
     r_minus_ = false;
 }
 

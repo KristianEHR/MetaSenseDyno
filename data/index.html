@@ -136,9 +136,10 @@
 
     #versionInfo {
       position: fixed;
-      bottom: 24px;
-      left: 20px;
-      right: auto;
+      top: 20px;
+      right: 20px;
+      left: auto;
+      bottom: auto;
       transform: none;
       font-size: 20px;
       color: #666;
@@ -201,13 +202,39 @@
       font-weight: bold;
     }
     
+    .can-monitor-stepper {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 4px;
+    }
+    .can-monitor-step-btn {
+      min-width: 22px;
+      height: 20px;
+      border: 1px solid #6bbf7c;
+      background: #263326;
+      color: #ddffdd;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      line-height: 1;
+      padding: 0;
+    }
+    .can-monitor-step-btn:hover {
+      background: #2f4530;
+    }
+    .can-monitor-step-target {
+      min-width: 48px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
     .bmp-box .reading {
       font-size: 16px;
       font-weight: bold;
       color: #ffffff;
       margin: 5px 0;
     }
-    
+
     .bmp-box .reading span {
       color: #ffaa44;
       font-size: 18px;
@@ -622,17 +649,24 @@
 
 .can-monitor {
   position: fixed;
-  bottom: 102px;
+  top: 50%;
   left: 20px;
+  transform: translateY(-50%);
   z-index: 99;
-  width: min(340px, calc(100vw - 16px));
+  width: min(365px, calc(100vw - 20px));
+  max-width: calc(100vw - 16px);
+  min-width: 0;
+  box-sizing: border-box;
   background: rgba(0, 0, 0, 0.72);
   border: 1px solid #6dff8a;
   border-radius: 10px;
-  padding: 10px 12px;
+  padding: 7px 9px;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(3px);
-  font-size: 13px;
+  font-size: 11px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   contain: layout paint;
 }
 
@@ -640,46 +674,85 @@
   color: #b9ffca;
   font-weight: 700;
   letter-spacing: 0.8px;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   text-transform: uppercase;
 }
 
 .can-monitor-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.can-monitor-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 13ch;
-  gap: 3px 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 8px;
+  min-width: 0;
+}
+
+.can-monitor-row-raw {
+  grid-template-columns: 1fr;
+  row-gap: 1px;
+}
+
+.can-monitor-row-raw .can-monitor-label,
+.can-monitor-row-raw .can-monitor-value {
+  grid-column: 1;
+  text-align: left;
+}
+
+.can-monitor-section-row {
+  margin-top: 2px;
+  padding-top: 2px;
+  border-top: 1px solid rgba(147, 245, 171, 0.16);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
+  column-gap: 8px;
+  cursor: pointer;
+}
+
+.can-monitor-section-toggle-indicator {
+  color: #93f5ab;
+  font-weight: 700;
+  user-select: none;
 }
 
 .can-monitor-label {
   color: #bbbbbb;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
   min-height: 1.2em;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .can-monitor-value {
   color: #ffffff;
   font-weight: 700;
   text-align: right;
-  width: 13ch;
-  min-width: 13ch;
-  max-width: 13ch;
-  white-space: nowrap;
+  width: auto;
+  min-width: 0;
+  max-width: 180px;
+  white-space: normal;
+  overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
   font-family: Consolas, "Courier New", monospace;
   min-height: 1.2em;
+  line-height: 1.2;
 }
 
 .can-monitor-value-raw {
   width: auto;
   min-width: 0;
-  max-width: 100%;
+  max-width: none;
   white-space: normal;
   overflow-wrap: anywhere;
   text-align: left;
-  font-size: 12px;
   color: #e3ffe9;
 }
 
@@ -687,11 +760,12 @@
   color: #93f5ab;
   font-weight: 800;
   letter-spacing: 0.08em;
-  margin-top: 4px;
+  margin-top: 0;
+  text-transform: uppercase;
 }
 
 .can-monitor-section-value {
-  color: transparent;
+  display: none;
 }
 
 .can-monitor-status-row {
@@ -704,14 +778,14 @@
 .can-monitor-status-group {
   margin-top: 7px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-wrap: nowrap;
+  gap: 4px;
   align-items: center;
+  overflow: hidden;
 }
 
 .can-monitor-status-label {
   color: #8fa6b8;
-  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   min-width: 34px;
@@ -720,11 +794,24 @@
 .can-flag {
   border: 1px solid #555;
   border-radius: 999px;
-  padding: 2px 8px;
-  font-size: 11px;
+  padding: 1px 5px;
+  line-height: 1;
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: #999;
   background: rgba(120, 120, 120, 0.2);
   font-weight: 700;
+  text-transform: uppercase;
+}
+
+.can-monitor-row .can-flag {
+  border-radius: 4px;
+  padding: 0 4px;
+  min-width: 36px;
+  justify-self: end;
 }
 
 .can-flag.on {
@@ -734,9 +821,9 @@
 }
 
 .can-flag.warn {
-  color: #2a1a00;
-  background: #ffd089;
-  border-color: #ffd089;
+  color: #2b1a00;
+  background: #ffc966;
+  border-color: #ffc966;
 }
 
 .can-flag.fault {
@@ -747,7 +834,7 @@
 
 @media (max-width: 900px) {
   .can-monitor {
-    bottom: 102px;
+    bottom: 35px;
     left: 8px;
     width: calc(100vw - 16px);
   }
@@ -805,74 +892,244 @@
     <div class="can-monitor-title">CAN MONITOR</div>
     <!-- RX scope is intentionally strict for this setup: only ID1DA and ID55A. -->
     <div class="can-monitor-grid">
-      <span class="can-monitor-label can-monitor-section">0x1DA:</span>
-      <span class="can-monitor-value can-monitor-section-value">.</span>
+      <div class="can-monitor-row can-monitor-section-row">
+        <span class="can-monitor-label can-monitor-section">0x1DA</span>
+      </div>
 
-      <span class="can-monitor-label">Dyno RPM</span>
-      <span id="canMon1daRpm" class="can-monitor-value">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Dyno RPM</span>
+        <span id="canMon1daRpm" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label">Input Voltage (V)</span>
-      <span id="canMon1daInputV" class="can-monitor-value">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Input V</span>
+        <span id="canMon1daInputV" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label">Effective Torque (Nm)</span>
-      <span id="canMon1daTorque" class="can-monitor-value">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Torque (Nm)</span>
+        <span id="canMon1daTorque" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label">MG_CLOCK</span>
-      <span id="canMon1daClock" class="can-monitor-value">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">MG_CLOCK</span>
+        <span id="canMon1daClock" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label">Error Codes (bin)</span>
-      <span id="canMon1daErr" class="can-monitor-value">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Error Codes</span>
+        <span id="canMon1daErr" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label">frames/age(ms)</span>
-      <span id="canMonId1da" class="can-monitor-value">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">MG_CLOCK bits</span>
+        <span id="canMon1daClockBits" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-monitor-section">0x55A:</span>
-      <span class="can-monitor-value can-monitor-section-value">.</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">CRC_1DA rx/calc</span>
+        <span id="canMon1daCrc" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label">Inverter Temp (C)</span>
-      <span id="canMonInvTemp" class="can-monitor-value">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">CRC_1DA proof ok/total</span>
+        <span id="canMon1daCrcProof" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label">Stator Temp (C)</span>
-      <span id="canMonStatorTemp" class="can-monitor-value">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">CRC_1DA last fail age(ms)</span>
+        <span id="canMon1daCrcFailAge" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label">Coolant Temp (C)</span>
-      <span id="canMonCoolantTemp" class="can-monitor-value">---</span>
+      <div class="can-monitor-row can-monitor-row-raw">
+        <span class="can-monitor-label">RX bytes</span>
+        <span id="canMon1daRaw" class="can-monitor-value can-monitor-value-raw">---</span>
+      </div>
 
-      <span class="can-monitor-label can-monitor-section">0x120:</span>
-      <span class="can-monitor-value can-monitor-section-value">.</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">frames/age(ms)</span>
+        <span id="canMonId1da" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label">Torque Demand (Nm)</span>
-      <span id="canMonVcuTorque" class="can-monitor-value">---</span>
+      <div class="can-monitor-row can-monitor-section-row">
+        <span class="can-monitor-label can-monitor-section">0x1D4 SNIFF (DBC)</span>
+      </div>
 
-      <span class="can-monitor-label">TX age(ms)</span>
-      <span id="canMon120TxAge" class="can-monitor-value">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Torque demand [Nm]</span>
+        <span id="canMon1d4Torque" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label">TX raw B0..B7</span>
-      <span id="canMon120TxRaw" class="can-monitor-value can-monitor-value-raw">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Torque demand RAW</span>
+        <span id="canMon1d4Raw" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-monitor-section">DYNO:</span>
-      <span class="can-monitor-value can-monitor-section-value">.</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">HV Status</span>
+        <span id="canMon1d4HvStatus" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label">Engine RPM</span>
-      <span id="canMonEngineRpm" class="can-monitor-value">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">RB+</span>
+        <span id="canMon1d4RelayPlus" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label">Output State</span>
-      <span id="canMonFwState" class="can-monitor-value">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Charge status</span>
+        <span id="canMon1d4BatteryStatus" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label">Gate Reason</span>
-      <span id="canMonStartGate" class="can-monitor-value">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">CMD_clock</span>
+        <span id="canMon1d4Clock" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label">Sim Mode</span>
-      <span id="canMonVcuMode" class="can-monitor-value">---</span>
-    </div>
-    <div class="can-monitor-status-group">
-      <span id="canFlagReady" class="can-flag">READY</span>
-    </div>
-    <div class="can-monitor-status-group">
-      <span id="canFlagHwPrecharge" class="can-flag">HV_PRECHARGE</span>
-      <span id="canFlagHwRbplus" class="can-flag">HV_RB+</span>
-      <span id="canFlagHwRbminus" class="can-flag">HV_RB-</span>
-      <span id="canFlagHwSsr" class="can-flag">HV_SSR</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">0x1D4 CRC control token rx/calc/status</span>
+        <span id="canMon1d4Crc" class="can-monitor-value">---</span>
+      </div>
+
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">0x1D4 CRC control token ok/total</span>
+        <span id="canMon1d4CrcProof" class="can-monitor-value">---</span>
+      </div>
+
+      <div class="can-monitor-row can-monitor-row-raw">
+        <span class="can-monitor-label">Sniffed bytes [B0..B7]</span>
+        <span id="canMon1d4RawSniff" class="can-monitor-value can-monitor-value-raw">---</span>
+      </div>
+
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">sniff frames/age(ms)</span>
+        <span id="canMon1d4FramesSniff" class="can-monitor-value">---</span>
+      </div>
+
+      <div class="can-monitor-row can-monitor-section-row">
+        <span class="can-monitor-label can-monitor-section">0x1D4 TX (GENERATED)</span>
+      </div>
+
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Torque demand [Nm]</span>
+        <span id="canMon1d4TxTorque" class="can-monitor-value">---</span>
+      </div>
+
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Torque target [Nm]</span>
+        <span class="can-monitor-value can-monitor-stepper">
+          <button id="canMon1d4TxTargetDec" class="can-monitor-step-btn" type="button" aria-label="decrease torque target">-</button>
+          <span id="canMon1d4TxTarget" class="can-monitor-step-target">0.00</span>
+          <button id="canMon1d4TxTargetInc" class="can-monitor-step-btn" type="button" aria-label="increase torque target">+</button>
+        </span>
+      </div>
+
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Torque demand RAW</span>
+        <span id="canMon1d4TxRaw" class="can-monitor-value">---</span>
+      </div>
+
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">HV Status</span>
+        <span id="canMon1d4TxHvStatus" class="can-monitor-value">---</span>
+      </div>
+
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">RB+</span>
+        <span id="canMon1d4TxRelayPlus" class="can-monitor-value">---</span>
+      </div>
+
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Charge status</span>
+        <span id="canMon1d4TxBatteryStatus" class="can-monitor-value">---</span>
+      </div>
+
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">CMD_clock</span>
+        <span id="canMon1d4TxClock" class="can-monitor-value">---</span>
+      </div>
+
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">0x1D4 CRC control token rx/calc/status</span>
+        <span id="canMon1d4TxCrc" class="can-monitor-value">---</span>
+      </div>
+
+      <div class="can-monitor-row can-monitor-row-raw">
+        <span class="can-monitor-label">Generated bytes [B0..B7]</span>
+        <span id="canMon1d4RawTx" class="can-monitor-value can-monitor-value-raw">---</span>
+      </div>
+
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">tx frames/age(ms)</span>
+        <span id="canMon1d4FramesTx" class="can-monitor-value">---</span>
+      </div>
+
+      <div class="can-monitor-row can-monitor-section-row">
+        <span class="can-monitor-label can-monitor-section">0x55A</span>
+      </div>
+
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Inverter Temp (C)</span>
+        <span id="canMonInvTemp" class="can-monitor-value">---</span>
+      </div>
+
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Stator Temp (C)</span>
+        <span id="canMonStatorTemp" class="can-monitor-value">---</span>
+      </div>
+
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Coolant Temp (C)</span>
+        <span id="canMonCoolantTemp" class="can-monitor-value">---</span>
+      </div>
+
+      <div class="can-monitor-row can-monitor-section-row">
+        <span class="can-monitor-label can-monitor-section">DYNO</span>
+      </div>
+
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Engine RPM</span>
+        <span id="canMonEngineRpm" class="can-monitor-value">---</span>
+      </div>
+
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">INV Ready</span>
+        <span id="canFlagReady" class="can-flag">OFF</span>
+      </div>
+
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">HV RB+</span>
+        <span id="canFlagHwRbplus" class="can-flag">OFF</span>
+      </div>
+
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">HV Precharge</span>
+        <span id="canFlagHwPrecharge" class="can-flag">OFF</span>
+      </div>
+
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">HV RB-</span>
+        <span id="canFlagHwRbminus" class="can-flag">OFF</span>
+      </div>
+
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">HV SSR</span>
+        <span id="canFlagHwSsr" class="can-flag">OFF</span>
+      </div>
+
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Output State</span>
+        <span id="canMonFwState" class="can-monitor-value">---</span>
+      </div>
+
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Gate Reason</span>
+        <span id="canMonStartGate" class="can-monitor-value">---</span>
+      </div>
+
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Sim Mode</span>
+        <span id="canMonVcuMode" class="can-monitor-value">---</span>
+      </div>
     </div>
   </div>
 
@@ -1155,8 +1412,13 @@
     let reportReadyActive = false;
     let autoGenerateReportEnabled = false;
     let autoGenerateReportTriggered = false;
+    let leaf1d4TxTargetNm = 0.0;
+    const kLeaf1d4TxStepNm = 0.1;
+    const kLeaf1d4TxMinNm = -512.0;
+    const kLeaf1d4TxMaxNm = 511.75;
     const autoReportPrefKey = "metasense.autoGenerateReport";
     const canMonitorPrefKey = "metasense.canMonitorVisible";
+    const canMonitorSectionsPrefKey = "metasense.canMonitorSections";
     const autoButtonIdleLabel = "Auto Run (F8)";
     const autoButtonActiveLabel = "🔴 Auto Run ACTIVE (F8 to cancel)";
 	
@@ -1261,17 +1523,84 @@
       leaf_1da_rpm: 0,
       leaf_1da_clock: 0,
       leaf_1da_err: 0,
+      leaf_1da_crc: 0,
+      leaf_1da_crc_calc: 0,
+      leaf_1da_crc_ok: -1,
+      leaf_1da_crc_residue: 0,
+      leaf_1da_crc_samples: 0,
+      leaf_1da_crc_matches: 0,
+      leaf_1da_crc_fails: 0,
+      leaf_1da_crc_fail_age_ms: -1,
+      leaf_1da_b0: 0,
+      leaf_1da_b1: 0,
+      leaf_1da_b2: 0,
+      leaf_1da_b3: 0,
+      leaf_1da_b4: 0,
+      leaf_1da_b5: 0,
+      leaf_1da_b6: 0,
+      leaf_1da_b7: 0,
       leaf_id1da_frames: 0,
       leaf_id1da_age_ms: 0,
-      leaf_120_tx_age_ms: 0,
-      leaf_120_tx_b0: 0,
-      leaf_120_tx_b1: 0,
-      leaf_120_tx_b2: 0,
-      leaf_120_tx_b3: 0,
-      leaf_120_tx_b4: 0,
-      leaf_120_tx_b5: 0,
-      leaf_120_tx_b6: 0,
-      leaf_120_tx_b7: 0,
+      leaf_1d4_torque_nm: 0,
+      leaf_1d4_torque_raw: 0,
+      leaf_1d4_hv_status: 0,
+      leaf_1d4_relay_plus: 0,
+      leaf_1d4_charge_status: 0,
+      leaf_1d4_battery_status: 0,
+      leaf_1d4_clock: 0,
+      leaf_1d4_crc: 0,
+      leaf_1d4_crc_calc: 0,
+      leaf_1d4_crc_ok: 0,
+      leaf_1d4_crc_residue: 0,
+      leaf_1d4_crc_samples: 0,
+      leaf_1d4_crc_matches: 0,
+      leaf_1d4_sniff_frames: 0,
+      leaf_1d4_sniff_age_ms: 0,
+      leaf_1d4_sniff_torque_nm: 0,
+      leaf_1d4_sniff_torque_raw: 0,
+      leaf_1d4_sniff_hv_status: 0,
+      leaf_1d4_sniff_relay_plus: 0,
+      leaf_1d4_sniff_charge_status: 0,
+      leaf_1d4_sniff_clock: 0,
+      leaf_1d4_sniff_crc: 0,
+      leaf_1d4_sniff_b0: 0,
+      leaf_1d4_sniff_b1: 0,
+      leaf_1d4_sniff_b2: 0,
+      leaf_1d4_sniff_b3: 0,
+      leaf_1d4_sniff_b4: 0,
+      leaf_1d4_sniff_b5: 0,
+      leaf_1d4_sniff_b6: 0,
+      leaf_1d4_sniff_b7: 0,
+      leaf_1d4_tx_torque_nm: 0,
+      leaf_1d4_tx_torque_raw: 0,
+      leaf_1d4_tx_target_nm: 0,
+      leaf_1d4_tx_hv_status: 0,
+      leaf_1d4_tx_relay_plus: 0,
+      leaf_1d4_tx_charge_status: 0,
+      leaf_1d4_tx_clock: 0,
+      leaf_1d4_tx_crc: 0,
+      leaf_1d4_tx_crc_calc: 0,
+      leaf_1d4_tx_crc_ok: -1,
+      leaf_1d4_tx_frames: 0,
+      leaf_1d4_tx_age_ms: 0,
+      leaf_1d4_tx_b0: 0,
+      leaf_1d4_tx_b1: 0,
+      leaf_1d4_tx_b2: 0,
+      leaf_1d4_tx_b3: 0,
+      leaf_1d4_tx_b4: 0,
+      leaf_1d4_tx_b5: 0,
+      leaf_1d4_tx_b6: 0,
+      leaf_1d4_tx_b7: 0,
+      leaf_1d4_frames: 0,
+      leaf_1d4_age_ms: 0,
+      leaf_1d4_b0: 0,
+      leaf_1d4_b1: 0,
+      leaf_1d4_b2: 0,
+      leaf_1d4_b3: 0,
+      leaf_1d4_b4: 0,
+      leaf_1d4_b5: 0,
+      leaf_1d4_b6: 0,
+      leaf_1d4_b7: 0,
       leaf_inv_temp: 0,
       leaf_stator_temp: 0,
       leaf_coolant_temp: 0,
@@ -1293,13 +1622,65 @@
       hw_rbplus: false,
       hw_precharge: false,
       hw_rbminus: false,
-      hw_ssr: false
+      hw_ssr: false,
+      wifi_rssi: null
     };
+
+    function updateStatusSnippet(telemetry) {
+      const statusEl = document.getElementById("status");
+      if (!statusEl) return;
+
+      const wifiRssi = Number.isFinite(Number(telemetry?.wifi_rssi)) ? Number(telemetry.wifi_rssi) : null;
+      if (wifiRssi === null) {
+        statusEl.textContent = "✅ Live Data Active";
+      } else {
+        statusEl.textContent = `✅ Live Data Active · Wi-Fi Signal: ${wifiRssi} dBm`;
+      }
+    }
+
+    function clampLeaf1d4TxTargetNm(value) {
+      const finite = Number.isFinite(value) ? value : 0;
+      return Math.min(kLeaf1d4TxMaxNm, Math.max(kLeaf1d4TxMinNm, finite));
+    }
+
+    function roundLeaf1d4TxTargetNm(value) {
+      return Math.round(value * 10) / 10;
+    }
+
+    function updateLeaf1d4TxTargetUi(value) {
+      leaf1d4TxTargetNm = clampLeaf1d4TxTargetNm(value);
+      const targetEl = document.getElementById("canMon1d4TxTarget");
+      if (targetEl) {
+        targetEl.textContent = leaf1d4TxTargetNm.toFixed(2);
+      }
+    }
+
+    function sendLeaf1d4TxTargetNm(value) {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        showToast("WebSocket not connected");
+        return;
+      }
+      const bounded = clampLeaf1d4TxTargetNm(value);
+      ws.send("SET_SINGLE:leaf1d4TorqueNm=" + bounded.toFixed(2));
+    }
+
+    function adjustLeaf1d4TxTargetNm(delta) {
+      const updated = roundLeaf1d4TxTargetNm(clampLeaf1d4TxTargetNm(leaf1d4TxTargetNm + delta));
+      updateLeaf1d4TxTargetUi(updated);
+      sendLeaf1d4TxTargetNm(updated);
+    }
 
     function updateCanMonitor(telemetry) {
       if (!telemetry) return;
 
-      const engineRpm = Number(telemetry.rpm);
+      const activeRpmSource = (typeof telemetry.rpm_source_active === "string" && telemetry.rpm_source_active.length > 0)
+        ? telemetry.rpm_source_active
+        : ((currentRpmSource === "leafrpm" && !(telemetry.can_fallback === true)) ? "leafrpm" : "tachogen");
+      const sourceIsCan = String(activeRpmSource).toLowerCase() === "leafrpm" ||
+        String(activeRpmSource).toLowerCase() === "can" ||
+        String(activeRpmSource).toLowerCase() === "canrpm";
+      const primaryRpm = Number(telemetry.rpm);
+      const dynoRpm = Number(telemetry.drum_rpm);
       const inv = Number(telemetry.leaf_inv_temp);
       const stat = Number(telemetry.leaf_stator_temp);
       const cool = Number(telemetry.leaf_coolant_temp);
@@ -1308,21 +1689,80 @@
       const id1daRpm = Number(telemetry.leaf_1da_rpm);
       const id1daClock = Number(telemetry.leaf_1da_clock);
       const id1daErr = Number(telemetry.leaf_1da_err);
-      const vcuTorque120 = Number(telemetry.leaf_120_cmd_nm);
-      const vcuTorque = Number.isFinite(vcuTorque120) ? vcuTorque120 : Number(telemetry.vcu_torque_demand);
+      const id1daCrc = Number(telemetry.leaf_1da_crc);
+      const id1daCrcCalc = Number(telemetry.leaf_1da_crc_calc);
+      const id1daCrcOk = Number(telemetry.leaf_1da_crc_ok);
+      const id1daCrcSamples = Number(telemetry.leaf_1da_crc_samples);
+      const id1daCrcMatches = Number(telemetry.leaf_1da_crc_matches);
+      const id1daCrcFails = Number(telemetry.leaf_1da_crc_fails);
+      const id1daCrcFailAgeMs = Number(telemetry.leaf_1da_crc_fail_age_ms);
+      const id1daRaw = [
+        Number(telemetry.leaf_1da_b0),
+        Number(telemetry.leaf_1da_b1),
+        Number(telemetry.leaf_1da_b2),
+        Number(telemetry.leaf_1da_b3),
+        Number(telemetry.leaf_1da_b4),
+        Number(telemetry.leaf_1da_b5),
+        Number(telemetry.leaf_1da_b6),
+        Number(telemetry.leaf_1da_b7)
+      ];
+      const id1d4TorqueNm = Number(telemetry.leaf_1d4_torque_nm);
+      const id1d4TorqueRaw = Number(telemetry.leaf_1d4_torque_raw);
+      const id1d4HvStatus = Number(telemetry.leaf_1d4_hv_status);
+      const id1d4RelayPlus = Number(telemetry.leaf_1d4_relay_plus);
+      const id1d4ChargeStatus = Number.isFinite(Number(telemetry.leaf_1d4_charge_status))
+        ? Number(telemetry.leaf_1d4_charge_status)
+        : Number(telemetry.leaf_1d4_battery_status);
+      const id1d4Clock = Number(telemetry.leaf_1d4_clock);
+      const id1d4Crc = Number(telemetry.leaf_1d4_crc);
+      const id1d4CrcCalc = Number(telemetry.leaf_1d4_crc_calc);
+      const id1d4CrcOk = Number(telemetry.leaf_1d4_crc_ok);
+      const id1d4CrcSamples = Number(telemetry.leaf_1d4_crc_samples);
+      const id1d4CrcMatches = Number(telemetry.leaf_1d4_crc_matches);
+      const id1d4SniffFrames = Number(telemetry.leaf_1d4_sniff_frames);
+      const id1d4SniffAgeMs = Number(telemetry.leaf_1d4_sniff_age_ms);
+      const id1d4SniffTorqueNm = Number(telemetry.leaf_1d4_sniff_torque_nm);
+      const id1d4SniffTorqueRaw = Number(telemetry.leaf_1d4_sniff_torque_raw);
+      const id1d4SniffHvStatus = Number(telemetry.leaf_1d4_sniff_hv_status);
+      const id1d4SniffRelayPlus = Number(telemetry.leaf_1d4_sniff_relay_plus);
+      const id1d4SniffChargeStatus = Number(telemetry.leaf_1d4_sniff_charge_status);
+      const id1d4SniffClock = Number(telemetry.leaf_1d4_sniff_clock);
+      const id1d4SniffCrc = Number(telemetry.leaf_1d4_sniff_crc);
+      const id1d4SniffRaw = [
+        Number(telemetry.leaf_1d4_sniff_b0),
+        Number(telemetry.leaf_1d4_sniff_b1),
+        Number(telemetry.leaf_1d4_sniff_b2),
+        Number(telemetry.leaf_1d4_sniff_b3),
+        Number(telemetry.leaf_1d4_sniff_b4),
+        Number(telemetry.leaf_1d4_sniff_b5),
+        Number(telemetry.leaf_1d4_sniff_b6),
+        Number(telemetry.leaf_1d4_sniff_b7)
+      ];
+      const id1d4TxTorqueNm = Number(telemetry.leaf_1d4_tx_torque_nm);
+      const id1d4TxTorqueRaw = Number(telemetry.leaf_1d4_tx_torque_raw);
+      const id1d4TxTargetNm = Number(telemetry.leaf_1d4_tx_target_nm);
+      const id1d4TxHvStatus = Number(telemetry.leaf_1d4_tx_hv_status);
+      const id1d4TxRelayPlus = Number(telemetry.leaf_1d4_tx_relay_plus);
+      const id1d4TxChargeStatus = Number(telemetry.leaf_1d4_tx_charge_status);
+      const id1d4TxClock = Number(telemetry.leaf_1d4_tx_clock);
+      const id1d4TxCrc = Number(telemetry.leaf_1d4_tx_crc);
+      const id1d4TxCrcCalc = Number(telemetry.leaf_1d4_tx_crc_calc);
+      const id1d4TxCrcOk = Number(telemetry.leaf_1d4_tx_crc_ok);
+      const id1d4TxFrames = Number(telemetry.leaf_1d4_tx_frames);
+      const id1d4TxAgeMs = Number(telemetry.leaf_1d4_tx_age_ms);
+      const id1d4TxRaw = [
+        Number(telemetry.leaf_1d4_tx_b0),
+        Number(telemetry.leaf_1d4_tx_b1),
+        Number(telemetry.leaf_1d4_tx_b2),
+        Number(telemetry.leaf_1d4_tx_b3),
+        Number(telemetry.leaf_1d4_tx_b4),
+        Number(telemetry.leaf_1d4_tx_b5),
+        Number(telemetry.leaf_1d4_tx_b6),
+        Number(telemetry.leaf_1d4_tx_b7)
+      ];
+      const vcuTorque = Number(telemetry.vcu_torque_demand);
       const id1daFrames = Number(telemetry.leaf_id1da_frames);
       const id1daAgeMs = Number(telemetry.leaf_id1da_age_ms);
-      const id120TxAgeMs = Number(telemetry.leaf_120_tx_age_ms);
-      const id120TxRaw = [
-        Number(telemetry.leaf_120_tx_b0),
-        Number(telemetry.leaf_120_tx_b1),
-        Number(telemetry.leaf_120_tx_b2),
-        Number(telemetry.leaf_120_tx_b3),
-        Number(telemetry.leaf_120_tx_b4),
-        Number(telemetry.leaf_120_tx_b5),
-        Number(telemetry.leaf_120_tx_b6),
-        Number(telemetry.leaf_120_tx_b7)
-      ];
       const isSimMode = Number(telemetry.vcu_sim) === 1 || telemetry.vcu_sim === true;
 
       const setText = (id, text) => {
@@ -1336,27 +1776,85 @@
         const n = Math.max(0, Math.min(255, Math.round(v)));
         return n.toString(16).toUpperCase().padStart(2, "0");
       };
-      const fmtRaw8 = (values) => values.map(fmtHexByte).join(" ");
+      const fmtRaw8 = (values) => {
+        const bytes = values.map(fmtHexByte);
+        return bytes.join(" ");
+      };
       const fmtBin6 = (v) => {
         if (!Number.isFinite(v)) return "---";
         const n = Math.max(0, Math.min(63, Math.round(v)));
         return n.toString(2).padStart(6, "0");
       };
-
-      setText("canMon1daRpm", fmtInt(id1daRpm));
-  setText("canMonEngineRpm", fmtInt(engineRpm));
+      const monitorDynoRpm = Number.isFinite(primaryRpm) ? primaryRpm : dynoRpm;
+      const monitorEngineRpm = Number.isFinite(primaryRpm) ? primaryRpm : dynoRpm;
+      setText("canMon1daRpm", fmtInt(monitorDynoRpm));
+      setText("canMonEngineRpm", fmtInt(monitorEngineRpm));
       setText("canMon1daInputV", fmt(id1daInputV, 1));
       setText("canMon1daTorque", fmt(id1daTorque, 2));
       setText("canMon1daClock", fmtInt(id1daClock));
+      setText("canMon1daClockBits", Number.isFinite(id1daClock) ? id1daClock.toString(2).padStart(2, "0") : "--");
       setText("canMon1daErr", `${fmtInt(id1daErr)} (${fmtBin6(id1daErr)})`);
+      const has1daCrcProof = Number.isFinite(id1daCrcSamples) && Math.round(id1daCrcSamples) > 0;
+      if (has1daCrcProof && id1daCrcOk >= 0) {
+        setText("canMon1daCrc", `${fmtHexByte(id1daCrc)} / ${fmtHexByte(id1daCrcCalc)} ${id1daCrcOk ? "OK" : "BAD"}`);
+        setText("canMon1daCrcProof", `${Math.round(id1daCrcMatches)} / ${Math.round(id1daCrcSamples)}`);
+      } else {
+        setText("canMon1daCrc", "N/A (no 0x1DA)");
+        setText("canMon1daCrcProof", "N/A");
+      }
+      if (id1daCrcFailAgeMs === -1) {
+        setText("canMon1daCrcFailAge", "N/A / fails 0");
+      } else if (id1daCrcFailAgeMs === -2) {
+        setText("canMon1daCrcFailAge", `never / fails ${fmtInt(id1daCrcFails)}`);
+      } else {
+        setText("canMon1daCrcFailAge", `${fmtInt(id1daCrcFailAgeMs)} / fails ${fmtInt(id1daCrcFails)}`);
+      }
+      setText("canMon1daRaw", fmtRaw8(id1daRaw));
+      setText("canMon1d4Torque", fmt(id1d4TorqueNm, 2));
+      setText("canMon1d4Raw", fmtInt(id1d4TorqueRaw));
+      setText("canMon1d4HvStatus", id1d4HvStatus ? "1" : "0");
+      setText("canMon1d4RelayPlus", id1d4RelayPlus ? "1" : "0");
+      setText("canMon1d4BatteryStatus", fmtHexByte(id1d4ChargeStatus));
+      setText("canMon1d4Clock", fmtInt(id1d4Clock));
+      const has1d4CrcProof = Number.isFinite(id1d4CrcSamples) && Math.round(id1d4CrcSamples) > 0;
+      if (has1d4CrcProof && id1d4CrcOk >= 0) {
+        setText("canMon1d4Crc", `${fmtHexByte(id1d4Crc)} / ${fmtHexByte(id1d4CrcCalc)} ${id1d4CrcOk ? "OK" : "BAD"}`);
+        setText("canMon1d4CrcProof", `${Math.round(id1d4CrcMatches)} / ${Math.round(id1d4CrcSamples)}`);
+      } else {
+        setText("canMon1d4Crc", "N/A (no 0x1D4)");
+        setText("canMon1d4CrcProof", "N/A");
+      }
+      setText("canMon1d4SniffTorque", fmt(id1d4SniffTorqueNm, 2));
+      setText("canMon1d4SniffRaw", fmtInt(id1d4SniffTorqueRaw));
+      setText("canMon1d4SniffHvStatus", id1d4SniffHvStatus ? "1" : "0");
+      setText("canMon1d4SniffRelayPlus", id1d4SniffRelayPlus ? "1" : "0");
+      setText("canMon1d4SniffBatteryStatus", fmtHexByte(id1d4SniffChargeStatus));
+      setText("canMon1d4SniffClock", fmtInt(id1d4SniffClock));
+      setText("canMon1d4SniffCrc", fmtHexByte(id1d4SniffCrc));
+      setText("canMon1d4RawSniff", fmtRaw8(id1d4SniffRaw));
+      setText("canMon1d4FramesSniff", `${Math.round(id1d4SniffFrames)} / ${Math.round(id1d4SniffAgeMs)}`);
+      setText("canMon1d4TxTorque", fmt(id1d4TxTorqueNm, 2));
+      if (Number.isFinite(id1d4TxTargetNm)) {
+        updateLeaf1d4TxTargetUi(id1d4TxTargetNm);
+      }
+      setText("canMon1d4TxRaw", fmtInt(id1d4TxTorqueRaw));
+      setText("canMon1d4TxHvStatus", id1d4TxHvStatus ? "1" : "0");
+      setText("canMon1d4TxRelayPlus", id1d4TxRelayPlus ? "1" : "0");
+      setText("canMon1d4TxBatteryStatus", fmtHexByte(id1d4TxChargeStatus));
+      setText("canMon1d4TxClock", fmtInt(id1d4TxClock));
+      if (id1d4TxCrcOk >= 0) {
+        setText("canMon1d4TxCrc", `${fmtHexByte(id1d4TxCrc)} / ${fmtHexByte(id1d4TxCrcCalc)} ${id1d4TxCrcOk ? "OK" : "BAD"}`);
+      } else {
+        setText("canMon1d4TxCrc", "N/A (no 0x1D4 TX)");
+      }
+      setText("canMon1d4RawTx", fmtRaw8(id1d4TxRaw));
+      setText("canMon1d4FramesTx", `${Math.round(id1d4TxFrames)} / ${Math.round(id1d4TxAgeMs)}`);
       setText("canMonInvTemp", fmt(inv, 1));
       setText("canMonStatorTemp", fmt(stat, 1));
       setText("canMonCoolantTemp", fmt(cool, 1));
       setText("canMonVcuMode", isSimMode ? "SIM" : "RUN");
       setText("canMonVcuTorque", fmt(vcuTorque, 2));
       setText("canMonId1da", `${Math.round(id1daFrames)} / ${Math.round(id1daAgeMs)}`);
-      setText("canMon120TxAge", fmtInt(id120TxAgeMs));
-      setText("canMon120TxRaw", fmtRaw8(id120TxRaw));
       setText("canMonFwState", telemetry.fw_state || "---");
       setText("canMonStartGate", telemetry.hw_start_gate || "---");
 
@@ -1364,6 +1862,7 @@
         const el = document.getElementById(id);
         if (!el) return;
         el.classList.remove("on", "warn", "fault");
+        el.textContent = isOn ? "ON" : "OFF";
         if (isOn) {
           if (mode === "warn") el.classList.add("warn");
           else if (mode === "fault") el.classList.add("fault");
@@ -2052,6 +2551,92 @@
       }
     }
 
+    function loadCanMonitorSectionPrefs() {
+      try {
+        const raw = localStorage.getItem(canMonitorSectionsPrefKey);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          return parsed;
+        }
+      } catch (e) {
+        // Ignore storage and parse failures.
+      }
+      return {};
+    }
+
+    function saveCanMonitorSectionPrefs(prefs) {
+      try {
+        localStorage.setItem(canMonitorSectionsPrefKey, JSON.stringify(prefs || {}));
+      } catch (e) {
+        // Ignore storage failures.
+      }
+    }
+
+    function setCanMonitorSectionCollapsed(sectionKey, collapsed, persist = true) {
+      const sectionHeader = document.querySelector(`.can-monitor-section-row[data-can-section='${sectionKey}']`);
+      const sectionRows = document.querySelectorAll(`.can-monitor-row[data-can-section-body='${sectionKey}']`);
+      sectionRows.forEach((row) => {
+        row.style.display = collapsed ? "none" : "grid";
+      });
+
+      if (sectionHeader) {
+        const indicator = sectionHeader.querySelector(".can-monitor-section-toggle-indicator");
+        if (indicator) {
+          indicator.textContent = collapsed ? "[+]" : "[-]";
+        }
+      }
+
+      if (persist) {
+        const prefs = loadCanMonitorSectionPrefs();
+        prefs[sectionKey] = collapsed ? 1 : 0;
+        saveCanMonitorSectionPrefs(prefs);
+      }
+    }
+
+    function initCanMonitorSections() {
+      const grid = document.querySelector("#canMonitor .can-monitor-grid");
+      if (!grid) return;
+
+      const rows = Array.from(grid.querySelectorAll(":scope > .can-monitor-row"));
+      if (!rows.length) return;
+
+      const sectionPrefs = loadCanMonitorSectionPrefs();
+      let currentSectionKey = "";
+      let sectionIndex = 0;
+
+      rows.forEach((row) => {
+        if (row.classList.contains("can-monitor-section-row")) {
+          const labelEl = row.querySelector(".can-monitor-section");
+          const sectionLabel = (labelEl ? labelEl.textContent : "section").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
+          currentSectionKey = `${sectionLabel}-${sectionIndex}`;
+          sectionIndex += 1;
+          row.dataset.canSection = currentSectionKey;
+
+          if (!row.querySelector(".can-monitor-section-toggle-indicator")) {
+            const indicator = document.createElement("span");
+            indicator.className = "can-monitor-section-toggle-indicator";
+            indicator.textContent = "[-]";
+            row.appendChild(indicator);
+          }
+
+          row.onclick = function() {
+            const header = this;
+            const key = header.dataset.canSection;
+            if (!key) return;
+            const indicator = header.querySelector(".can-monitor-section-toggle-indicator");
+            const currentlyCollapsed = indicator ? indicator.textContent === "[+]" : false;
+            setCanMonitorSectionCollapsed(key, !currentlyCollapsed, true);
+          };
+
+          const collapsedByPref = sectionPrefs[currentSectionKey] === 1;
+          setCanMonitorSectionCollapsed(currentSectionKey, collapsedByPref, false);
+        } else if (currentSectionKey.length > 0) {
+          row.dataset.canSectionBody = currentSectionKey;
+        }
+      });
+    }
+
     function loadCanMonitorPreference() {
       let visible = true;
       try {
@@ -2378,7 +2963,7 @@
       ws = new WebSocket("ws://" + location.hostname + "/ws");
       
       ws.onopen = function() {
-        document.getElementById("status").innerText = "✅ Live Data Active";
+        updateStatusSnippet(cachedTelemetry);
         ws.send("PAGE_MAIN");
         ws.send("SET_UI_MODE:dashboard");
         ws.send("GET_SETTINGS");
@@ -2428,6 +3013,7 @@
             updateStreamMetrics(msg);
 
             // Merge sparse delta update into cache to retain previous values
+            if (msg.wifi_rssi !== undefined) cachedTelemetry.wifi_rssi = Number(msg.wifi_rssi);
             if (msg.rpm !== undefined) cachedTelemetry.rpm = msg.rpm;
             if (msg.rpm_error !== undefined) cachedTelemetry.rpm_error = Number(msg.rpm_error) === 1;
             if (msg.drum_rpm !== undefined) cachedTelemetry.drum_rpm = msg.drum_rpm;
@@ -2475,17 +3061,84 @@
             if (msg.leaf_1da_rpm !== undefined) cachedTelemetry.leaf_1da_rpm = msg.leaf_1da_rpm;
             if (msg.leaf_1da_clock !== undefined) cachedTelemetry.leaf_1da_clock = msg.leaf_1da_clock;
             if (msg.leaf_1da_err !== undefined) cachedTelemetry.leaf_1da_err = msg.leaf_1da_err;
+            if (msg.leaf_1da_crc !== undefined) cachedTelemetry.leaf_1da_crc = msg.leaf_1da_crc;
+            if (msg.leaf_1da_crc_calc !== undefined) cachedTelemetry.leaf_1da_crc_calc = msg.leaf_1da_crc_calc;
+            if (msg.leaf_1da_crc_ok !== undefined) cachedTelemetry.leaf_1da_crc_ok = msg.leaf_1da_crc_ok;
+            if (msg.leaf_1da_crc_residue !== undefined) cachedTelemetry.leaf_1da_crc_residue = msg.leaf_1da_crc_residue;
+            if (msg.leaf_1da_crc_samples !== undefined) cachedTelemetry.leaf_1da_crc_samples = msg.leaf_1da_crc_samples;
+            if (msg.leaf_1da_crc_matches !== undefined) cachedTelemetry.leaf_1da_crc_matches = msg.leaf_1da_crc_matches;
+            if (msg.leaf_1da_crc_fails !== undefined) cachedTelemetry.leaf_1da_crc_fails = msg.leaf_1da_crc_fails;
+            if (msg.leaf_1da_crc_fail_age_ms !== undefined) cachedTelemetry.leaf_1da_crc_fail_age_ms = msg.leaf_1da_crc_fail_age_ms;
+            if (msg.leaf_1da_b0 !== undefined) cachedTelemetry.leaf_1da_b0 = msg.leaf_1da_b0;
+            if (msg.leaf_1da_b1 !== undefined) cachedTelemetry.leaf_1da_b1 = msg.leaf_1da_b1;
+            if (msg.leaf_1da_b2 !== undefined) cachedTelemetry.leaf_1da_b2 = msg.leaf_1da_b2;
+            if (msg.leaf_1da_b3 !== undefined) cachedTelemetry.leaf_1da_b3 = msg.leaf_1da_b3;
+            if (msg.leaf_1da_b4 !== undefined) cachedTelemetry.leaf_1da_b4 = msg.leaf_1da_b4;
+            if (msg.leaf_1da_b5 !== undefined) cachedTelemetry.leaf_1da_b5 = msg.leaf_1da_b5;
+            if (msg.leaf_1da_b6 !== undefined) cachedTelemetry.leaf_1da_b6 = msg.leaf_1da_b6;
+            if (msg.leaf_1da_b7 !== undefined) cachedTelemetry.leaf_1da_b7 = msg.leaf_1da_b7;
             if (msg.leaf_id1da_frames !== undefined) cachedTelemetry.leaf_id1da_frames = msg.leaf_id1da_frames;
             if (msg.leaf_id1da_age_ms !== undefined) cachedTelemetry.leaf_id1da_age_ms = msg.leaf_id1da_age_ms;
-            if (msg.leaf_120_tx_age_ms !== undefined) cachedTelemetry.leaf_120_tx_age_ms = msg.leaf_120_tx_age_ms;
-            if (msg.leaf_120_tx_b0 !== undefined) cachedTelemetry.leaf_120_tx_b0 = msg.leaf_120_tx_b0;
-            if (msg.leaf_120_tx_b1 !== undefined) cachedTelemetry.leaf_120_tx_b1 = msg.leaf_120_tx_b1;
-            if (msg.leaf_120_tx_b2 !== undefined) cachedTelemetry.leaf_120_tx_b2 = msg.leaf_120_tx_b2;
-            if (msg.leaf_120_tx_b3 !== undefined) cachedTelemetry.leaf_120_tx_b3 = msg.leaf_120_tx_b3;
-            if (msg.leaf_120_tx_b4 !== undefined) cachedTelemetry.leaf_120_tx_b4 = msg.leaf_120_tx_b4;
-            if (msg.leaf_120_tx_b5 !== undefined) cachedTelemetry.leaf_120_tx_b5 = msg.leaf_120_tx_b5;
-            if (msg.leaf_120_tx_b6 !== undefined) cachedTelemetry.leaf_120_tx_b6 = msg.leaf_120_tx_b6;
-            if (msg.leaf_120_tx_b7 !== undefined) cachedTelemetry.leaf_120_tx_b7 = msg.leaf_120_tx_b7;
+            if (msg.leaf_1d4_torque_nm !== undefined) cachedTelemetry.leaf_1d4_torque_nm = msg.leaf_1d4_torque_nm;
+            if (msg.leaf_1d4_torque_raw !== undefined) cachedTelemetry.leaf_1d4_torque_raw = msg.leaf_1d4_torque_raw;
+            if (msg.leaf_1d4_hv_status !== undefined) cachedTelemetry.leaf_1d4_hv_status = msg.leaf_1d4_hv_status;
+            if (msg.leaf_1d4_relay_plus !== undefined) cachedTelemetry.leaf_1d4_relay_plus = msg.leaf_1d4_relay_plus;
+            if (msg.leaf_1d4_charge_status !== undefined) cachedTelemetry.leaf_1d4_charge_status = msg.leaf_1d4_charge_status;
+            if (msg.leaf_1d4_battery_status !== undefined) cachedTelemetry.leaf_1d4_battery_status = msg.leaf_1d4_battery_status;
+            if (msg.leaf_1d4_clock !== undefined) cachedTelemetry.leaf_1d4_clock = msg.leaf_1d4_clock;
+            if (msg.leaf_1d4_crc !== undefined) cachedTelemetry.leaf_1d4_crc = msg.leaf_1d4_crc;
+            if (msg.leaf_1d4_crc_calc !== undefined) cachedTelemetry.leaf_1d4_crc_calc = msg.leaf_1d4_crc_calc;
+            if (msg.leaf_1d4_crc_ok !== undefined) cachedTelemetry.leaf_1d4_crc_ok = msg.leaf_1d4_crc_ok;
+            if (msg.leaf_1d4_crc_residue !== undefined) cachedTelemetry.leaf_1d4_crc_residue = msg.leaf_1d4_crc_residue;
+            if (msg.leaf_1d4_crc_samples !== undefined) cachedTelemetry.leaf_1d4_crc_samples = msg.leaf_1d4_crc_samples;
+            if (msg.leaf_1d4_crc_matches !== undefined) cachedTelemetry.leaf_1d4_crc_matches = msg.leaf_1d4_crc_matches;
+            if (msg.leaf_1d4_sniff_frames !== undefined) cachedTelemetry.leaf_1d4_sniff_frames = msg.leaf_1d4_sniff_frames;
+            if (msg.leaf_1d4_sniff_age_ms !== undefined) cachedTelemetry.leaf_1d4_sniff_age_ms = msg.leaf_1d4_sniff_age_ms;
+            if (msg.leaf_1d4_sniff_torque_nm !== undefined) cachedTelemetry.leaf_1d4_sniff_torque_nm = msg.leaf_1d4_sniff_torque_nm;
+            if (msg.leaf_1d4_sniff_torque_raw !== undefined) cachedTelemetry.leaf_1d4_sniff_torque_raw = msg.leaf_1d4_sniff_torque_raw;
+            if (msg.leaf_1d4_sniff_hv_status !== undefined) cachedTelemetry.leaf_1d4_sniff_hv_status = msg.leaf_1d4_sniff_hv_status;
+            if (msg.leaf_1d4_sniff_relay_plus !== undefined) cachedTelemetry.leaf_1d4_sniff_relay_plus = msg.leaf_1d4_sniff_relay_plus;
+            if (msg.leaf_1d4_sniff_charge_status !== undefined) cachedTelemetry.leaf_1d4_sniff_charge_status = msg.leaf_1d4_sniff_charge_status;
+            if (msg.leaf_1d4_sniff_clock !== undefined) cachedTelemetry.leaf_1d4_sniff_clock = msg.leaf_1d4_sniff_clock;
+            if (msg.leaf_1d4_sniff_crc !== undefined) cachedTelemetry.leaf_1d4_sniff_crc = msg.leaf_1d4_sniff_crc;
+            if (msg.leaf_1d4_sniff_b0 !== undefined) cachedTelemetry.leaf_1d4_sniff_b0 = msg.leaf_1d4_sniff_b0;
+            if (msg.leaf_1d4_sniff_b1 !== undefined) cachedTelemetry.leaf_1d4_sniff_b1 = msg.leaf_1d4_sniff_b1;
+            if (msg.leaf_1d4_sniff_b2 !== undefined) cachedTelemetry.leaf_1d4_sniff_b2 = msg.leaf_1d4_sniff_b2;
+            if (msg.leaf_1d4_sniff_b3 !== undefined) cachedTelemetry.leaf_1d4_sniff_b3 = msg.leaf_1d4_sniff_b3;
+            if (msg.leaf_1d4_sniff_b4 !== undefined) cachedTelemetry.leaf_1d4_sniff_b4 = msg.leaf_1d4_sniff_b4;
+            if (msg.leaf_1d4_sniff_b5 !== undefined) cachedTelemetry.leaf_1d4_sniff_b5 = msg.leaf_1d4_sniff_b5;
+            if (msg.leaf_1d4_sniff_b6 !== undefined) cachedTelemetry.leaf_1d4_sniff_b6 = msg.leaf_1d4_sniff_b6;
+            if (msg.leaf_1d4_sniff_b7 !== undefined) cachedTelemetry.leaf_1d4_sniff_b7 = msg.leaf_1d4_sniff_b7;
+            if (msg.leaf_1d4_tx_torque_nm !== undefined) cachedTelemetry.leaf_1d4_tx_torque_nm = msg.leaf_1d4_tx_torque_nm;
+            if (msg.leaf_1d4_tx_torque_raw !== undefined) cachedTelemetry.leaf_1d4_tx_torque_raw = msg.leaf_1d4_tx_torque_raw;
+            if (msg.leaf_1d4_tx_target_nm !== undefined) cachedTelemetry.leaf_1d4_tx_target_nm = msg.leaf_1d4_tx_target_nm;
+            if (msg.leaf_1d4_tx_hv_status !== undefined) cachedTelemetry.leaf_1d4_tx_hv_status = msg.leaf_1d4_tx_hv_status;
+            if (msg.leaf_1d4_tx_relay_plus !== undefined) cachedTelemetry.leaf_1d4_tx_relay_plus = msg.leaf_1d4_tx_relay_plus;
+            if (msg.leaf_1d4_tx_charge_status !== undefined) cachedTelemetry.leaf_1d4_tx_charge_status = msg.leaf_1d4_tx_charge_status;
+            if (msg.leaf_1d4_tx_clock !== undefined) cachedTelemetry.leaf_1d4_tx_clock = msg.leaf_1d4_tx_clock;
+            if (msg.leaf_1d4_tx_crc !== undefined) cachedTelemetry.leaf_1d4_tx_crc = msg.leaf_1d4_tx_crc;
+            if (msg.leaf_1d4_tx_crc_calc !== undefined) cachedTelemetry.leaf_1d4_tx_crc_calc = msg.leaf_1d4_tx_crc_calc;
+            if (msg.leaf_1d4_tx_crc_ok !== undefined) cachedTelemetry.leaf_1d4_tx_crc_ok = msg.leaf_1d4_tx_crc_ok;
+            if (msg.leaf_1d4_tx_frames !== undefined) cachedTelemetry.leaf_1d4_tx_frames = msg.leaf_1d4_tx_frames;
+            if (msg.leaf_1d4_tx_age_ms !== undefined) cachedTelemetry.leaf_1d4_tx_age_ms = msg.leaf_1d4_tx_age_ms;
+            if (msg.leaf_1d4_tx_b0 !== undefined) cachedTelemetry.leaf_1d4_tx_b0 = msg.leaf_1d4_tx_b0;
+            if (msg.leaf_1d4_tx_b1 !== undefined) cachedTelemetry.leaf_1d4_tx_b1 = msg.leaf_1d4_tx_b1;
+            if (msg.leaf_1d4_tx_b2 !== undefined) cachedTelemetry.leaf_1d4_tx_b2 = msg.leaf_1d4_tx_b2;
+            if (msg.leaf_1d4_tx_b3 !== undefined) cachedTelemetry.leaf_1d4_tx_b3 = msg.leaf_1d4_tx_b3;
+            if (msg.leaf_1d4_tx_b4 !== undefined) cachedTelemetry.leaf_1d4_tx_b4 = msg.leaf_1d4_tx_b4;
+            if (msg.leaf_1d4_tx_b5 !== undefined) cachedTelemetry.leaf_1d4_tx_b5 = msg.leaf_1d4_tx_b5;
+            if (msg.leaf_1d4_tx_b6 !== undefined) cachedTelemetry.leaf_1d4_tx_b6 = msg.leaf_1d4_tx_b6;
+            if (msg.leaf_1d4_tx_b7 !== undefined) cachedTelemetry.leaf_1d4_tx_b7 = msg.leaf_1d4_tx_b7;
+            if (msg.leaf_1d4_frames !== undefined) cachedTelemetry.leaf_1d4_frames = msg.leaf_1d4_frames;
+            if (msg.leaf_1d4_age_ms !== undefined) cachedTelemetry.leaf_1d4_age_ms = msg.leaf_1d4_age_ms;
+            if (msg.leaf_1d4_b0 !== undefined) cachedTelemetry.leaf_1d4_b0 = msg.leaf_1d4_b0;
+            if (msg.leaf_1d4_b1 !== undefined) cachedTelemetry.leaf_1d4_b1 = msg.leaf_1d4_b1;
+            if (msg.leaf_1d4_b2 !== undefined) cachedTelemetry.leaf_1d4_b2 = msg.leaf_1d4_b2;
+            if (msg.leaf_1d4_b3 !== undefined) cachedTelemetry.leaf_1d4_b3 = msg.leaf_1d4_b3;
+            if (msg.leaf_1d4_b4 !== undefined) cachedTelemetry.leaf_1d4_b4 = msg.leaf_1d4_b4;
+            if (msg.leaf_1d4_b5 !== undefined) cachedTelemetry.leaf_1d4_b5 = msg.leaf_1d4_b5;
+            if (msg.leaf_1d4_b6 !== undefined) cachedTelemetry.leaf_1d4_b6 = msg.leaf_1d4_b6;
+            if (msg.leaf_1d4_b7 !== undefined) cachedTelemetry.leaf_1d4_b7 = msg.leaf_1d4_b7;
             if (msg.leaf_inv_temp !== undefined) cachedTelemetry.leaf_inv_temp = msg.leaf_inv_temp;
             if (msg.leaf_stator_temp !== undefined) cachedTelemetry.leaf_stator_temp = msg.leaf_stator_temp;
             if (msg.leaf_coolant_temp !== undefined) cachedTelemetry.leaf_coolant_temp = msg.leaf_coolant_temp;
@@ -2508,6 +3161,7 @@
 
             // Create a merged view with cached data + new msg for backward compatibility
             const telemetry = Object.assign({}, cachedTelemetry, msg);
+            updateStatusSnippet(telemetry);
             const recordingNow = Boolean(telemetry.recording);
             const recordingStarted = !lastRecordingState && recordingNow;
             const recordingEnded = lastRecordingState && !recordingNow;
@@ -2801,6 +3455,7 @@ else if (msg.type === "info" || msg.type === "status") {
     
     function init() {
       loadCanMonitorPreference();
+      initCanMonitorSections();
       createTicks();
       createHPTicks();
       createTorqueTicks();
@@ -2905,6 +3560,12 @@ else if (msg.type === "info" || msg.type === "status") {
       const panel = document.getElementById("canMonitor");
       const currentlyVisible = !!panel && panel.style.display !== "none";
       setCanMonitorVisibility(!currentlyVisible, true);
+    };
+    document.getElementById("canMon1d4TxTargetDec").onclick = function() {
+      adjustLeaf1d4TxTargetNm(-kLeaf1d4TxStepNm);
+    };
+    document.getElementById("canMon1d4TxTargetInc").onclick = function() {
+      adjustLeaf1d4TxTargetNm(kLeaf1d4TxStepNm);
     };
     
     document.getElementById("confirmManual").onclick = function() {

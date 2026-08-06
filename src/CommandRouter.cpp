@@ -784,9 +784,13 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
         const String key = kv.substring(0, eq);
         const String val = kv.substring(eq + 1);
         const float fval = val.toFloat();
+        bool persistSettings = true;
         bool applyLoadCellProfile = false;
 
-        if (key == "rpmFilter") {
+        if (key == "leaf1d4TorqueNm") {
+            MetaSense::Input::setLeafUiTorqueDemandNm(fval);
+            persistSettings = false;
+        } else if (key == "rpmFilter") {
             MetaSense::Settings::filterAlpha = fval;
         } else if (key == "loadAvgN") {
             if (fval < 1.0f) {
@@ -929,14 +933,16 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
         } else {
             // Pass-through for display-only keys (maxRPM, maxHP, armCm, etc.)
         }
-        MetaSense::Settings::saveToStorage();
-        if (applyLoadCellProfile) {
-            const bool applied = MetaSense::Input::applyLoadCellSettingsProfile();
-            if (!applied) {
-                MetaSense::WebSocketServer::sendInfo("Load-cell profile saved but NAU apply failed (will apply on next init)");
+        if (persistSettings) {
+            MetaSense::Settings::saveToStorage();
+            if (applyLoadCellProfile) {
+                const bool applied = MetaSense::Input::applyLoadCellSettingsProfile();
+                if (!applied) {
+                    MetaSense::WebSocketServer::sendInfo("Load-cell profile saved but NAU apply failed (will apply on next init)");
+                }
             }
+            sendSettingsSnapshot();
         }
-        sendSettingsSnapshot();
         MetaSense::WebSocketServer::sendStatus(key + " saved");
     }
     else {

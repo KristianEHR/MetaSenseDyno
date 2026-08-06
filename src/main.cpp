@@ -74,8 +74,8 @@ namespace MetaSense::Globals {
 const bool kVcuSwitch = (VCU_switch != 0);
 }
 
-const char* ssid     = "5djnmv47";
-const char* password = "Niser0201";
+const char* ssid     = "TP-Link_458C";
+const char* password = "metasense";
 
 namespace {
  
@@ -586,6 +586,8 @@ void setupWifi()
     // Auto-reconnect on disconnect without rebooting.
     WiFi.setAutoReconnect(true);
     WiFi.persistent(false); // don't hammer NVS on every reconnect
+    Serial.println("[WiFi] DHCP mode");
+    Serial0.println("[WiFi] DHCP mode");
 
     // Register disconnect/reconnect event for serial diagnostics.
     WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
@@ -684,15 +686,10 @@ void controlTaskEntry(void* /*parameter*/)
                          dynoVcu.getSSR(),
                          dynoVcu.getRMinus());
 
-    #if METASENSE_VCU_OWNS_HV_RPLUS_PRECHARGE
-        MetaSense::HardwareOutputStateMachine::setVcuRelayOverride(true,
-                                        dynoVcu.getRbPlus(),
-                                        dynoVcu.getPrecharge(),
-                                        dynoVcu.getSSR(),
-                                        dynoVcu.getRMinus());
-    #else
-        MetaSense::HardwareOutputStateMachine::setVcuRelayOverride(false, false, false, false, false);
-    #endif
+    // The hardware output state machine owns the relay state. Keep the VCU relay
+    // override disabled so the HWSM remains the single enforcement point for the
+    // RSS/RB-minus interlock.
+    MetaSense::HardwareOutputStateMachine::setVcuRelayOverride(false, false, false, false, false);
 #if ENABLE_RUNTIME_INSTRUMENTATION
         recordTaskRuntime(controlTaskStats,
                           micros() - startedUs,
@@ -753,17 +750,20 @@ void networkTaskEntry(void* /*parameter*/)
                                                     nauInternalCalOk,
                                                     nauInternalCalAttempts);
             const int rbPlusLevel = digitalRead(MetaSense::Globals::kRbPlusInputPin);
-            Serial.printf("[BOOTSTATUS] vcu_mode=%s, vcu_ready=%d, rb_plus=%d, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u\n",
+            const bool ssrActive = MetaSense::HardwareOutputStateMachine::isSsrActive();
+            Serial.printf("[BOOTSTATUS] vcu_mode=%s, vcu_ready=%d, rb_plus=%d, ssr=%d, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u\n",
                           "can_inverter_status",
                           vcuReady ? 1 : 0,
                           rbPlusLevel,
+                          ssrActive ? 1 : 0,
                           nauLdoConfigured ? 1 : 0,
                           nauInternalCalOk ? 1 : 0,
                           static_cast<unsigned>(nauInternalCalAttempts));
-            Serial0.printf("[BOOTSTATUS] vcu_mode=%s, vcu_ready=%d, rb_plus=%d, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u\n",
+            Serial0.printf("[BOOTSTATUS] vcu_mode=%s, vcu_ready=%d, rb_plus=%d, ssr=%d, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u\n",
                            "can_inverter_status",
                            vcuReady ? 1 : 0,
                            rbPlusLevel,
+                           ssrActive ? 1 : 0,
                            nauLdoConfigured ? 1 : 0,
                            nauInternalCalOk ? 1 : 0,
                            static_cast<unsigned>(nauInternalCalAttempts));
@@ -797,7 +797,8 @@ void networkTaskEntry(void* /*parameter*/)
                                                     nauInternalCalOk,
                                                     nauInternalCalAttempts);
             const int rbPlusLevel = digitalRead(MetaSense::Globals::kRbPlusInputPin);
-            Serial.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s, vcu_mode=%s, vcu_ready=%d, vcu_ready_src=%s, prestart_warn=%d, rb_plus=%d, torque=%.2f, egt_hot=%.1f, amb=%.1f, press=%.1f, rh=%.1f, rho=%.3f, cf=%.4f, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u, rpm_raw01_le=%u, rpm_raw01_be=%u, rpm_raw23_le=%u, rpm_raw23_be=%u, tq_raw01_le=%d, tq_raw01_be=%d, tq_raw23_le=%d, tq_raw23_be=%d\n",
+            const bool ssrActive = MetaSense::HardwareOutputStateMachine::isSsrActive();
+            Serial.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s, vcu_mode=%s, vcu_ready=%d, vcu_ready_src=%s, prestart_warn=%d, rb_plus=%d, ssr=%d, torque=%.2f, egt_hot=%.1f, amb=%.1f, press=%.1f, rh=%.1f, rho=%.3f, cf=%.4f, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u, rpm_raw01_le=%u, rpm_raw01_be=%u, rpm_raw23_le=%u, rpm_raw23_be=%u, tq_raw01_le=%d, tq_raw01_be=%d, tq_raw23_le=%d, tq_raw23_be=%d\n",
                           static_cast<unsigned long>(ts),
                           wifiCredentialsConfigured() ? ssid : "<not-configured>",
                           static_cast<int>(status),
@@ -809,6 +810,7 @@ void networkTaskEntry(void* /*parameter*/)
                           vcuReadySource,
                           hwPrestartWarn ? 1 : 0,
                           rbPlusLevel,
+                          ssrActive ? 1 : 0,
                           torqueNm,
                           egtHotC,
                           ambientC,
@@ -827,7 +829,7 @@ void networkTaskEntry(void* /*parameter*/)
                           static_cast<int>(leafFbDiag.torque_raw01_be),
                           static_cast<int>(leafFbDiag.torque_raw23_le),
                           static_cast<int>(leafFbDiag.torque_raw23_be));
-            Serial0.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s, vcu_mode=%s, vcu_ready=%d, vcu_ready_src=%s, prestart_warn=%d, rb_plus=%d, torque=%.2f, egt_hot=%.1f, amb=%.1f, press=%.1f, rh=%.1f, rho=%.3f, cf=%.4f, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u, rpm_raw01_le=%u, rpm_raw01_be=%u, rpm_raw23_le=%u, rpm_raw23_be=%u, tq_raw01_le=%d, tq_raw01_be=%d, tq_raw23_le=%d, tq_raw23_be=%d\n",
+            Serial0.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s, vcu_mode=%s, vcu_ready=%d, vcu_ready_src=%s, prestart_warn=%d, rb_plus=%d, ssr=%d, torque=%.2f, egt_hot=%.1f, amb=%.1f, press=%.1f, rh=%.1f, rho=%.3f, cf=%.4f, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u, rpm_raw01_le=%u, rpm_raw01_be=%u, rpm_raw23_le=%u, rpm_raw23_be=%u, tq_raw01_le=%d, tq_raw01_be=%d, tq_raw23_le=%d, tq_raw23_be=%d\n",
                            static_cast<unsigned long>(ts),
                            wifiCredentialsConfigured() ? ssid : "<not-configured>",
                            static_cast<int>(status),
@@ -839,6 +841,7 @@ void networkTaskEntry(void* /*parameter*/)
                            vcuReadySource,
                            hwPrestartWarn ? 1 : 0,
                            rbPlusLevel,
+                           ssrActive ? 1 : 0,
                            torqueNm,
                            egtHotC,
                            ambientC,
