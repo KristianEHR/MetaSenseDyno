@@ -3035,24 +3035,26 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
     static int cachedRSSI = 0;
     const uint32_t now = millis();
 
-    // === DASHBOARD: Lightweight update every 25ms (NO blocking WiFi calls) ===
-    // Keep this very lean for UI responsiveness
+    // === LIGHTWEIGHT DATA: Every 25ms with essential telemetry (NO blocking WiFi calls) ===
+    // Browser expects "data" message type with these fields
     if (now - lastDashboardMs >= 25U) {
         lastDashboardMs = now;
-        String dashJson;
-        dashJson.reserve(200);
-        dashJson = "{\"type\":\"dashboard\",";
-        dashJson += "\"rpm\":" + String(data.rpm, 1) + ",";
-        dashJson += "\"leaf_rpm\":" + String(data.leaf_rpm, 1) + ",";
-        dashJson += "\"inv_temp\":" + String(data.leaf_invTempC, 1) + ",";
-        dashJson += "\"stator_temp\":" + String(data.leaf_statorTempC, 1) + ",";
-        dashJson += "\"coolant_temp\":" + String(data.leaf_coolantTempC, 1) + ",";
-        dashJson += "\"torque_nm\":" + String(data.leaf_torqueNm, 2);
-        dashJson += "}";
-        wsock.textAll(dashJson);
+        String dataJson;
+        dataJson.reserve(200);
+        dataJson = "{\"type\":\"data\",";
+        dataJson += "\"rpm\":" + String(data.rpm, 1) + ",";
+        dataJson += "\"leaf_rpm\":" + String(data.leaf_rpm, 1) + ",";
+        dataJson += "\"leaf_inv_temp\":" + String(data.leaf_invTempC, 1) + ",";
+        dataJson += "\"leaf_stator_temp\":" + String(data.leaf_statorTempC, 1) + ",";
+        dataJson += "\"leaf_coolant_temp\":" + String(data.leaf_coolantTempC, 1) + ",";
+        dataJson += "\"leaf_1da_torque_nm\":" + String(data.leaf_torqueNm, 2) + ",";
+        dataJson += "\"leaf_120_cmd_nm\":" + String(data.leaf_torqueDemandNm, 2);
+        dataJson += "}";
+        wsock.textAll(dataJson);
     }
 
-    // === CAN TELEMETRY: Full monitor data every 100ms (includes IP + RSSI) ===
+    // === CAN MONITOR: Full monitor data every 100ms (includes IP + RSSI + all 47 fields) ===
+    // Optional: Can be used by advanced monitoring pages
     if (now - lastCanTelemetryMs >= 100U) {
         lastCanTelemetryMs = now;
         
@@ -3065,7 +3067,7 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         
         String canJson;
         canJson.reserve(850);
-        canJson = "{\"type\":\"telemetry\",";
+        canJson = "{\"type\":\"canmonitor\",";
         canJson += "\"ip\":\"" + cachedIP + "\",";
         canJson += "\"rssi\":" + String(cachedRSSI) + ",";
         canJson += "\"rpm\":" + String(data.rpm, 1) + ",";
