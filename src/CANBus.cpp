@@ -879,86 +879,9 @@ void reset()
 
 void poll(uint32_t nowMs)
 {
-    static uint32_t lastPollHeartMs = 0U;
-    static uint32_t lastDiagMs = 0;
-    static uint32_t lastCanStatMs = 0U;
-#if !METASENSE_CAN_RX_ONE_LINE_LOG
-    if ((nowMs - lastPollHeartMs) >= 2000U) {
-        lastPollHeartMs = nowMs;
-        Serial.printf("[CAN-POLL-HEART] now=%lu configured=%d ready=%d\n",
-                      static_cast<unsigned long>(nowMs),
-                      static_cast<int>(s_configured),
-                      static_cast<int>(s_stats.ready));
-        Serial0.printf("[CAN-POLL-HEART] now=%lu configured=%d ready=%d\n",
-                       static_cast<unsigned long>(nowMs),
-                       static_cast<int>(s_configured),
-                       static_cast<int>(s_stats.ready));
-    }
-#endif
-
-#if METASENSE_CAN_RX_ONE_LINE_LOG
-    if ((nowMs - lastPollHeartMs) >= 2000U) {
-        lastPollHeartMs = nowMs;
-        Serial.printf("[CAN-STAT] ready=%d state=%u rx=%lu leaf=%lu unk=%lu q=%lu miss=%lu over=%lu last=0x%03lX\n",
-                      static_cast<int>(s_stats.ready),
-                      static_cast<unsigned>(s_stats.lastTwaiState),
-                      static_cast<unsigned long>(s_stats.rxFrames),
-                      static_cast<unsigned long>(s_stats.rxLeafFrames),
-                      static_cast<unsigned long>(s_stats.rxUnknownFrames),
-                      static_cast<unsigned long>(s_stats.twaiRxQueued),
-                      static_cast<unsigned long>(s_stats.twaiRxMissed),
-                      static_cast<unsigned long>(s_stats.twaiRxOverrun),
-                      static_cast<unsigned long>(s_stats.lastRxId));
-    }
-#endif
-
     if (!ensureReady(nowMs)) {
         return;
     }
-#if METASENSE_STARTUP_SNIFF_CAPTURE_ENABLE
-    if (!s_startupSniffArmInitialized) {
-        s_startupSniffArmInitialized = true;
-        s_startupSniffArmAtMs = nowMs + METASENSE_STARTUP_SNIFF_ARM_DELAY_MS;
-        Serial.printf("[STARTUP-SNIFF] armed delay=%lums capture=%lums\n",
-                      static_cast<unsigned long>(METASENSE_STARTUP_SNIFF_ARM_DELAY_MS),
-                      static_cast<unsigned long>(METASENSE_STARTUP_SNIFF_CAPTURE_MS));
-    }
-    static uint32_t s_startupSniffDiagLastMs = 0U;
-    if (s_startupSniffDiagLastMs == 0U || (nowMs - s_startupSniffDiagLastMs) >= 2000U) {
-        s_startupSniffDiagLastMs = nowMs;
-        const uint32_t armInMs = (nowMs >= s_startupSniffArmAtMs) ? 0U : (s_startupSniffArmAtMs - nowMs);
-        const uint32_t last11aAgeMs = (s_startupSniffLast11aMs == 0U) ? 0U : (nowMs - s_startupSniffLast11aMs);
-        Serial.printf("[STARTUP-SNIFF-STAT] active=%u done=%u count=%u drop=%u arm_in=%lu last11a_age=%lu\n",
-                      static_cast<unsigned>(s_startupSniffActive ? 1U : 0U),
-                      static_cast<unsigned>(s_startupSniffDone ? 1U : 0U),
-                      static_cast<unsigned>(s_startupSniffCount),
-                      static_cast<unsigned>(s_startupSniffDropped),
-                      static_cast<unsigned long>(armInMs),
-                      static_cast<unsigned long>(last11aAgeMs));
-    }
-    if (!s_startupSniffDone && !s_startupSniffActive && nowMs >= s_startupSniffArmAtMs) {
-        if (METASENSE_STARTUP_SNIFF_START_ON_FIRST_11A == 0U) {
-            startStartupSniffCapture(nowMs);
-        }
-    }
-#endif
-    static uint32_t lastRateMs = 0;
-    static uint32_t lastUnknownScanMs = 0;
-    static uint32_t lastUnknownAtScan = 0;
-    static uint32_t lastSniffSummaryMs = 0;
-    static uint32_t lastSniffPrintMs = 0;
-    static uint32_t lastSniffSnapshotCount = 0;
-    static uint32_t lastRx1daFrames = 0;
-    static uint32_t lastRx1d4CmdFrames = 0;
-    static uint32_t lastRx1dcFrames = 0;
-    static uint32_t lastRx1dbFrames = 0;
-    static uint32_t lastRx11aFrames = 0;
-    static uint32_t lastRxUnknownFrames = 0;
-    static uint32_t lastRxStdFrames = 0;
-    static uint32_t lastRxExtFrames = 0;
-    static uint32_t last11aChangeLogMs = 0;
-    const uint32_t DIAG_PERIOD_MS = 5000;
-    const uint32_t RATE_PERIOD_MS = 2000;
 
     twai_status_info_t twaiStatus = {};
     if (!s_canHal.getStatus(twaiStatus)) {
@@ -977,18 +900,6 @@ void poll(uint32_t nowMs)
     s_stats.twaiTxErrorCounter = static_cast<uint32_t>(twaiStatus.tx_error_counter);
     s_stats.twaiRxErrorCounter = static_cast<uint32_t>(twaiStatus.rx_error_counter);
 
-    if ((nowMs - lastCanStatMs) >= 2000U) {
-        lastCanStatMs = nowMs;
-        Serial.printf("[CAN-STAT] ready=%u state=%u rx_total=%lu last_id=0x%03lX queued=%lu missed=%lu overrun=%lu\n",
-                      static_cast<unsigned>(s_stats.ready ? 1U : 0U),
-                      static_cast<unsigned>(twaiStatus.state),
-                      static_cast<unsigned long>(s_stats.rxFrames),
-                      static_cast<unsigned long>(s_stats.lastRxId),
-                      static_cast<unsigned long>(s_stats.twaiRxQueued),
-                      static_cast<unsigned long>(s_stats.twaiRxMissed),
-                      static_cast<unsigned long>(s_stats.twaiRxOverrun));
-    }
-
     if (twaiStatus.state == TWAI_STATE_BUS_OFF) {
         handleDriverFault(nowMs, true);
         return;
@@ -997,54 +908,11 @@ void poll(uint32_t nowMs)
         handleDriverFault(nowMs, false);
         return;
     }
-    
-    // Periodic diagnostic: show queue status
-#if !METASENSE_CAN_SNIFF_ONLY
-#if !METASENSE_CAN_RX_ONE_LINE_LOG
-    if (lastDiagMs == 0U || (nowMs - lastDiagMs) >= DIAG_PERIOD_MS) {
-        lastDiagMs = nowMs;
-        Serial.printf("[CAN-POLL-DIAG] queued=%lu missed=%lu overrun=%lu arb_lost=%lu bus_err=%lu tx_err=%u rx_err=%u state=%u rx_frames_total=%lu leaf_frames=%lu unk_frames=%lu\n",
-                      static_cast<unsigned long>(twaiStatus.msgs_to_rx),
-                      static_cast<unsigned long>(twaiStatus.rx_missed_count),
-                      static_cast<unsigned long>(twaiStatus.rx_overrun_count),
-                      static_cast<unsigned long>(twaiStatus.arb_lost_count),
-                      static_cast<unsigned long>(twaiStatus.bus_error_count),
-                      static_cast<unsigned>(twaiStatus.tx_error_counter),
-                      static_cast<unsigned>(twaiStatus.rx_error_counter),
-                      static_cast<unsigned>(twaiStatus.state),
-                      static_cast<unsigned long>(s_stats.rxFrames),
-                      static_cast<unsigned long>(s_stats.rxLeafFrames),
-                      static_cast<unsigned long>(s_stats.rxUnknownFrames));
-    }
-#endif
-#else
-#if !METASENSE_CAN_RX_ONE_LINE_LOG
-    if (lastDiagMs == 0U || (nowMs - lastDiagMs) >= DIAG_PERIOD_MS) {
-        lastDiagMs = nowMs;
-        const uint32_t lastRxAgeMs = (s_stats.lastRxMs == 0U) ? 0U : (nowMs - s_stats.lastRxMs);
-        Serial.printf("[CAN-SNIFF-DIAG] state=%u queued=%lu missed=%lu overrun=%lu arb_lost=%lu bus_err=%lu rx_total=%lu std=%lu ext=%lu leaf=%lu 1da=%lu 55a=%lu 11a=%lu unk=%lu last_id=0x%03lX last_age=%lu\n",
-                      static_cast<unsigned>(twaiStatus.state),
-                      static_cast<unsigned long>(twaiStatus.msgs_to_rx),
-                      static_cast<unsigned long>(twaiStatus.rx_missed_count),
-                      static_cast<unsigned long>(twaiStatus.rx_overrun_count),
-                      static_cast<unsigned long>(twaiStatus.arb_lost_count),
-                      static_cast<unsigned long>(twaiStatus.bus_error_count),
-                      static_cast<unsigned long>(s_stats.rxFrames),
-                      static_cast<unsigned long>(s_stats.rxStdFrames),
-                      static_cast<unsigned long>(s_stats.rxExtFrames),
-                      static_cast<unsigned long>(s_stats.rxLeafFrames),
-                      static_cast<unsigned long>(s_stats.rx1daFrames),
-                      static_cast<unsigned long>(s_stats.rx55aFrames),
-                      static_cast<unsigned long>(s_stats.rx11aFrames),
-                      static_cast<unsigned long>(s_stats.rxUnknownFrames),
-                      static_cast<unsigned long>(s_stats.lastRxId),
-                      static_cast<unsigned long>(lastRxAgeMs));
-    }
-#endif
-#endif
 
-    uint32_t framesThisPoll = 0;
-    uint32_t extFramesThisPoll = 0;
+    // Track 0x1DA CRC errors for fault detection
+    static uint32_t lastRateCheckMs = 0U;
+    static uint32_t lastRx1daBadFramesAtCheck = 0U;
+    
     for (uint8_t i = 0; i < s_config.maxFramesPerPoll; ++i) {
         uint32_t id = 0;
         uint8_t len = 0;
@@ -1054,88 +922,42 @@ void poll(uint32_t nowMs)
             break;
         }
 
+        // Skip excluded IDs (0x120, 0x11A, 0x1D4 unless sniffing)
         if (isRxIdExcluded(id)) {
-            // Do not decode, count as unknown, or surface excluded IDs.
             continue;
         }
 
-    #if METASENSE_STARTUP_SNIFF_CAPTURE_ENABLE
-        const uint32_t captureNowMs = millis();
-        recordStartupSniffFrame(captureNowMs, id, data, len, isExtended);
-    #endif
-        
-        if (isExtended) {
-            ++s_stats.rxExtFrames;
-            ++extFramesThisPoll;
-        } else {
-            ++s_stats.rxStdFrames;
-        }
-
-        ++framesThisPoll;
-
         const uint32_t decodeId = normalizeLeafIdForDecode(id);
-#if METASENSE_CAN_ID_SCAN
-#if !METASENSE_CAN_RX_ONE_LINE_LOG
-        const bool newSniffId = noteSniffId(id, data, len);
-        if (newSniffId && (lastSniffPrintMs == 0U || (nowMs - lastSniffPrintMs) >= 50U)) {
-            lastSniffPrintMs = nowMs;
-            Serial.printf("0x%03lX ", static_cast<unsigned long>(id));
-            for (uint8_t b = 0U; b < len; ++b) {
-                Serial.printf("%02X", static_cast<unsigned>(data[b]));
-                if (b + 1U < len) {
-                    Serial.print(' ');
-                }
-            }
-            Serial.println();
-        }
-#endif
-#endif
 
-        twai_message_t msg = {};
-        msg.identifier = decodeId;
-        msg.data_length_code = len;
-        memcpy(msg.data, data, len);
-
+        // Check 0x1DA CRC (if present)
         int8_t frame1daWireCrcOk = -1;
         uint8_t frame1daWireCrcCalc = 0U;
         if (decodeId == 0x1DAU && len >= 8U) {
             frame1daWireCrcOk = is1daWireCrcKnownGood(data, len, &frame1daWireCrcCalc) ? 1 : 0;
         }
 
-        if (decodeId == 0x55AU) {
-            ++s_stats.rx55aFrames;
-            s_stats.last55aMs = nowMs;
-            s_stats.last55aLen = len;
-            memset(s_stats.last55aData, 0, sizeof(s_stats.last55aData));
-            memcpy(s_stats.last55aData, data, len);
-        }
+        // Store last frame data for TX echo capture
         if (id == 0x1D4U) {
-    #if METASENSE_LEAF_1D4_RINGBUF_ENABLE
-            pushLeaf1d4Ring(data, len);
-    #endif
-    #if METASENSE_LEAF_1D4_SNIFF_RX_ENABLED
-            ++s_stats.rx1d4SniffFrames;
-            s_stats.last1d4SniffMs = nowMs;
-            s_stats.last1d4SniffLen = len;
-            memset(s_stats.last1d4SniffData, 0, sizeof(s_stats.last1d4SniffData));
-            memcpy(s_stats.last1d4SniffData, data, len);
-            ++s_stats.rx1d4CmdFrames;
             s_stats.last1d4CmdMs = nowMs;
             s_stats.last1d4CmdLen = len;
             memset(s_stats.last1d4CmdData, 0, sizeof(s_stats.last1d4CmdData));
             memcpy(s_stats.last1d4CmdData, data, len);
-    #endif
         }
 
+        // Decode accepted Leaf frames
         if (isAcceptedLeafId(decodeId)) {
-            // Decode accepted telemetry in both normal and sniff-only modes so
-            // monitor fields (e.g. 0x55A temperatures) stay live.
-            // Exception: 0x1DA is CRC-gated; BAD frames are discarded.
+            // 0x1DA is CRC-gated; only decode if CRC is good
             const bool allowDecode = (decodeId != 0x1DAU) || (frame1daWireCrcOk == 1);
             if (allowDecode) {
+                twai_message_t msg = {};
+                msg.identifier = decodeId;
+                msg.data_length_code = len;
+                memcpy(msg.data, data, len);
                 LeafCan::decodeFrame(msg, s_feedback, nowMs);
             }
+
             ++s_stats.rxLeafFrames;
+
             if (decodeId == 0x1DAU) {
                 ++s_stats.rx1daFrames;
                 s_stats.last1daMs = nowMs;
@@ -1145,224 +967,44 @@ void poll(uint32_t nowMs)
                 if (len >= 8U) {
                     s_stats.last1daWireCrcOk = frame1daWireCrcOk;
                     s_stats.last1daWireCrcCalc = frame1daWireCrcCalc;
-                    if (s_stats.last1daWireCrcOk == 1) {
+                    if (frame1daWireCrcOk == 1) {
                         ++s_stats.rx1daWireCrcOkFrames;
                     } else {
                         ++s_stats.rx1daWireCrcBadFrames;
-                        static uint32_t s_last1daBadLogMs = 0U;
-                        if ((nowMs - s_last1daBadLogMs) >= 250U) {
-                            s_last1daBadLogMs = nowMs;
-                            const uint8_t crcRx = data[7];
-                            const uint8_t crcCalc = s_stats.last1daWireCrcCalc;
-                            const uint8_t clock = static_cast<uint8_t>(data[6] & 0x03U);
-                            Serial.printf("[1DA-CRC-BAD] n=%lu clk=%u rx=0x%02X calc=0x%02X data=%02X %02X %02X %02X %02X %02X %02X %02X\n",
-                                          static_cast<unsigned long>(s_stats.rx1daWireCrcBadFrames),
-                                          static_cast<unsigned>(clock),
-                                          static_cast<unsigned>(crcRx),
-                                          static_cast<unsigned>(crcCalc),
-                                          static_cast<unsigned>(data[0]),
-                                          static_cast<unsigned>(data[1]),
-                                          static_cast<unsigned>(data[2]),
-                                          static_cast<unsigned>(data[3]),
-                                          static_cast<unsigned>(data[4]),
-                                          static_cast<unsigned>(data[5]),
-                                          static_cast<unsigned>(data[6]),
-                                          static_cast<unsigned>(data[7]));
-                            Serial0.printf("[1DA-CRC-BAD] n=%lu clk=%u rx=0x%02X calc=0x%02X data=%02X %02X %02X %02X %02X %02X %02X %02X\n",
-                                           static_cast<unsigned long>(s_stats.rx1daWireCrcBadFrames),
-                                           static_cast<unsigned>(clock),
-                                           static_cast<unsigned>(crcRx),
-                                           static_cast<unsigned>(crcCalc),
-                                           static_cast<unsigned>(data[0]),
-                                           static_cast<unsigned>(data[1]),
-                                           static_cast<unsigned>(data[2]),
-                                           static_cast<unsigned>(data[3]),
-                                           static_cast<unsigned>(data[4]),
-                                           static_cast<unsigned>(data[5]),
-                                           static_cast<unsigned>(data[6]),
-                                           static_cast<unsigned>(data[7]));
-                        }
                     }
                 } else {
                     s_stats.last1daWireCrcOk = -1;
                     s_stats.last1daWireCrcCalc = 0U;
                 }
-            } else if (decodeId == 0x1DCU) {
-                ++s_stats.rx1dcFrames;
+            } else if (decodeId == 0x55AU) {
+                ++s_stats.rx55aFrames;
+                s_stats.last55aMs = nowMs;
+                s_stats.last55aLen = len;
+                memset(s_stats.last55aData, 0, sizeof(s_stats.last55aData));
+                memcpy(s_stats.last55aData, data, len);
             }
-        } else {
-            ++s_stats.rxUnknownFrames;
-#if METASENSE_CAN_ID_SCAN
-            noteUnknownId(id, data, len, nowMs, isExtended);
-#endif
-#if METASENSE_CAN_RX_ONE_LINE_LOG
-            logUnknownRxFrameOneLine(id, data, len, isExtended);
-#endif
-            if (id == 0x1DBU) {
-                ++s_stats.rx1dbFrames;
-            }
-            if (id == 0x11AU) {
-                const uint8_t deltaMask = changedMask(s_stats.last11aData,
-                                                      s_stats.last11aLen,
-                                                      data,
-                                                      len);
-                s_stats.last11aChangeMask = deltaMask;
-                if (s_stats.rx11aFrames > 0U && deltaMask != 0U) {
-                    ++s_stats.rx11aChanges;
-                }
-                s_stats.agg11aChangeMask |= deltaMask;
-                for (uint8_t b = 0U; b < len && b < 8U; ++b) {
-                    if ((deltaMask & static_cast<uint8_t>(1U << b)) != 0U) {
-                        ++s_stats.byteChg11a[b];
-                    }
-                }
-#if METASENSE_CAN_LOG_11A_CHANGES
-                if (deltaMask != 0U && (last11aChangeLogMs == 0U || (nowMs - last11aChangeLogMs) >= 100U)) {
-                    Serial.printf("[CAN-11A-CHG] n=%lu chg=%lu mask=0x%02X data=%02X %02X %02X %02X %02X %02X %02X %02X\n",
-                                  static_cast<unsigned long>(s_stats.rx11aFrames + 1U),
-                                  static_cast<unsigned long>(s_stats.rx11aChanges),
-                                  static_cast<unsigned>(deltaMask),
-                                  static_cast<unsigned>(data[0]),
-                                  static_cast<unsigned>(data[1]),
-                                  static_cast<unsigned>(data[2]),
-                                  static_cast<unsigned>(data[3]),
-                                  static_cast<unsigned>(data[4]),
-                                  static_cast<unsigned>(data[5]),
-                                  static_cast<unsigned>(data[6]),
-                                  static_cast<unsigned>(data[7]));
-                    last11aChangeLogMs = nowMs;
-                }
-#endif
-                ++s_stats.rx11aFrames;
-                s_stats.last11aMs = nowMs;
-                s_stats.last11aLen = len;
-                memset(s_stats.last11aData, 0, sizeof(s_stats.last11aData));
-                memcpy(s_stats.last11aData, data, len);
-            }
-            if (id == 0x50BU) {
-                ++s_stats.rx50bFrames;
-                s_stats.last50bMs = nowMs;
-            }
-            s_stats.lastUnknownMs = nowMs;
-            s_stats.lastUnknownId = id;
-            s_stats.lastUnknownLen = len;
-            memset(s_stats.lastUnknownData, 0, sizeof(s_stats.lastUnknownData));
-            memcpy(s_stats.lastUnknownData, data, len);
         }
+
         s_stats.lastRxMs = nowMs;
         s_stats.lastRxId = id;
         ++s_stats.rxFrames;
+    }
 
-        // Focused hunt: always surface these candidate IDs clearly.
-        logTargetRxFrame(id, data, len, isExtended);
-
-    #if METASENSE_CAN_RX_ONE_LINE_LOG
-        logRxFrameOneLine(id, data, len, isExtended);
-    #else
-        // Unconditional raw frame dump for sniffing every frame on the bus.
-        #if 0  // Disable verbose CAN debug output
-        Serial.printf("[CAN-RX-RAW] id=0x%03lX len=%u data=%02X %02X %02X %02X %02X %02X %02X %02X\n",
-                  static_cast<unsigned long>(id),
-                  static_cast<unsigned>(len),
-                  static_cast<unsigned>(data[0]),
-                  static_cast<unsigned>(data[1]),
-                  static_cast<unsigned>(data[2]),
-                  static_cast<unsigned>(data[3]),
-                  static_cast<unsigned>(data[4]),
-                  static_cast<unsigned>(data[5]),
-                  static_cast<unsigned>(data[6]),
-                  static_cast<unsigned>(data[7]));
-
-        Serial.printf("[CAN-FRAME-RX] id=0x%03lX len=%u data=%02X %02X %02X %02X %02X %02X %02X %02X\n",
-                  static_cast<unsigned long>(id),
-                  static_cast<unsigned>(len),
-                  static_cast<unsigned>(data[0]),
-                  static_cast<unsigned>(data[1]),
-                  static_cast<unsigned>(data[2]),
-                  static_cast<unsigned>(data[3]),
-                  static_cast<unsigned>(data[4]),
-                  static_cast<unsigned>(data[5]),
-                  static_cast<unsigned>(data[6]),
-                  static_cast<unsigned>(data[7]));
-        #endif
-    #endif
+    // Check 0x1DA CRC error rate: fault if > 100/sec
+    if (lastRateCheckMs == 0U || (nowMs - lastRateCheckMs) >= 1000U) {
+        const uint32_t dtMs = (lastRateCheckMs == 0U) ? 1000U : (nowMs - lastRateCheckMs);
+        const uint32_t d1daBad = s_stats.rx1daWireCrcBadFrames - lastRx1daBadFramesAtCheck;
+        const float errorRatePerSec = (dtMs > 0U) 
+            ? (1000.0f * static_cast<float>(d1daBad) / static_cast<float>(dtMs))
+            : 0.0f;
         
-    }
-
-#if METASENSE_STARTUP_SNIFF_CAPTURE_ENABLE
-    dumpStartupSniffCapture(nowMs);
-#endif
-    
-#if !METASENSE_CAN_SNIFF_ONLY
-#if !METASENSE_CAN_RX_ONE_LINE_LOG
-    if (lastDiagMs == 0U || (nowMs - lastDiagMs) >= DIAG_PERIOD_MS) {
-        Serial.printf("[CAN-POLL-FRAME-COUNT] this_poll=%lu ext_frames=%lu\n", static_cast<unsigned long>(framesThisPoll), static_cast<unsigned long>(extFramesThisPoll));
-    }
-
-    if (lastRateMs == 0U || (nowMs - lastRateMs) >= RATE_PERIOD_MS) {
-        const uint32_t dtMs = (lastRateMs == 0U) ? RATE_PERIOD_MS : (nowMs - lastRateMs);
-        const uint32_t d1da = s_stats.rx1daFrames - lastRx1daFrames;
-        const uint32_t d1d4cmd = s_stats.rx1d4CmdFrames - lastRx1d4CmdFrames;
-        const uint32_t d1db = s_stats.rx1dbFrames - lastRx1dbFrames;
-        const uint32_t d11a = s_stats.rx11aFrames - lastRx11aFrames;
-        const uint32_t dunk = s_stats.rxUnknownFrames - lastRxUnknownFrames;
-        const uint32_t dstd = s_stats.rxStdFrames - lastRxStdFrames;
-        const uint32_t dext = s_stats.rxExtFrames - lastRxExtFrames;
-
-        const float hz1da = (dtMs > 0U) ? (1000.0f * static_cast<float>(d1da) / static_cast<float>(dtMs)) : 0.0f;
-        const float hz1d4cmd = (dtMs > 0U) ? (1000.0f * static_cast<float>(d1d4cmd) / static_cast<float>(dtMs)) : 0.0f;
-        const float hz1db = (dtMs > 0U) ? (1000.0f * static_cast<float>(d1db) / static_cast<float>(dtMs)) : 0.0f;
-        const float hz11a = (dtMs > 0U) ? (1000.0f * static_cast<float>(d11a) / static_cast<float>(dtMs)) : 0.0f;
-        const float hzStd = (dtMs > 0U) ? (1000.0f * static_cast<float>(dstd) / static_cast<float>(dtMs)) : 0.0f;
-        const float hzExt = (dtMs > 0U) ? (1000.0f * static_cast<float>(dext) / static_cast<float>(dtMs)) : 0.0f;
-
-        Serial.printf("[CAN-RATE] std=%lu(%.1fHz) ext=%lu(%.1fHz) 1DA=%lu(%.1fHz) 1D4cmd=%lu(%.1fHz) 1DB=%lu(%.1fHz) legacy11A=%lu(%.1fHz) unk=%lu\n",
-                      static_cast<unsigned long>(s_stats.rxStdFrames), hzStd,
-                      static_cast<unsigned long>(s_stats.rxExtFrames), hzExt,
-                      static_cast<unsigned long>(s_stats.rx1daFrames), hz1da,
-                      static_cast<unsigned long>(s_stats.rx1d4CmdFrames), hz1d4cmd,
-                  static_cast<unsigned long>(s_stats.rx1dbFrames), hz1db,
-                  static_cast<unsigned long>(s_stats.rx11aFrames), hz11a,
-                      static_cast<unsigned long>(s_stats.rxUnknownFrames));
-
-        lastRateMs = nowMs;
-        lastRx1daFrames = s_stats.rx1daFrames;
-        lastRx1d4CmdFrames = s_stats.rx1d4CmdFrames;
-        lastRx1dbFrames = s_stats.rx1dbFrames;
-        lastRx11aFrames = s_stats.rx11aFrames;
-        lastRxUnknownFrames = s_stats.rxUnknownFrames;
-        lastRxStdFrames = s_stats.rxStdFrames;
-        lastRxExtFrames = s_stats.rxExtFrames;
-        (void)dunk;
-    }
-#endif
-#endif
-
-#if METASENSE_CAN_ID_SCAN
-    #if METASENSE_CAN_FRAME_IDENTIFIER
-#if !METASENSE_CAN_RX_ONE_LINE_LOG
-    printFrameIdentifierReport(nowMs);
-#endif
-    #else
-#if !METASENSE_CAN_RX_ONE_LINE_LOG
-    const size_t sniffIdCount = countSniffIds();
-    if ((lastSniffSummaryMs == 0U || (nowMs - lastSniffSummaryMs) >= 5000U) &&
-        (sniffIdCount != lastSniffSnapshotCount || lastSniffSummaryMs == 0U)) {
-        printSniffIdSnapshot();
-        lastSniffSummaryMs = nowMs;
-        lastSniffSnapshotCount = static_cast<uint32_t>(sniffIdCount);
-    }
-
-    if (lastUnknownScanMs == 0U || (nowMs - lastUnknownScanMs) >= 5000U) {
-        if (s_stats.rxUnknownFrames != lastUnknownAtScan) {
-            printUnknownIdScan(nowMs);
-            lastUnknownAtScan = s_stats.rxUnknownFrames;
+        if (errorRatePerSec > 100.0f) {
+            handleDriverFault(nowMs, false);
         }
-        lastUnknownScanMs = nowMs;
+        
+        lastRateCheckMs = nowMs;
+        lastRx1daBadFramesAtCheck = s_stats.rx1daWireCrcBadFrames;
     }
-#endif
-    #endif
-#endif
 }
 
 bool send(uint32_t id, const uint8_t* data, uint8_t len)
