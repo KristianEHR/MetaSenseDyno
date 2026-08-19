@@ -16,13 +16,13 @@ namespace MetaSense::LeafCRC {
 //   - Function: crc8MsbPoly85BF()
 //   - Status: 100% precision (Nissan's definitive reference)
 //
-// 0x1D4 (TX to Nissan inverter): Reengineered approximation
+// 0x1D4 (TX to Nissan inverter): Uses same algorithm structure as 0x1DA example
 //   - Base CRC: poly 0x1D, init 0xFF, xorOut 0xFF
 //   - Plus: Clock residue table based on byte 4 bits 6..7
 //   - Function: computeApprovedInverterCrc()
 //   - Status: ~99.99% precision (iteratively fitted)
 //
-// 0x11A (TX echo): Same as 0x1D4
+// 0x11A (TX echo): No CRC
 //
 // Source of truth for approved active Leaf CRC handling.
 // Diagnostic or exploratory CRC candidates must never influence active verdicts
