@@ -1,0 +1,76 @@
+Mandatory rules for CAN bus implementation in the MetaSense DYNO project. 19:08:2016/KE
+
+The CRC is a control method for verification of the validity/quality of CAN frames send and received on the CAN bus.
+CAN communication is interchange of short telegrams packed in a socalled CAN frame.
+The frame start with a header containing the CAN ID, The identifyer of the frame.
+Then there is 64 bit of Payload (packed data). For unpacking of the Payload you need to identify the position size and type.
+An associated DBC file holds the coding/encoding context of the frame ID.
+The last 2 bytes of the frame contains a CRC which is a code of integrity of the previous 7 Bytes of the payload.
+The CRC is calculated by an algorithm calculated from the binary values of the 7 first bytes of the payload.
+Upon receipt of a CAN frame, the integrity of the frame may be checked by calculating the crc value of the 7 first bytes
+of the frame payload.
+This calculated CRC must be identic with the CRC field in the received frame for accepting it.
+
+If you send CAN frames you first must generate the frame, typical from a DBC description. Here the calculated CRC is the
+last byte.
+
+As designer you are free to define the frames you provide along with their ID's INCL. whether they have CRC or not.
+In many CAN bus implementations the DBC and ID's are proprietary.
+In our case we communicate with a Nissan Leaf Inverter, where the CRC algorithm is designed by Nissan (proprietary and unknown.)
+
+We have reverse engineered the CRC algorithm from a stream of 0x1DA frames, received from the Nissan Leaf Invertr.
+The CAN frames 0x1D4 we generate and send to control the Inverter, are generated from reverse engineered 0x1D4-
+  = Nissan algorithm.
+
+Important: These rules must be strictly followed when generating the CAN communication fw in the MetaSense-Dyno controller.
+Wrong implementation may be hazardous for operator(s) of the DYNO.
+
+=== SPECIFICATION: CRC ALGORITHMS ===
+
+FRAME 0x1DA (RX - Nissan Leaf Inverter Motor Speed/Torque):
+  CRC Byte Position: Byte 7 (last byte of 8-byte payload)
+  CRC Input: Bytes 0-6 of payload (7 bytes)
+  Algorithm: CRC-8 MSB-first
+  Polynomial: 0x85 (VERIFY WITH ACTUAL NISSAN SPEC)
+  Initial Value: 0x00
+  XOR Output: 0xBF
+  Validation: receivedCRC (byte 7) must equal calculated CRC
+  Action on CRC mismatch: REJECT frame, do not decode data
+
+FRAME 0x1D4 (TX - MetaSense Torque Command to Inverter):
+  CRC Byte Position: Byte 7 (last byte of 8-byte payload)
+  CRC Input: Bytes 0-6 of payload (7 bytes)
+  Algorithm: CRC-8 MSB-first
+  Polynomial: 0x1D (VERIFY WITH ACTUAL NISSAN SPEC)
+  Initial Value: 0x00
+  XOR Output: 0x29
+  Clock-based residue: Yes, residue table based on byte 4 bits 6-7
+  Action: Always generate correct CRC before transmission
+
+FRAME 0x11A (TX - Optional steering input echo):
+  CRC Byte Position: Byte 7
+  CRC Algorithm: Same as 0x1D4 (poly 0x1D)
+  Note: Not all systems use this frame
+
+=== CRITICAL IMPLEMENTATION REQUIREMENTS ===
+
+1. CONSISTENCY CHECK:
+   - If 0x1DA RX and 0x1D4 TX both use "reverse engineered Nissan algorithm"
+   - Then they MUST use the SAME polynomial (either both 0x85 or both 0x1D)
+   - Current code mismatch (0x85 vs 0x1D) suggests one implementation is WRONG
+
+2. ACCEPTANCE GATE:
+   - RX acceptance must ONLY validate CRC for frames requiring it
+   - Frames failing CRC validation must be REJECTED entirely
+   - No partial decoding of CRC-invalid frames
+
+3. DISPLAY/MONITORING:
+   - CRC monitor must show actual calculated vs received values
+   - Stale CRC values indicate frame acceptance issue
+   - CRC toggling between OK/BAD indicates algorithm error
+
+4. TESTING PROCEDURE:
+   - Capture live 0x1DA frames from Nissan Leaf
+   - Manually verify CRC calculation with captured data
+   - Confirm polynomial 0x85 produces matching CRC byte 7
+   - Do NOT deploy until verified against real frames
