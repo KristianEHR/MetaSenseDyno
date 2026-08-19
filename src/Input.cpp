@@ -3135,25 +3135,26 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         canJson += "\"leaf_inv_temp\":" + String(data.leaf_invTempC, 1) + ",";
         canJson += "\"leaf_stator_temp\":" + String(data.leaf_statorTempC, 1) + ",";
         canJson += "\"leaf_coolant_temp\":" + String(data.leaf_coolantTempC, 1) + ",";
-        // Diagnostic fields - send actual CAN stats instead of zeros
+        // Diagnostic fields - use decoded LeafInvFeedback & CAN stats
         const auto& canStats = MetaSense::CANBus::stats();
+        const auto& leafFb = MetaSense::CANBus::feedback();
         const uint32_t ageSince1da = (canStats.last1daMs > 0 && now > canStats.last1daMs) ? (now - canStats.last1daMs) : 0;
         const uint32_t ageSince11a = (canStats.last11aMs > 0 && now > canStats.last11aMs) ? (now - canStats.last11aMs) : 0;
         const uint32_t ageSince1d4Tx = (canStats.last1d4TxMs > 0 && now > canStats.last1d4TxMs) ? (now - canStats.last1d4TxMs) : 0;
         
-        canJson += "\"leaf_1da_input_v\":0,";
+        canJson += "\"leaf_1da_input_v\":" + String(leafFb.input_voltage, 1) + ",";
         canJson += "\"leaf_1da_torque_nm\":" + String(data.leaf_torqueNm, 2) + ",";
         canJson += "\"leaf_1da_rpm\":" + String(data.leaf_rpm, 1) + ",";
-        canJson += "\"leaf_1da_clock\":" + String(canStats.last1daData[6]) + ",";
-        canJson += "\"leaf_1da_err\":0,";
-        canJson += "\"leaf_1da_crc\":" + String(canStats.last1daWireCrcCalc) + ",";
+        canJson += "\"leaf_1da_clock\":" + String(leafFb.mg_clock) + ",";
+        canJson += "\"leaf_1da_err\":" + String(leafFb.mg_error_codes) + ",";
+        canJson += "\"leaf_1da_crc\":" + String(leafFb.crc_1da) + ",";
         canJson += "\"leaf_1da_crc_calc\":" + String(canStats.last1daWireCrcCalc) + ",";
         canJson += "\"leaf_1da_crc_ok\":" + String((canStats.last1daWireCrcOk == 1) ? 1 : 0) + ",";
-        canJson += "\"leaf_1da_inv_status_bit\":0,";
-        canJson += "\"leaf_1da_inv_fault_map\":0,";
-        canJson += "\"leaf_1da_inv_blinky\":0,";
-        canJson += "\"leaf_1da_inv_unknown_faults\":0,";
-        canJson += "\"leaf_1da_inv_fault_can_timeout\":0,";
+        canJson += "\"leaf_1da_inv_status_bit\":" + String(leafFb.inv_status_bit) + ",";
+        canJson += "\"leaf_1da_inv_fault_map\":" + String(leafFb.inv_fault_map) + ",";
+        canJson += "\"leaf_1da_inv_blinky\":" + String(leafFb.inv_blinky) + ",";
+        canJson += "\"leaf_1da_inv_unknown_faults\":" + String(leafFb.inv_unknown_faults) + ",";
+        canJson += "\"leaf_1da_inv_fault_can_timeout\":" + String(leafFb.inv_fault_can_timeout_maybe) + ",";
         canJson += "\"leaf_1da_crc_wire_ok_frames\":" + String(canStats.rx1daWireCrcOkFrames) + ",";
         canJson += "\"leaf_1da_crc_wire_bad_frames\":" + String(canStats.rx1daWireCrcBadFrames) + ",";
         canJson += "\"leaf_id1da_frames\":" + String(canStats.rx1daFrames) + ",";
