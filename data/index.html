@@ -3485,6 +3485,11 @@ else if (msg.type === "info" || msg.type === "status") {
         }
       };
       
+      ws.onerror = function(event) {
+        console.error("❌ WebSocket Error:", event);
+        document.getElementById("status").innerText = "❌ WebSocket Error";
+      };
+      
       ws.onclose = function() { 
         document.getElementById("status").innerText = "⚠️ Reconnecting...";
         setTimeout(connectWS, 1000); 

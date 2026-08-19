@@ -3034,32 +3034,92 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
     static String cachedIP = "0.0.0.0";
     static int cachedRSSI = 0;
     const uint32_t now = millis();
+    
+    // Check if we have WebSocket clients connected
+    const uint32_t clientCount = MetaSense::WebSocketServer::socket().count();
+    
+    // Throttle telemetry when multiple clients or system under load
+    // This prevents network task starvation during OTA uploads
+    const uint32_t dashboardCadenceMs = (clientCount > 0) ? 100U : 25U;  // Reduce dashboard cadence when browser connected
+    const uint32_t canCadenceMs = (clientCount > 0) ? 250U : 100U;       // Reduce CAN monitor cadence
 
-    // === LIGHTWEIGHT DATA: Every 25ms with essential telemetry (NO blocking WiFi calls) ===
-    // Browser expects "data" message type with these fields
-    if (now - lastDashboardMs >= 25U) {
+    // === LIGHTWEIGHT DATA: Essential telemetry ===
+    // Browser expects "data" message type with ALL these fields
+    if (now - lastDashboardMs >= dashboardCadenceMs) {
         lastDashboardMs = now;
         String dataJson;
-        dataJson.reserve(200);
+        dataJson.reserve(1200);
         dataJson = "{\"type\":\"data\",";
         dataJson += "\"rpm\":" + String(data.rpm, 1) + ",";
+        dataJson += "\"rpm_error\":0,";
+        dataJson += "\"drum_rpm\":" + String(data.drumRpm, 1) + ",";
+        dataJson += "\"kw\":" + String(data.kw, 2) + ",";
+        dataJson += "\"peakKW\":" + String(data.peakKW, 2) + ",";
+        dataJson += "\"peakKW_RPM\":" + String(data.peakKW_RPM, 1) + ",";
+        dataJson += "\"torque\":" + String(data.torqueNm, 2) + ",";
+        dataJson += "\"brakeTorque\":" + String(data.brakeTorqueNm, 2) + ",";
+        dataJson += "\"torque_measured\":" + String(data.torqueNm, 2) + ",";
+        dataJson += "\"load_kg\":" + String(data.loadKg, 2) + ",";
+        dataJson += "\"throttle_pct\":" + String(data.throttlePercent, 1) + ",";
+        dataJson += "\"peakTorque\":" + String(data.peakTorque, 2) + ",";
+        dataJson += "\"peakTorque_RPM\":" + String(data.peakTorque_RPM, 1) + ",";
+        dataJson += "\"e_torque\":" + String(data.eTorque, 2) + ",";
+        dataJson += "\"energy\":" + String(data.energyMJ, 3) + ",";
+        dataJson += "\"energy_active\":" + String(isRecording ? 1 : 0) + ",";
+        dataJson += "\"rel_humidity\":" + String(data.humidity, 1) + ",";
+        dataJson += "\"ratio_confidence\":0,";
+        dataJson += "\"rpm_target\":" + String(data.rpmTarget, 1) + ",";
+        dataJson += "\"can_fallback\":0,";
+        dataJson += "\"rpm_source_active\":\"leafrpm\",";
+        dataJson += "\"kp_source\":\"firmware\",";
+        dataJson += "\"kp_live\":0,";
+        dataJson += "\"ki_live\":0,";
+        dataJson += "\"egt_hot\":" + String(data.egtHotC, 1) + ",";
+        dataJson += "\"egt_status\":" + String(data.egtStatus) + ",";
+        dataJson += "\"egt_ready\":" + String(data.egtReady ? 1 : 0) + ",";
+        dataJson += "\"pressure\":" + String(data.pressureHpa, 1) + ",";
+        dataJson += "\"ambient_temp\":" + String(data.ambientC, 1) + ",";
+        dataJson += "\"air_density\":" + String(data.airDensity, 3) + ",";
+        dataJson += "\"climate_cf\":" + String(data.climateCF, 3) + ",";
+        dataJson += "\"dyno_mode\":\"" + String(MetaSense::toString(data.mode)) + "\",";
+        dataJson += "\"inv_ready\":" + String(data.leaf_invReady ? 1 : 0) + ",";
+        dataJson += "\"sw_active\":" + String(data.swActive ? 1 : 0) + ",";
+        dataJson += "\"load_raw\":0,";
+        dataJson += "\"nau_ready\":0,";
+        dataJson += "\"recording\":" + String(isRecording ? 1 : 0) + ",";
+        dataJson += "\"lambda\":" + String(data.lambdaValue, 2) + ",";
+        dataJson += "\"massflow_m3h\":" + String(data.massflowM3h, 2) + ",";
         dataJson += "\"leaf_rpm\":" + String(data.leaf_rpm, 1) + ",";
-        dataJson += "\"leaf_inv_temp\":" + String(data.leaf_invTempC, 1) + ",";
-        dataJson += "\"leaf_stator_temp\":" + String(data.leaf_statorTempC, 1) + ",";
-        dataJson += "\"leaf_coolant_temp\":" + String(data.leaf_coolantTempC, 1) + ",";
+        dataJson += "\"leaf_torque\":" + String(data.leaf_torqueNm, 2) + ",";
+        dataJson += "\"leaf_torque_demand\":" + String(data.leaf_torqueDemandNm, 2) + ",";
+        dataJson += "\"leaf_1da_input_v\":0,";
         dataJson += "\"leaf_1da_torque_nm\":" + String(data.leaf_torqueNm, 2) + ",";
-        dataJson += "\"leaf_120_cmd_nm\":" + String(data.leaf_torqueDemandNm, 2);
+        dataJson += "\"leaf_1da_rpm\":" + String(data.leaf_rpm, 1) + ",";
+        dataJson += "\"leaf_1da_clock\":0,";
+        dataJson += "\"leaf_1da_err\":0,";
+        dataJson += "\"leaf_1da_crc\":0,";
+        dataJson += "\"leaf_1da_crc_calc\":0,";
+        dataJson += "\"leaf_1da_crc_ok\":0,";
+        dataJson += "\"leaf_1da_crc_wire_ok\":0,";
+        dataJson += "\"leaf_1da_crc_wire_trusted\":0,";
+        dataJson += "\"leaf_1da_crc_wire_calc\":0,";
+        dataJson += "\"leaf_1da_crc_wire_ok_frames\":0,";
+        dataJson += "\"leaf_1da_crc_wire_bad_frames\":0,";
+        dataJson += "\"leaf_1da_inv_status_bit\":0,";
+        dataJson += "\"leaf_1da_inv_fault_map\":0,";
+        dataJson += "\"leaf_1da_inv_blinky\":0,";
+        dataJson += "\"leaf_1da_inv_unknown_faults\":0";
         dataJson += "}";
         wsock.textAll(dataJson);
     }
 
-    // === CAN MONITOR: Full monitor data every 100ms (includes IP + RSSI + all 47 fields) ===
-    // Optional: Can be used by advanced monitoring pages
-    if (now - lastCanTelemetryMs >= 100U) {
+    // === CAN MONITOR: Full monitor data (includes IP + RSSI + all 47 fields) ===
+    if (now - lastCanTelemetryMs >= canCadenceMs) {
         lastCanTelemetryMs = now;
         
-        // Update cached IP/RSSI only every 5 seconds to avoid blocking calls
-        if (now - lastIPCacheMs >= 5000U) {
+        // Update cached IP/RSSI only every 60 seconds to avoid blocking WiFi API calls
+        // These calls can take >50ms and starve the WebSocket loop
+        if (now - lastIPCacheMs >= 60000U) {
             lastIPCacheMs = now;
             cachedIP = WiFi.localIP().toString();
             cachedRSSI = WiFi.RSSI();

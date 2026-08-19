@@ -35,7 +35,13 @@ void begin(AsyncWebServer& server)
             return;
         }
 
+        if (type == WS_EVT_CONNECT) {
+            Serial.printf("[WS] Client connected: id=%u, ip=%s\n", client->id(), client->remoteIP().toString().c_str());
+            return;
+        }
+
         if (type == WS_EVT_DISCONNECT) {
+            Serial.printf("[WS] Client disconnected: id=%u\n", client->id());
             rxBuffers.erase(client->id());
             return;
         }
@@ -70,6 +76,14 @@ void begin(AsyncWebServer& server)
 
 void loop()
 {
+    // Send ping to all connected clients to keep connections alive
+    static uint32_t lastPingMs = 0;
+    const uint32_t now = millis();
+    if (now - lastPingMs >= 5000U) {  // Ping every 5 seconds
+        lastPingMs = now;
+        ws.pingAll();
+    }
+    
     ws.cleanupClients();
 }
 
