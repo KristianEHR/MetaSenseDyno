@@ -3108,7 +3108,15 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         dataJson += "\"leaf_1da_inv_status_bit\":0,";
         dataJson += "\"leaf_1da_inv_fault_map\":0,";
         dataJson += "\"leaf_1da_inv_blinky\":0,";
-        dataJson += "\"leaf_1da_inv_unknown_faults\":0";
+        dataJson += "\"leaf_1da_inv_unknown_faults\":0,";
+        // Add HW status flags for DYNO section
+        dataJson += "\"leaf_ready\":" + String(MetaSense::CANBus::feedback().ready ? 1 : 0) + ",";
+        dataJson += "\"hw_precharge\":" + String(MetaSense::HardwareOutputStateMachine::isPrechargeActive() ? 1 : 0) + ",";
+        dataJson += "\"vcu_precharge\":" + String(MetaSense::HardwareOutputStateMachine::isPrechargeActive() ? 1 : 0) + ",";
+        dataJson += "\"hw_rbplus\":" + String(MetaSense::HardwareOutputStateMachine::isRbPlusActive() ? 1 : 0) + ",";
+        dataJson += "\"hw_rbminus\":" + String(MetaSense::HardwareOutputStateMachine::isRbMinusActive() ? 1 : 0) + ",";
+        dataJson += "\"hw_ssr\":" + String(MetaSense::HardwareOutputStateMachine::isSsrActive() ? 1 : 0) + ",";
+        dataJson += "\"vcu_sim\":" + String(data.vcuSimMode ? 1 : 0)";
         dataJson += "}";
         wsock.textAll(dataJson);
     }

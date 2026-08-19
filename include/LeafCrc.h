@@ -71,6 +71,8 @@ inline uint8_t computeBaseIdLo(uint8_t idLo, const uint8_t* payload8)
 
 inline uint8_t computeExact1daWireCrc(uint8_t idLo, const uint8_t* payload8)
 {
+    // TEST: Use Nissan standard 0x1D polynomial for 0x1DA RX (same as TX)
+    // instead of the incorrect 0x85 polynomial that was causing CRC rejection
     if (payload8 == nullptr) {
         return 0U;
     }
@@ -78,7 +80,8 @@ inline uint8_t computeExact1daWireCrc(uint8_t idLo, const uint8_t* payload8)
     uint8_t p[8] = {0U};
     p[0] = idLo;
     memcpy(&p[1], payload8, 7U);
-    return crc8MsbPoly85BF(p, 8U);
+    // Use standard Nissan poly 0x1D with xorOut 0x29 instead of poly 0x85
+    return crc8MsbPoly1D29(p, 8U);
 }
 
 inline uint8_t computeExact1d4LikeCrc(uint8_t idLo, const uint8_t* payload8)
