@@ -3132,7 +3132,7 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         }
         
         String canJson;
-        canJson.reserve(1500);  // Increased from 850 to fit all 24 raw byte fields
+        canJson.reserve(2000);  // Increased to fit all 0x1D4 diagnostic fields
         canJson = "{\"type\":\"canmonitor\",";
         canJson += "\"ip\":\"" + cachedIP + "\",";
         canJson += "\"rssi\":" + String(cachedRSSI) + ",";
@@ -3197,6 +3197,7 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         canJson += "\"leaf_1d4_tx_age_ms\":" + String(ageSince1d4Tx) + ",";
         canJson += "\"leaf_1d4_tx_torque_nm\":" + String(data.leaf_torqueDemandNm, 2) + ",";
         canJson += "\"leaf_1d4_tx_torque_raw\":" + String(canStats.last1d4TxData[0]) + ",";
+        canJson += "\"leaf_1d4_tx_target_nm\":" + String(data.leaf_torqueDemandNm, 2) + ",";  // Same as torque_nm for now
         canJson += "\"leaf_1d4_tx_hv_status\":" + String((canStats.last1d4TxData[1] >> 4) & 0x01) + ",";
         canJson += "\"leaf_1d4_tx_relay_plus\":" + String((canStats.last1d4TxData[1] >> 5) & 0x01) + ",";
         canJson += "\"leaf_1d4_tx_charge_status\":" + String((canStats.last1d4TxData[1] >> 6) & 0x01) + ",";
@@ -3204,6 +3205,17 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         canJson += "\"leaf_1d4_tx_crc\":0,";
         canJson += "\"leaf_1d4_tx_crc_calc\":0,";
         canJson += "\"leaf_1d4_tx_crc_ok\":0,";
+        // 0x1D4 TX ring buffer & diagnostic fields (placeholders)
+        canJson += "\"leaf_1d4_ring_count\":0,";
+        canJson += "\"leaf_1d4_ring_newest_valid\":0,";
+        canJson += "\"leaf_1d4_ring_newest_len\":0,";
+        canJson += "\"leaf_1d4_tx_source_mode\":0,";
+        canJson += "\"leaf_1d4_tx_ring_base_used\":0,";
+        canJson += "\"leaf_1d4_tx_ring_base_len\":0,";
+        canJson += "\"leaf_1d4_tx_ring_source_age\":0,";
+        canJson += "\"leaf_1d4_tx_ring_fallback_total\":0,";
+        canJson += "\"leaf_1d4_tx_eq_sniff\":-1,";
+        canJson += "\"leaf_1d4_tx_diff_mask_vs_sniff\":0,";
         // 0x11A TX raw bytes
         canJson += "\"leaf_11a_tx_b0\":" + String(canStats.last11aTxData[0]) + ",";
         canJson += "\"leaf_11a_tx_b1\":" + String(canStats.last11aTxData[1]) + ",";
