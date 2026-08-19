@@ -848,5 +848,37 @@
 			],
 			"isBackground": false
 		},
+		{
+			"label": "Build (esp32s3-OTA-Upload)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-OTA-Upload"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$platformio"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Upload OTA (esp32s3-OTA-Upload)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-OTA-Upload",
+				"-t",
+				"upload"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$platformio"
+			],
+			"group": "build"
+		}
 	]
 }
