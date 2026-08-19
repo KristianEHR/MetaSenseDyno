@@ -701,6 +701,8 @@ void networkTaskEntry(void* /*parameter*/)
     wl_status_t lastWifiStatus = WL_IDLE_STATUS;
     String serialCommandBuffer;
 
+    setupWifi();
+
     for (;;) {
         (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(25));
         const uint32_t startedUs = micros();
@@ -1011,7 +1013,6 @@ void setup()
     } else {
         logLine("[BOOT] No factory profile found in FS");
     }
-    setupWifi();
     if (!modbusPublisher.begin()) {
         logLine("[BOOT] ModbusPublisher begin failed");
     }
