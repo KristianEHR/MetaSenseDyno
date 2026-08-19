@@ -1626,8 +1626,8 @@
       const id1daCrcOk = Number.isFinite(id1daCrcFrameOk) && id1daCrcFrameOk >= 0
         ? id1daCrcFrameOk
         : (Number.isFinite(id1daCrcWireOk) ? id1daCrcWireOk : id1daCrcTrusted);
-      const id1daCrcOkFrames = Number(telemetry.leaf_1da_crc_wire_ok_frames);
-      const id1daCrcBadFrames = Number(telemetry.leaf_1da_crc_wire_bad_frames);
+      const id1daCrcOkFrames = Number(telemetry.leaf_1da_crc_ok_frames);
+      const id1daCrcBadFrames = Number(telemetry.leaf_1da_crc_bad_frames);
       const id1daInvStatusBit = Number(telemetry.leaf_1da_inv_status_bit);
       const id1daInvFaultMap = Number(telemetry.leaf_1da_inv_fault_map);
       const id1daInvBlinky = Number(telemetry.leaf_1da_inv_blinky);

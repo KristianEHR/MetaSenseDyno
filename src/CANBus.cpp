@@ -105,15 +105,14 @@ bool is1daWireCrcKnownGood(const uint8_t* payload8,
     }
 
     const uint8_t crcRx = payload8[7];
-    // TEST: Use 0x1D polynomial like TX frames instead of 0x85
-    // Standard Nissan CRC should be consistent across all frames
-    const uint8_t crcFixed = MetaSense::LeafCRC::computeExact1d4LikeCrc(0xDAU, payload8);
+    // 0x1DA RX uses poly 0x85, init 0x00, xorOut 0xBF per Nissan spec
+    const uint8_t crcFixed = MetaSense::LeafCRC::computeExact1daWireCrc(0xDAU, payload8);
 
     if (outPrimaryCalc != nullptr) {
         *outPrimaryCalc = crcFixed;
     }
 
-    // Runtime validator intentionally follows strict shared LeafCRC path.
+    // Runtime validator requires exact CRC match per spec
     return (crcRx == crcFixed);
 }
 
@@ -359,9 +358,9 @@ void poll(uint32_t nowMs)
                     s_stats.last1daWireCrcOk = frame1daWireCrcOk;
                     s_stats.last1daWireCrcCalc = frame1daWireCrcCalc;
                     if (frame1daWireCrcOk == 1) {
-                        ++s_stats.rx1daWireCrcOkFrames;
+                        ++s_stats.rx1daCrcOkFrames;
                     } else {
-                        ++s_stats.rx1daWireCrcBadFrames;
+                        ++s_stats.rx1daCrcBadFrames;
                     }
                 } else {
                     s_stats.last1daWireCrcOk = -1;

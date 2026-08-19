@@ -3163,8 +3163,8 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         canJson += "\"leaf_1da_inv_blinky\":" + String(leafFb.inv_blinky) + ",";
         canJson += "\"leaf_1da_inv_unknown_faults\":" + String(leafFb.inv_unknown_faults) + ",";
         canJson += "\"leaf_1da_inv_fault_can_timeout\":" + String(leafFb.inv_fault_can_timeout_maybe) + ",";
-        canJson += "\"leaf_1da_crc_wire_ok_frames\":" + String(canStats.rx1daWireCrcOkFrames) + ",";
-        canJson += "\"leaf_1da_crc_wire_bad_frames\":" + String(canStats.rx1daWireCrcBadFrames) + ",";
+        canJson += "\"leaf_1da_crc_ok_frames\":" + String(canStats.rx1daCrcOkFrames) + ",";
+        canJson += "\"leaf_1da_crc_bad_frames\":" + String(canStats.rx1daCrcBadFrames) + ",";
         canJson += "\"leaf_id1da_frames\":" + String(canStats.rx1daFrames) + ",";
         canJson += "\"leaf_id1da_age_ms\":" + String(ageSince1da) + ",";
         // DEBUG: Send raw 0x1DA frame bytes to browser for inspection

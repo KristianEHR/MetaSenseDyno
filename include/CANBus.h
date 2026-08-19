@@ -57,6 +57,8 @@ struct Stats {
 	uint8_t last1daLen = 0;
 	int8_t last1daWireCrcOk = -1;
 	uint8_t last1daWireCrcCalc = 0;
+	uint32_t rx1daCrcOkFrames = 0;      // 0x1DA frames with valid CRC
+	uint32_t rx1daCrcBadFrames = 0;     // 0x1DA frames with invalid CRC
 	uint8_t last11aChangeMask = 0;
 	uint8_t last120ChangeMask = 0;
 	uint8_t agg11aChangeMask = 0;
