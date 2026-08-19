@@ -74,11 +74,11 @@ namespace MetaSense::Globals {
 const bool kVcuSwitch = (VCU_switch != 0);
 }
 
+namespace {
+ 
 const char* ssid     = "TP-Link_458C";
 const char* password = "metasense";
 
-namespace {
- 
 MetaSense::ModbusPublisher modbusPublisher;
 MetaSense::MetaSenseDynoVCU dynoVcu;
 AsyncWebServer webServer(80);
@@ -98,12 +98,63 @@ constexpr uint16_t kI2cTimeoutMs = 50;
 #ifndef METASENSE_HEARTBEAT_PERIOD_MS
 #define METASENSE_HEARTBEAT_PERIOD_MS 2000
 #endif
+#ifndef METASENSE_CAN_RX_ONE_LINE_LOG
+#define METASENSE_CAN_RX_ONE_LINE_LOG 0
+#endif
+#ifndef METASENSE_FW_ID
+#define METASENSE_FW_ID "unknown"
+#endif
+#ifndef METASENSE_STARTUP_SNIFF_RELEASE_TX_PIN
+#define METASENSE_STARTUP_SNIFF_RELEASE_TX_PIN -1
+#endif
 constexpr uint32_t kControlPeriodMs = METASENSE_CONTROL_PERIOD_MS;
 constexpr uint32_t kModbusPeriodMs = 50;
 constexpr uint32_t kHeartbeatPeriodMs = METASENSE_HEARTBEAT_PERIOD_MS;
 constexpr UBaseType_t kControlTaskPriority = 5;
 constexpr UBaseType_t kNetworkTaskPriority = 3;
 constexpr UBaseType_t kModbusTaskPriority = 1;
+
+void processSerialMonitorCommand(Stream& stream, String& buffer)
+{
+    while (stream.available() > 0) {
+        const int raw = stream.read();
+        if (raw < 0) {
+            break;
+        }
+
+        const char ch = static_cast<char>(raw);
+        if (ch == '\r') {
+            continue;
+        }
+
+        if (ch != '\n') {
+            if (buffer.length() < 64U) {
+                buffer += ch;
+            }
+            continue;
+        }
+
+        buffer.trim();
+        buffer.toUpperCase();
+        if (buffer.isEmpty()) {
+            continue;
+        }
+
+        if (buffer == "DUMP11A" || buffer == "STARTUP_SNIFF_DUMP") {
+            const bool printed = MetaSense::CANBus::printStartupSniffCapture();
+            if (!printed) {
+                stream.println("[STARTUP-SNIFF] no completed capture available");
+            }
+        } else if (buffer == "HELP") {
+            stream.println("[SERIAL-CMD] DUMP11A | STARTUP_SNIFF_DUMP");
+        } else {
+            stream.print("[SERIAL-CMD] unknown: ");
+            stream.println(buffer);
+        }
+
+        buffer = "";
+    }
+}
 
 struct TaskRuntimeStats {
     volatile uint32_t lastUs = 0;
@@ -264,15 +315,33 @@ void logWifiConnected()
     Serial0.println("[BOOT] Web UI: http://dyno-controller.local/");
 }
 
-void setupWebServer()
+bool setupWebServer()
 {
     if (!LittleFS.begin(false, "/littlefs", 10, "littlefs")) {
-        logLine("[BOOT] LittleFS mount failed");
-        return;
+        logLine("[BOOT] LittleFS mount failed (no auto-format)");
+        logLine("[BOOT] Preserve FS contents; run Upload Filesystem manually if needed");
+        return false;
     }
 
     auto sendHtmlNoCache = [](AsyncWebServerRequest* request, const char* path) {
+        if (!LittleFS.exists(path)) {
+            const String body = String("<html><body><h1>MetaSense DYNO</h1><p>UI file missing: ") +
+                                path +
+                                "</p><p>LittleFS was likely reformatted. Upload the filesystem image to restore the web UI.</p>"
+                                "</body></html>";
+            AsyncWebServerResponse* fallback = request->beginResponse(503, "text/html", body);
+            fallback->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+            fallback->addHeader("Pragma", "no-cache");
+            fallback->addHeader("Expires", "0");
+            request->send(fallback);
+            return;
+        }
+
         AsyncWebServerResponse* response = request->beginResponse(LittleFS, path, "text/html");
+        if (response == nullptr) {
+            request->send(500, "text/plain", "failed to create file response");
+            return;
+        }
         response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
         response->addHeader("Pragma", "no-cache");
         response->addHeader("Expires", "0");
@@ -286,13 +355,16 @@ void setupWebServer()
         sendHtmlNoCache(request, "/index.html");
     });
     webServer.on("/index1.html", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->send(404, "text/plain", "index1.html is obsolete; use /index.html");
+        request->redirect("/index.html");
+    });
+    webServer.on("/index1", HTTP_GET, [](AsyncWebServerRequest* request) {
+        request->redirect("/index.html");
+    });
+    webServer.on("/index", HTTP_GET, [](AsyncWebServerRequest* request) {
+        request->redirect("/index.html");
     });
     webServer.on("/settings", HTTP_GET, [sendHtmlNoCache](AsyncWebServerRequest* request) {
         sendHtmlNoCache(request, "/settings.html");
-    });
-    webServer.on("/captures", HTTP_GET, [sendHtmlNoCache](AsyncWebServerRequest* request) {
-        sendHtmlNoCache(request, "/captures.html");
     });
     webServer.on("/trend", HTTP_GET, [sendHtmlNoCache](AsyncWebServerRequest* request) {
         sendHtmlNoCache(request, "/trend.html");
@@ -398,115 +470,14 @@ void setupWebServer()
         sendJsonNoCache(request, 200, MetaSense::RunStorage::fsLiveProbeVerifyJson());
     });
 
-    webServer.on("/api/captures/list", HTTP_GET, [](AsyncWebServerRequest* request) {
-        AsyncWebServerResponse* response = request->beginResponse(200,
-                                                                  "application/json",
-                                                                  MetaSense::RunStorage::listRawCaptures());
-        response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-        response->addHeader("Pragma", "no-cache");
-        response->addHeader("Expires", "0");
-        request->send(response);
-    });
-
-    webServer.on("/api/captures/file", HTTP_GET, [](AsyncWebServerRequest* request) {
-        if (!request->hasParam("name")) {
-            request->send(400, "text/plain", "missing name");
-            return;
-        }
-
-        String name = request->getParam("name")->value();
-        if (name.indexOf('/') >= 0 || name.indexOf("..") >= 0) {
-            request->send(400, "text/plain", "invalid name");
-            return;
-        }
-
-        if (!name.endsWith(".csv")) {
-            name += ".csv";
-        }
-
-        String path = String("/captures/") + name;
-        if (!LittleFS.exists(path)) {
-            path = String("/") + name;
-            if (!LittleFS.exists(path)) {
-                request->send(404, "text/plain", "capture not found");
-                return;
-            }
-        }
-
-        request->send(LittleFS, path, "text/csv");
-    });
-
-    webServer.on("/api/captures/report", HTTP_GET, [](AsyncWebServerRequest* request) {
-        if (!request->hasParam("name")) {
-            AsyncWebServerResponse* response = request->beginResponse(400, "application/json", "{}");
-            response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-            response->addHeader("Pragma", "no-cache");
-            response->addHeader("Expires", "0");
-            request->send(response);
-            return;
-        }
-
-        String name = request->getParam("name")->value();
-        AsyncWebServerResponse* response = request->beginResponse(200,
-                                                                  "application/json",
-                                                                  MetaSense::RunStorage::loadRawCaptureReport(name));
-        response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-        response->addHeader("Pragma", "no-cache");
-        response->addHeader("Expires", "0");
-        request->send(response);
-    });
-
-    auto startCaptureHandler = [](AsyncWebServerRequest* request) {
-        String filePath;
-        if (!MetaSense::RunStorage::startRawCapture(20000, 0.0f, 3.404f, filePath)) {
-            AsyncWebServerResponse* response = request->beginResponse(409,
-                                                                      "application/json",
-                                                                      "{\"ok\":false,\"msg\":\"Capture already active or start failed\"}");
-            response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-            response->addHeader("Pragma", "no-cache");
-            response->addHeader("Expires", "0");
-            request->send(response);
-            return;
-        }
-
-        AsyncWebServerResponse* response = request->beginResponse(200,
-                                                                  "application/json",
-                                                                  "{\"ok\":true,\"msg\":\"Capture started\",\"file\":\"" + filePath + "\"}");
-        response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-        response->addHeader("Pragma", "no-cache");
-        response->addHeader("Expires", "0");
-        request->send(response);
-    };
-    webServer.on("/api/captures/start", HTTP_POST, startCaptureHandler);
-
-    webServer.on("/api/captures/state", HTTP_GET, [](AsyncWebServerRequest* request) {
-        AsyncWebServerResponse* response = request->beginResponse(200,
-                                                                  "application/json",
-                                                                  MetaSense::RunStorage::rawCaptureStateJson());
-        response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-        response->addHeader("Pragma", "no-cache");
-        response->addHeader("Expires", "0");
-        request->send(response);
-    });
-
-    webServer.on("/api/captures/verify", HTTP_GET, [](AsyncWebServerRequest* request) {
-        String name;
-        if (request->hasParam("name")) {
-            name = request->getParam("name")->value();
-        }
-        AsyncWebServerResponse* response = request->beginResponse(200,
-                                                                  "application/json",
-                                                                  MetaSense::RunStorage::verifyRawCaptureCsv(name));
-        response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-        response->addHeader("Pragma", "no-cache");
-        response->addHeader("Expires", "0");
-        request->send(response);
-    });
-
     webServer.serveStatic("/", LittleFS, "/");
     MetaSense::WebSocketServer::begin(webServer);
     webServer.begin();
     logLine("[BOOT] Web server ready on port 80");
+    if (!LittleFS.exists("/index.html")) {
+        logLine("[BOOT] Web UI assets missing from LittleFS; upload filesystem image to restore UI pages");
+    }
+    return true;
 }
 
 void logWifiConfiguration()
@@ -560,6 +531,8 @@ void logBuildProfile()
                    METASENSE_LEAF_CAN_TX_PIN,
                    METASENSE_LEAF_CAN_RX_PIN,
                    METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS != 0 ? 1 : 0);
+    Serial.printf("[FW-ID] id=%s hb_ms=%lu\n", METASENSE_FW_ID, static_cast<unsigned long>(kHeartbeatPeriodMs));
+    Serial0.printf("[FW-ID] id=%s hb_ms=%lu\n", METASENSE_FW_ID, static_cast<unsigned long>(kHeartbeatPeriodMs));
 }
 
 bool wifiCredentialsConfigured()
@@ -617,6 +590,8 @@ void setupWifi()
 
 void setupOtaOnceConnected()
 {
+    static uint32_t lastWebServerAttemptMs = 0U;
+
     if (otaStarted || WiFi.status() != WL_CONNECTED) {
         return;
     }
@@ -647,8 +622,11 @@ void setupOtaOnceConnected()
     logLine("[BOOT] NTP sync requested");
 
     if (!webServerStarted) {
-        setupWebServer();
-        webServerStarted = true;
+        const uint32_t nowMs = millis();
+        if (lastWebServerAttemptMs == 0U || (nowMs - lastWebServerAttemptMs) >= 5000U) {
+            lastWebServerAttemptMs = nowMs;
+            webServerStarted = setupWebServer();
+        }
     }
 }
 
@@ -719,10 +697,15 @@ void networkTaskEntry(void* /*parameter*/)
 {
     uint32_t lastStatusMs = 0;
     bool bootStatusLogged = false;
+    uint32_t lastWifiRetryMs = 0;
+    wl_status_t lastWifiStatus = WL_IDLE_STATUS;
+    String serialCommandBuffer;
 
     for (;;) {
         (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(25));
         const uint32_t startedUs = micros();
+
+        processSerialMonitorCommand(Serial, serialCommandBuffer);
 
         setupOtaOnceConnected();
 
@@ -740,6 +723,35 @@ void networkTaskEntry(void* /*parameter*/)
 #endif
 
         const uint32_t now = millis();
+        const wl_status_t wifiStatusNow = WiFi.status();
+
+        if (wifiStatusNow != lastWifiStatus) {
+            Serial.printf("[WiFi] Status transition: %d (%s) -> %d (%s)\n",
+                          static_cast<int>(lastWifiStatus),
+                          wifiStatusToString(lastWifiStatus),
+                          static_cast<int>(wifiStatusNow),
+                          wifiStatusToString(wifiStatusNow));
+            Serial0.printf("[WiFi] Status transition: %d (%s) -> %d (%s)\n",
+                           static_cast<int>(lastWifiStatus),
+                           wifiStatusToString(lastWifiStatus),
+                           static_cast<int>(wifiStatusNow),
+                           wifiStatusToString(wifiStatusNow));
+            lastWifiStatus = wifiStatusNow;
+        }
+
+        if (wifiCredentialsConfigured() &&
+            wifiStatusNow != WL_CONNECTED &&
+            (lastWifiRetryMs == 0U || (now - lastWifiRetryMs) >= 10000U)) {
+            lastWifiRetryMs = now;
+            Serial.printf("[WiFi] Retry connect (status=%d %s)\n",
+                          static_cast<int>(wifiStatusNow),
+                          wifiStatusToString(wifiStatusNow));
+            Serial0.printf("[WiFi] Retry connect (status=%d %s)\n",
+                           static_cast<int>(wifiStatusNow),
+                           wifiStatusToString(wifiStatusNow));
+            WiFi.begin(ssid, password);
+        }
+
         if (!bootStatusLogged && now >= 3000U) {
             bootStatusLogged = true;
             const bool vcuReady = MetaSense::Input::isVcuReady();
@@ -775,6 +787,8 @@ void networkTaskEntry(void* /*parameter*/)
             const String ip = WiFi.localIP().toString();
             const uint32_t ts = heartbeatTimestamp();
             const LeafInvFeedback& leafFbDiag = MetaSense::CANBus::feedback();
+            const MetaSense::CANBus::Stats& canStatsDiag = MetaSense::CANBus::stats();
+            const MetaSense::CANBus::StartupSniffStatus startupSniffDiag = MetaSense::CANBus::startupSniffStatus();
             const bool vcuReady = MetaSense::Input::isVcuReady();
             const char* vcuReadySource = MetaSense::Input::vcuReadySource();
             const bool hwPrestartWarn = MetaSense::HardwareOutputStateMachine::hasPrestartWarning();
@@ -798,7 +812,7 @@ void networkTaskEntry(void* /*parameter*/)
                                                     nauInternalCalAttempts);
             const int rbPlusLevel = digitalRead(MetaSense::Globals::kRbPlusInputPin);
             const bool ssrActive = MetaSense::HardwareOutputStateMachine::isSsrActive();
-            Serial.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s, vcu_mode=%s, vcu_ready=%d, vcu_ready_src=%s, prestart_warn=%d, rb_plus=%d, ssr=%d, torque=%.2f, egt_hot=%.1f, amb=%.1f, press=%.1f, rh=%.1f, rho=%.3f, cf=%.4f, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u, rpm_raw01_le=%u, rpm_raw01_be=%u, rpm_raw23_le=%u, rpm_raw23_be=%u, tq_raw01_le=%d, tq_raw01_be=%d, tq_raw23_le=%d, tq_raw23_be=%d\n",
+            Serial.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s, vcu_mode=%s, vcu_ready=%d, vcu_ready_src=%s, prestart_warn=%d, rb_plus=%d, ssr=%d, torque=%.2f, egt_hot=%.1f, amb=%.1f, press=%.1f, rh=%.1f, rho=%.3f, cf=%.4f, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u, can_cfg_rx=%d, can_cfg_oneline=%d, sniff_en=%d, sniff_active=%d, sniff_done=%d, sniff_dumped=%d, sniff_count=%u, sniff_drop=%u, can_rx_total=%lu, can_last_id=0x%03lX, can_11a=%lu, can_50b=%lu, rpm_raw01_le=%u, rpm_raw01_be=%u, rpm_raw23_le=%u, rpm_raw23_be=%u, tq_raw01_le=%d, tq_raw01_be=%d, tq_raw23_le=%d, tq_raw23_be=%d\n",
                           static_cast<unsigned long>(ts),
                           wifiCredentialsConfigured() ? ssid : "<not-configured>",
                           static_cast<int>(status),
@@ -821,6 +835,18 @@ void networkTaskEntry(void* /*parameter*/)
                           nauLdoConfigured ? 1 : 0,
                           nauInternalCalOk ? 1 : 0,
                           static_cast<unsigned>(nauInternalCalAttempts),
+                          METASENSE_LEAF_CAN_RX_ENABLED != 0 ? 1 : 0,
+                          METASENSE_CAN_RX_ONE_LINE_LOG != 0 ? 1 : 0,
+                          startupSniffDiag.enabled ? 1 : 0,
+                          startupSniffDiag.active ? 1 : 0,
+                          startupSniffDiag.done ? 1 : 0,
+                          startupSniffDiag.dumped ? 1 : 0,
+                          static_cast<unsigned>(startupSniffDiag.count),
+                          static_cast<unsigned>(startupSniffDiag.dropped),
+                          static_cast<unsigned long>(canStatsDiag.rxFrames),
+                          static_cast<unsigned long>(canStatsDiag.lastRxId),
+                          static_cast<unsigned long>(canStatsDiag.rx11aFrames),
+                          static_cast<unsigned long>(canStatsDiag.rx50bFrames),
                           static_cast<unsigned>(leafFbDiag.rpm_raw01_le),
                           static_cast<unsigned>(leafFbDiag.rpm_raw01_be),
                           static_cast<unsigned>(leafFbDiag.rpm_raw23_le),
@@ -829,7 +855,7 @@ void networkTaskEntry(void* /*parameter*/)
                           static_cast<int>(leafFbDiag.torque_raw01_be),
                           static_cast<int>(leafFbDiag.torque_raw23_le),
                           static_cast<int>(leafFbDiag.torque_raw23_be));
-            Serial0.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s, vcu_mode=%s, vcu_ready=%d, vcu_ready_src=%s, prestart_warn=%d, rb_plus=%d, ssr=%d, torque=%.2f, egt_hot=%.1f, amb=%.1f, press=%.1f, rh=%.1f, rho=%.3f, cf=%.4f, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u, rpm_raw01_le=%u, rpm_raw01_be=%u, rpm_raw23_le=%u, rpm_raw23_be=%u, tq_raw01_le=%d, tq_raw01_be=%d, tq_raw23_le=%d, tq_raw23_be=%d\n",
+            Serial0.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s, vcu_mode=%s, vcu_ready=%d, vcu_ready_src=%s, prestart_warn=%d, rb_plus=%d, ssr=%d, torque=%.2f, egt_hot=%.1f, amb=%.1f, press=%.1f, rh=%.1f, rho=%.3f, cf=%.4f, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u, can_cfg_rx=%d, can_cfg_oneline=%d, sniff_en=%d, sniff_active=%d, sniff_done=%d, sniff_dumped=%d, sniff_count=%u, sniff_drop=%u, can_rx_total=%lu, can_last_id=0x%03lX, can_11a=%lu, can_50b=%lu, rpm_raw01_le=%u, rpm_raw01_be=%u, rpm_raw23_le=%u, rpm_raw23_be=%u, tq_raw01_le=%d, tq_raw01_be=%d, tq_raw23_le=%d, tq_raw23_be=%d\n",
                            static_cast<unsigned long>(ts),
                            wifiCredentialsConfigured() ? ssid : "<not-configured>",
                            static_cast<int>(status),
@@ -852,6 +878,18 @@ void networkTaskEntry(void* /*parameter*/)
                            nauLdoConfigured ? 1 : 0,
                            nauInternalCalOk ? 1 : 0,
                            static_cast<unsigned>(nauInternalCalAttempts),
+                           METASENSE_LEAF_CAN_RX_ENABLED != 0 ? 1 : 0,
+                           METASENSE_CAN_RX_ONE_LINE_LOG != 0 ? 1 : 0,
+                           startupSniffDiag.enabled ? 1 : 0,
+                           startupSniffDiag.active ? 1 : 0,
+                           startupSniffDiag.done ? 1 : 0,
+                           startupSniffDiag.dumped ? 1 : 0,
+                           static_cast<unsigned>(startupSniffDiag.count),
+                           static_cast<unsigned>(startupSniffDiag.dropped),
+                           static_cast<unsigned long>(canStatsDiag.rxFrames),
+                           static_cast<unsigned long>(canStatsDiag.lastRxId),
+                           static_cast<unsigned long>(canStatsDiag.rx11aFrames),
+                           static_cast<unsigned long>(canStatsDiag.rx50bFrames),
                            static_cast<unsigned>(leafFbDiag.rpm_raw01_le),
                            static_cast<unsigned>(leafFbDiag.rpm_raw01_be),
                            static_cast<unsigned>(leafFbDiag.rpm_raw23_le),
@@ -956,6 +994,13 @@ void setup()
     Serial.println("[BOOT] Settings loaded from storage (if available)");
     Serial0.println("[BOOT] Settings loaded from storage (if available)");
     logBuildProfile();
+    if (METASENSE_STARTUP_SNIFF_RELEASE_TX_PIN >= 0) {
+        pinMode(METASENSE_STARTUP_SNIFF_RELEASE_TX_PIN, INPUT_PULLUP);
+        Serial.printf("[BOOT] Released legacy CAN TX pin %d to INPUT_PULLUP\n",
+                      METASENSE_STARTUP_SNIFF_RELEASE_TX_PIN);
+        Serial0.printf("[BOOT] Released legacy CAN TX pin %d to INPUT_PULLUP\n",
+                       METASENSE_STARTUP_SNIFF_RELEASE_TX_PIN);
+    }
     scanI2cBus();
     logWifiConfiguration();
 
