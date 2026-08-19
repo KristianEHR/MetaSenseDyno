@@ -155,24 +155,30 @@ bool CanHAL::send(uint32_t id, const uint8_t* data, uint8_t len) {
     memcpy(msg.data, data, len);
     const esp_err_t err = twai_transmit(&msg, pdMS_TO_TICKS(10));
     if (err != ESP_OK) {
+        #if 0  // Disable verbose CAN debug output
         Serial.printf("[CAN-TX] failed id=0x%03lX len=%u err=0x%x\n",
                       static_cast<unsigned long>(id),
                       static_cast<unsigned>(len),
                       static_cast<unsigned>(err));
+        #endif
         return false;
     }
     if (id == 0x1D4U) {
+        #if 0  // Disable verbose CAN debug output
         Serial.printf("[CAN-TX] ok id=0x%03lX len=%u\n",
                       static_cast<unsigned long>(id),
                       static_cast<unsigned>(len));
+        #endif
     }
     return true;
 #endif
 }
 
 bool CanHAL::receive(uint32_t& id, uint8_t* data, uint8_t& len, bool& isExtended) {
+#if 0  // Disable verbose CAN debug output
 #if !METASENSE_CAN_RX_ONE_LINE_LOG
     Serial.printf("[CANHAL-RECEIVE] started=%d\n", started_ ? 1 : 0);
+#endif
 #endif
     if (!started_) {
         return false;
@@ -221,6 +227,7 @@ bool CanHAL::receive(uint32_t& id, uint8_t* data, uint8_t& len, bool& isExtended
     
     // Surface standard vs extended distribution to upper layers.
     isExtended = (msg.flags & TWAI_MSG_FLAG_EXTD) != 0;
+#if 0  // Disable verbose CAN debug output
 #if !METASENSE_CAN_RX_ONE_LINE_LOG
     Serial.printf("[CAN-RX-FRAME] id=0x%03lX len=%u ext=%d data=%02X %02X %02X %02X %02X %02X %02X %02X\n",
                   static_cast<unsigned long>(id),
@@ -234,6 +241,7 @@ bool CanHAL::receive(uint32_t& id, uint8_t* data, uint8_t& len, bool& isExtended
                   static_cast<unsigned>(data[5]),
                   static_cast<unsigned>(data[6]),
                   static_cast<unsigned>(data[7]));
+#endif
 #endif
 #if METASENSE_CAN_HAL_RX_DIAG
     if (id == 0x55BU || (isExtended && id == 0x55BU)) {

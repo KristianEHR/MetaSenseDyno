@@ -1260,6 +1260,7 @@ void poll(uint32_t nowMs)
         logRxFrameOneLine(id, data, len, isExtended);
     #else
         // Unconditional raw frame dump for sniffing every frame on the bus.
+        #if 0  // Disable verbose CAN debug output
         Serial.printf("[CAN-RX-RAW] id=0x%03lX len=%u data=%02X %02X %02X %02X %02X %02X %02X %02X\n",
                   static_cast<unsigned long>(id),
                   static_cast<unsigned>(len),
@@ -1283,6 +1284,7 @@ void poll(uint32_t nowMs)
                   static_cast<unsigned>(data[5]),
                   static_cast<unsigned>(data[6]),
                   static_cast<unsigned>(data[7]));
+        #endif
     #endif
         
     }

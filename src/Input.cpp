@@ -3107,23 +3107,17 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
 
 void publishTelemetry()
 {
-    static uint32_t lastPublishedVersion = 0;
-    static uint32_t lastSendMs = 0;
+    static uint32_t lastPublishedMs = 0;
 
     const uint32_t now = millis();
-    if (now - lastSendMs < kWebSocketPublishPeriodMs) {
+    // Send telemetry on a fixed 100ms cadence (heartbeat at 25ms in notifyClients)
+    if (now - lastPublishedMs < kWebSocketPublishPeriodMs) {
         return;
     }
 
-    const uint32_t currentVersion = MetaSense::RunStorage::version();
-    if (currentVersion == lastPublishedVersion) {
-        return;
-    }
-
-    lastPublishedVersion = currentVersion;
-    lastSendMs = now;
+    lastPublishedMs = now;
     const MetaSense::Telemetry telemetry = MetaSense::RunStorage::latest();
-    // Telemetry sending re-enabled with task yields to prevent blocking network
+    // Telemetry sending: always send on cadence (heartbeat + telemetry in notifyClients)
     notifyClients(telemetry, MetaSense::DynoStateMachine::isRecording());
 }
 
