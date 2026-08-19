@@ -3184,6 +3184,15 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         canJson += "\"leaf_11a_button\":" + String(canStats.last11aData[2]) + ",";
         canJson += "\"leaf_11a_heartbeat\":" + String(canStats.last11aData[3]) + ",";
         canJson += "\"leaf_11a_mux\":" + String(canStats.last11aData[6]) + ",";
+        // 0x11A RX raw bytes
+        canJson += "\"leaf_11a_b0\":" + String(canStats.last11aData[0]) + ",";
+        canJson += "\"leaf_11a_b1\":" + String(canStats.last11aData[1]) + ",";
+        canJson += "\"leaf_11a_b2\":" + String(canStats.last11aData[2]) + ",";
+        canJson += "\"leaf_11a_b3\":" + String(canStats.last11aData[3]) + ",";
+        canJson += "\"leaf_11a_b4\":" + String(canStats.last11aData[4]) + ",";
+        canJson += "\"leaf_11a_b5\":" + String(canStats.last11aData[5]) + ",";
+        canJson += "\"leaf_11a_b6\":" + String(canStats.last11aData[6]) + ",";
+        canJson += "\"leaf_11a_b7\":" + String(canStats.last11aData[7]) + ",";
         canJson += "\"leaf_1d4_tx_frames\":" + String(canStats.tx1d4Frames) + ",";
         canJson += "\"leaf_1d4_tx_age_ms\":" + String(ageSince1d4Tx) + ",";
         canJson += "\"leaf_1d4_tx_torque_nm\":" + String(data.leaf_torqueDemandNm, 2) + ",";
@@ -3195,6 +3204,24 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         canJson += "\"leaf_1d4_tx_crc\":0,";
         canJson += "\"leaf_1d4_tx_crc_calc\":0,";
         canJson += "\"leaf_1d4_tx_crc_ok\":0,";
+        // 0x11A TX raw bytes
+        canJson += "\"leaf_11a_tx_b0\":" + String(canStats.last11aTxData[0]) + ",";
+        canJson += "\"leaf_11a_tx_b1\":" + String(canStats.last11aTxData[1]) + ",";
+        canJson += "\"leaf_11a_tx_b2\":" + String(canStats.last11aTxData[2]) + ",";
+        canJson += "\"leaf_11a_tx_b3\":" + String(canStats.last11aTxData[3]) + ",";
+        canJson += "\"leaf_11a_tx_b4\":" + String(canStats.last11aTxData[4]) + ",";
+        canJson += "\"leaf_11a_tx_b5\":" + String(canStats.last11aTxData[5]) + ",";
+        canJson += "\"leaf_11a_tx_b6\":" + String(canStats.last11aTxData[6]) + ",";
+        canJson += "\"leaf_11a_tx_b7\":" + String(canStats.last11aTxData[7]) + ",";
+        // 0x1D4 TX raw bytes
+        canJson += "\"leaf_1d4_tx_b0\":" + String(canStats.last1d4TxData[0]) + ",";
+        canJson += "\"leaf_1d4_tx_b1\":" + String(canStats.last1d4TxData[1]) + ",";
+        canJson += "\"leaf_1d4_tx_b2\":" + String(canStats.last1d4TxData[2]) + ",";
+        canJson += "\"leaf_1d4_tx_b3\":" + String(canStats.last1d4TxData[3]) + ",";
+        canJson += "\"leaf_1d4_tx_b4\":" + String(canStats.last1d4TxData[4]) + ",";
+        canJson += "\"leaf_1d4_tx_b5\":" + String(canStats.last1d4TxData[5]) + ",";
+        canJson += "\"leaf_1d4_tx_b6\":" + String(canStats.last1d4TxData[6]) + ",";
+        canJson += "\"leaf_1d4_tx_b7\":" + String(canStats.last1d4TxData[7]) + ",";
         
         // Add state machine status
         const char* hwState = MetaSense::HardwareOutputStateMachine::stateName();
