@@ -1752,7 +1752,8 @@
       if (Number.isFinite(id1d4TxTargetNm)) {
         leaf1d4ControlState.targetNm = Math.max(leaf1d4TorqueMinNm, Math.min(leaf1d4TorqueMaxNm, id1d4TxTargetNm));
       }
-      if (id1d4Mode === "auto" || id1d4Mode === "manual") {
+      // Only update mode if it's defined and has a valid value
+      if (typeof id1d4Mode !== "undefined" && (id1d4Mode === "auto" || id1d4Mode === "manual")) {
         leaf1d4ControlState.mode = id1d4Mode;
       }
       refreshLeaf1d4ControlUi();
