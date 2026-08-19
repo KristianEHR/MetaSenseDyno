@@ -140,13 +140,8 @@ void processSerialMonitorCommand(Stream& stream, String& buffer)
             continue;
         }
 
-        if (buffer == "DUMP11A" || buffer == "STARTUP_SNIFF_DUMP") {
-            const bool printed = MetaSense::CANBus::printStartupSniffCapture();
-            if (!printed) {
-                stream.println("[STARTUP-SNIFF] no completed capture available");
-            }
-        } else if (buffer == "HELP") {
-            stream.println("[SERIAL-CMD] DUMP11A | STARTUP_SNIFF_DUMP");
+        if (buffer == "HELP") {
+            stream.println("[SERIAL-CMD] No debug commands currently enabled");
         } else {
             stream.print("[SERIAL-CMD] unknown: ");
             stream.println(buffer);
