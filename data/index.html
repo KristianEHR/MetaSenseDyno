@@ -941,17 +941,11 @@
       <span class="can-monitor-label can-sec-1da">Inv_FaultMap (legacy/bin)</span>
       <span id="canMon1daErr" class="can-monitor-value can-sec-1da">---</span>
 
-      <span class="can-monitor-label can-sec-1da">Inv_StatusBit</span>
-      <span id="canMon1daStatusBit" class="can-monitor-value can-sec-1da">---</span>
-
       <span class="can-monitor-label can-sec-1da">Inv_FaultMap (decoded 6b)</span>
       <span id="canMon1daFaultMap" class="can-monitor-value can-sec-1da">---</span>
 
       <span class="can-monitor-label can-sec-1da">Inv_Blinky</span>
       <span id="canMon1daBlinky" class="can-monitor-value can-sec-1da">---</span>
-
-      <span class="can-monitor-label can-sec-1da">Inv_UnknownFaults</span>
-      <span id="canMon1daUnknownFaults" class="can-monitor-value can-sec-1da">---</span>
 
       <span class="can-monitor-label can-sec-1da">Inv_Fault_CANTimeoutMaybe</span>
       <span id="canMon1daCanTimeout" class="can-monitor-value can-sec-1da">---</span>
@@ -961,9 +955,6 @@
 
       <span class="can-monitor-label can-sec-1da">Wire CRC OK / BAD</span>
       <span id="canMon1daCrcStats" class="can-monitor-value can-sec-1da">--- / ---</span>
-
-      <span class="can-monitor-label can-sec-1da">frames/age(ms)</span>
-      <span id="canMonId1da" class="can-monitor-value can-sec-1da">---</span>
 
       <span class="can-monitor-label can-sec-1da">0x1DA Raw B0..B7</span>
       <span id="canMon1daRaw" class="can-monitor-value can-sec-1da" style="font-family: monospace; font-size: 0.85em;">-- -- -- -- -- -- -- --</span>
@@ -1495,10 +1486,8 @@
       leaf_1da_crc_wire_calc: 0,
       leaf_1da_crc_wire_ok_frames: 0,
       leaf_1da_crc_wire_bad_frames: 0,
-      leaf_1da_inv_status_bit: 0,
       leaf_1da_inv_fault_map: 0,
       leaf_1da_inv_blinky: 0,
-      leaf_1da_inv_unknown_faults: 0,
       leaf_1da_inv_fault_can_timeout: 0,
       leaf_ready: 0,
       hw_precharge: 0,
@@ -1507,8 +1496,6 @@
       hw_rbminus: 0,
       hw_ssr: 0,
       vcu_sim: 0,
-      leaf_id1da_frames: 0,
-      leaf_id1da_age_ms: 0,
       leaf_1da_raw_b0b7: "-- -- -- -- -- -- -- --",
       leaf_id11a_source: "rx",
       leaf_id11a_frames: 0,
@@ -1628,15 +1615,11 @@
         : (Number.isFinite(id1daCrcWireOk) ? id1daCrcWireOk : id1daCrcTrusted);
       const id1daCrcOkFrames = Number(telemetry.leaf_1da_crc_ok_frames);
       const id1daCrcBadFrames = Number(telemetry.leaf_1da_crc_bad_frames);
-      const id1daInvStatusBit = Number(telemetry.leaf_1da_inv_status_bit);
       const id1daInvFaultMap = Number(telemetry.leaf_1da_inv_fault_map);
       const id1daInvBlinky = Number(telemetry.leaf_1da_inv_blinky);
-      const id1daInvUnknownFaults = Number(telemetry.leaf_1da_inv_unknown_faults);
       const id1daInvFaultCanTimeout = Number(telemetry.leaf_1da_inv_fault_can_timeout);
       const vcuTorque120 = Number(telemetry.leaf_120_cmd_nm);
       const vcuTorque = Number.isFinite(vcuTorque120) ? vcuTorque120 : Number(telemetry.vcu_torque_demand);
-      const id1daFrames = Number(telemetry.leaf_id1da_frames);
-      const id1daAgeMs = Number(telemetry.leaf_id1da_age_ms);
       const id1daRawB0B7 = telemetry.leaf_1da_raw_b0b7 || "-- -- -- -- -- -- -- --";
       const id11aSource = telemetry.leaf_id11a_source || "---";
       const id11aFrames = Number(telemetry.leaf_id11a_frames);
@@ -1739,10 +1722,8 @@
       setText("canMon1daTorque", fmt(id1daTorque, 2));
       setText("canMon1daClock", fmtInt(id1daClock));
       setText("canMon1daErr", `${fmtInt(id1daErr)} (${fmtBin6(id1daErr)})`);
-      setText("canMon1daStatusBit", fmtYesNo(id1daInvStatusBit));
       setText("canMon1daFaultMap", `${fmtInt(id1daInvFaultMap)} (0x${fmtHexByte(id1daInvFaultMap)} / ${fmtBin6(id1daInvFaultMap)})`);
       setText("canMon1daBlinky", `${fmtInt(id1daInvBlinky)} (0b${Number.isFinite(id1daInvBlinky) ? Math.max(0, Math.min(3, Math.round(id1daInvBlinky))).toString(2).padStart(2, "0") : "--"})`);
-      setText("canMon1daUnknownFaults", `${fmtInt(id1daInvUnknownFaults)} (0x${Number.isFinite(id1daInvUnknownFaults) ? Math.max(0, Math.min(2047, Math.round(id1daInvUnknownFaults))).toString(16).toUpperCase().padStart(3, "0") : "---"})`);
       setText("canMon1daCanTimeout", fmtYesNo(id1daInvFaultCanTimeout));
       setText("canMon1daCrc", `${fmtHexByte(id1daCrcRx)} / ${fmtHexByte(id1daCrcCalc)} / ${fmtYesNo(id1daCrcOk)}`);
       setText("canMon1daCrcStats", `${fmtInt(id1daCrcOkFrames)} / ${fmtInt(id1daCrcBadFrames)}`);
@@ -1751,7 +1732,6 @@
       setText("canMonCoolantTemp", fmt(cool, 1));
       setText("canMonVcuMode", isSimMode ? "SIM" : "RUN");
       setText("canMonVcuTorque", fmt(vcuTorque, 2));
-      setText("canMonId1da", `${Math.round(id1daFrames)} / ${Math.round(id1daAgeMs)}`);
       setText("canMon1daRaw", id1daRawB0B7);
       setText("canMon11aSource", `${id11aSource} ${fmtInt(id11aFrames)} / ${fmtInt(id11aAgeMs)}`);
       setText("canMon11aTx", `${fmtInt(id11aTxFrames)} / ${fmtInt(id11aTxAgeMs)}`);
@@ -3071,13 +3051,9 @@
             if (msg.leaf_1da_crc_wire_calc !== undefined) cachedTelemetry.leaf_1da_crc_wire_calc = msg.leaf_1da_crc_wire_calc;
             if (msg.leaf_1da_crc_wire_ok_frames !== undefined) cachedTelemetry.leaf_1da_crc_wire_ok_frames = msg.leaf_1da_crc_wire_ok_frames;
             if (msg.leaf_1da_crc_wire_bad_frames !== undefined) cachedTelemetry.leaf_1da_crc_wire_bad_frames = msg.leaf_1da_crc_wire_bad_frames;
-            if (msg.leaf_1da_inv_status_bit !== undefined) cachedTelemetry.leaf_1da_inv_status_bit = msg.leaf_1da_inv_status_bit;
             if (msg.leaf_1da_inv_fault_map !== undefined) cachedTelemetry.leaf_1da_inv_fault_map = msg.leaf_1da_inv_fault_map;
             if (msg.leaf_1da_inv_blinky !== undefined) cachedTelemetry.leaf_1da_inv_blinky = msg.leaf_1da_inv_blinky;
-            if (msg.leaf_1da_inv_unknown_faults !== undefined) cachedTelemetry.leaf_1da_inv_unknown_faults = msg.leaf_1da_inv_unknown_faults;
             if (msg.leaf_1da_inv_fault_can_timeout !== undefined) cachedTelemetry.leaf_1da_inv_fault_can_timeout = msg.leaf_1da_inv_fault_can_timeout;
-            if (msg.leaf_id1da_frames !== undefined) cachedTelemetry.leaf_id1da_frames = msg.leaf_id1da_frames;
-            if (msg.leaf_id1da_age_ms !== undefined) cachedTelemetry.leaf_id1da_age_ms = msg.leaf_id1da_age_ms;
             if (msg.leaf_id11a_source !== undefined) cachedTelemetry.leaf_id11a_source = msg.leaf_id11a_source;
             if (msg.leaf_id11a_frames !== undefined) cachedTelemetry.leaf_id11a_frames = msg.leaf_id11a_frames;
             if (msg.leaf_id11a_age_ms !== undefined) cachedTelemetry.leaf_id11a_age_ms = msg.leaf_id11a_age_ms;
@@ -3441,15 +3417,11 @@
             if (msg.leaf_1da_crc !== undefined) cachedTelemetry.leaf_1da_crc = msg.leaf_1da_crc;
             if (msg.leaf_1da_crc_calc !== undefined) cachedTelemetry.leaf_1da_crc_calc = msg.leaf_1da_crc_calc;
             if (msg.leaf_1da_crc_ok !== undefined) cachedTelemetry.leaf_1da_crc_ok = Number(msg.leaf_1da_crc_ok);
-            if (msg.leaf_1da_inv_status_bit !== undefined) cachedTelemetry.leaf_1da_inv_status_bit = msg.leaf_1da_inv_status_bit;
             if (msg.leaf_1da_inv_fault_map !== undefined) cachedTelemetry.leaf_1da_inv_fault_map = msg.leaf_1da_inv_fault_map;
             if (msg.leaf_1da_inv_blinky !== undefined) cachedTelemetry.leaf_1da_inv_blinky = msg.leaf_1da_inv_blinky;
-            if (msg.leaf_1da_inv_unknown_faults !== undefined) cachedTelemetry.leaf_1da_inv_unknown_faults = msg.leaf_1da_inv_unknown_faults;
             if (msg.leaf_1da_inv_fault_can_timeout !== undefined) cachedTelemetry.leaf_1da_inv_fault_can_timeout = msg.leaf_1da_inv_fault_can_timeout;
             if (msg.leaf_1da_crc_wire_ok_frames !== undefined) cachedTelemetry.leaf_1da_crc_wire_ok_frames = msg.leaf_1da_crc_wire_ok_frames;
             if (msg.leaf_1da_crc_wire_bad_frames !== undefined) cachedTelemetry.leaf_1da_crc_wire_bad_frames = msg.leaf_1da_crc_wire_bad_frames;
-            if (msg.leaf_id1da_frames !== undefined) cachedTelemetry.leaf_id1da_frames = msg.leaf_id1da_frames;
-            if (msg.leaf_id1da_age_ms !== undefined) cachedTelemetry.leaf_id1da_age_ms = msg.leaf_id1da_age_ms;
             if (msg.leaf_id11a_source !== undefined) cachedTelemetry.leaf_id11a_source = msg.leaf_id11a_source;
             if (msg.leaf_id11a_frames !== undefined) cachedTelemetry.leaf_id11a_frames = msg.leaf_id11a_frames;
             if (msg.leaf_id11a_age_ms !== undefined) cachedTelemetry.leaf_id11a_age_ms = msg.leaf_id11a_age_ms;

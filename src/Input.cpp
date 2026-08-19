@@ -3105,10 +3105,8 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         dataJson += "\"leaf_1da_crc_wire_calc\":0,";
         dataJson += "\"leaf_1da_crc_wire_ok_frames\":0,";
         dataJson += "\"leaf_1da_crc_wire_bad_frames\":0,";
-        dataJson += "\"leaf_1da_inv_status_bit\":0,";
         dataJson += "\"leaf_1da_inv_fault_map\":0,";
         dataJson += "\"leaf_1da_inv_blinky\":0,";
-        dataJson += "\"leaf_1da_inv_unknown_faults\":0,";
         // Add HW status flags for DYNO section
         dataJson += "\"leaf_ready\":" + String(MetaSense::CANBus::feedback().ready ? 1 : 0) + ",";
         dataJson += "\"hw_precharge\":" + String(MetaSense::HardwareOutputStateMachine::isPrechargeActive() ? 1 : 0) + ",";
@@ -3158,15 +3156,11 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         canJson += "\"leaf_1da_crc\":" + String(leafFb.crc_1da) + ",";
         canJson += "\"leaf_1da_crc_calc\":" + String(canStats.last1daWireCrcCalc) + ",";
         canJson += "\"leaf_1da_crc_ok\":" + String((canStats.last1daWireCrcOk == 1) ? 1 : 0) + ",";
-        canJson += "\"leaf_1da_inv_status_bit\":" + String(leafFb.inv_status_bit) + ",";
         canJson += "\"leaf_1da_inv_fault_map\":" + String(leafFb.inv_fault_map) + ",";
         canJson += "\"leaf_1da_inv_blinky\":" + String(leafFb.inv_blinky) + ",";
-        canJson += "\"leaf_1da_inv_unknown_faults\":" + String(leafFb.inv_unknown_faults) + ",";
         canJson += "\"leaf_1da_inv_fault_can_timeout\":" + String(leafFb.inv_fault_can_timeout_maybe) + ",";
         canJson += "\"leaf_1da_crc_ok_frames\":" + String(canStats.rx1daCrcOkFrames) + ",";
         canJson += "\"leaf_1da_crc_bad_frames\":" + String(canStats.rx1daCrcBadFrames) + ",";
-        canJson += "\"leaf_id1da_frames\":" + String(canStats.rx1daFrames) + ",";
-        canJson += "\"leaf_id1da_age_ms\":" + String(ageSince1da) + ",";
         // DEBUG: Send raw 0x1DA frame bytes to browser for inspection
         canJson += "\"leaf_1da_raw_b0b7\":\"";
         for (uint8_t i = 0; i < 8; ++i) {
