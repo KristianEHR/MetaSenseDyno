@@ -3132,7 +3132,7 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         }
         
         String canJson;
-        canJson.reserve(850);
+        canJson.reserve(1500);  // Increased from 850 to fit all 24 raw byte fields
         canJson = "{\"type\":\"canmonitor\",";
         canJson += "\"ip\":\"" + cachedIP + "\",";
         canJson += "\"rssi\":" + String(cachedRSSI) + ",";
