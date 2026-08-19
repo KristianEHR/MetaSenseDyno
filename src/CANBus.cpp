@@ -334,8 +334,9 @@ void poll(uint32_t nowMs)
 
         // Decode accepted Leaf frames
         if (isAcceptedLeafId(decodeId)) {
-            // 0x1DA is CRC-gated; only decode if CRC is good
-            const bool allowDecode = (decodeId != 0x1DAU) || (frame1daWireCrcOk == 1);
+            // Disable CRC validation for 0x1DA to diagnose blinking issue
+            // If data becomes stable, CRC algorithm is the root cause
+            const bool allowDecode = true;  // Bypass CRC gate entirely
             if (allowDecode) {
                 twai_message_t msg = {};
                 msg.identifier = decodeId;

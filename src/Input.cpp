@@ -3159,6 +3159,15 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         canJson += "\"leaf_1da_crc_wire_bad_frames\":" + String(canStats.rx1daWireCrcBadFrames) + ",";
         canJson += "\"leaf_id1da_frames\":" + String(canStats.rx1daFrames) + ",";
         canJson += "\"leaf_id1da_age_ms\":" + String(ageSince1da) + ",";
+        // DEBUG: Send raw 0x1DA frame bytes to browser for inspection
+        canJson += "\"leaf_1da_raw_b0b7\":\"";
+        for (uint8_t i = 0; i < 8; ++i) {
+            char hex[3];
+            snprintf(hex, sizeof(hex), "%02X", canStats.last1daData[i]);
+            canJson += hex;
+            if (i < 7) canJson += " ";
+        }
+        canJson += "\",";
         canJson += "\"leaf_120_cmd_nm\":" + String(data.leaf_torqueDemandNm, 2) + ",";
         canJson += "\"vcu_torque_demand\":" + String(data.leaf_torqueDemandNm, 2) + ",";
         canJson += "\"vcu_sim\":" + String(data.vcuSimMode ? "1" : "0") + ",";
