@@ -1,0 +1,40 @@
+ M .vscode/tasks.json
+ M "GPIO mappings.pdf"
+ M data/captures.html
+ M data/index.html
+ M include/CANBus.h
+ M include/LeafCan.h
+ M lib/HAL_CAN/CanHAL.cpp
+ M platformio.ini
+ M src/CANBus.cpp
+ M src/CommandRouter.cpp
+ M src/HardwareOutputStateMachine.cpp
+ M src/Input.cpp
+ M src/Input.h
+ M src/LeafCan.cpp
+ M src/main.cpp
+?? 1d4_monitor_capture_20260807_224237.log
+?? 1d4_monitor_capture_20260807_224237_1d4_only.log
+?? 1d4_monitor_capture_20260807_224330.log
+?? 1d4_monitor_capture_20260807_224330_1d4_only.log
+?? _fw_restore_20260802/
+?? _tmp_backup_cco_head.cpp
+?? _tmp_backup_input.cpp
+?? _tmp_backup_input_ascii.cpp
+?? _tmp_backup_latest_head.cpp
+?? _tmp_backup_latest_head_ascii.cpp
+?? _tmp_crc_compare.txt
+?? backups/capture_com6_8s.ps1
+?? backups/check_sniff2_tags.ps1
+?? backups/create_restore_point.ps1
+?? backups/envdump_sniff2_extract.ps1
+?? backups/envdump_sniff2_extract.txt
+?? backups/envdump_sniff2_full.txt
+?? backups/platformio_sniff_archive_20260810.ini
+?? backups/restore_20260810_173908/
+?? backups/restore_20260815_134058/
+?? backups/search_envdump_defines.ps1
+?? build.log
+?? include/Leaf1d4ReplaySeries.h
+?? template_tx_bootcheck.log
+?? tools/

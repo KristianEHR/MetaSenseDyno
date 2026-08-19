@@ -1,0 +1,1 @@
+Frame=6E 6E 00 00 C7 44 01 E4 Alg=MSB poly1D initFF xorFF over [D4+B0..B6] Computed=0x48NO Residue=0xAC

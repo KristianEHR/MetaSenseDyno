@@ -591,7 +591,24 @@ void setupOtaOnceConnected()
 {
     static uint32_t lastWebServerAttemptMs = 0U;
 
-    if (otaStarted || WiFi.status() != WL_CONNECTED) {
+    if (WiFi.status() != WL_CONNECTED) {
+        return;
+    }
+
+    // Initialize web server first (before OTA startup)
+    if (!webServerStarted) {
+        const uint32_t nowMs = millis();
+        if (lastWebServerAttemptMs == 0U || (nowMs - lastWebServerAttemptMs) >= 5000U) {
+            lastWebServerAttemptMs = nowMs;
+            webServerStarted = setupWebServer();
+            if (webServerStarted) {
+                logLine("[BOOT] Web server started successfully");
+            }
+        }
+    }
+
+    // Start OTA after web server is initialized
+    if (otaStarted) {
         return;
     }
 
@@ -619,14 +636,6 @@ void setupOtaOnceConnected()
     // Attempt NTP time sync (non-blocking; sync happens in background)
     configTime(0, 0, "pool.ntp.org", "time.nist.gov");
     logLine("[BOOT] NTP sync requested");
-
-    if (!webServerStarted) {
-        const uint32_t nowMs = millis();
-        if (lastWebServerAttemptMs == 0U || (nowMs - lastWebServerAttemptMs) >= 5000U) {
-            lastWebServerAttemptMs = nowMs;
-            webServerStarted = setupWebServer();
-        }
-    }
 }
 
 void controlTaskEntry(void* /*parameter*/)

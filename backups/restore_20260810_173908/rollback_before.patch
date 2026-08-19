@@ -1,0 +1,2424 @@
+diff --git a/.vscode/tasks.json b/.vscode/tasks.json
+index d3d1390..b8b52e4 100644
+--- a/.vscode/tasks.json
++++ b/.vscode/tasks.json
+@@ -32,6 +32,57 @@
+ 				"$platformio"
+ 			]
+ 		},
++		{
++			"label": "MODE: Upload NORMAL TX (esp32s3-USB)",
++			"type": "shell",
++			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
++			"args": [
++				"run",
++				"-e",
++				"esp32s3-USB",
++				"-t",
++				"upload"
++			],
++			"isBackground": false,
++			"problemMatcher": [
++				"$platformio"
++			],
++			"group": "build"
++		},
++		{
++			"label": "MODE: Upload RX-ONLY SNIFF (esp32s3-USB-sniff)",
++			"type": "shell",
++			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
++			"args": [
++				"run",
++				"-e",
++				"esp32s3-USB-sniff",
++				"-t",
++				"upload"
++			],
++			"isBackground": false,
++			"problemMatcher": [
++				"$platformio"
++			],
++			"group": "build"
++		},
++		{
++			"label": "MODE: Upload NEXT JOB (esp32s3-USB-sniff)",
++			"type": "shell",
++			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
++			"args": [
++				"run",
++				"-e",
++				"esp32s3-USB-sniff",
++				"-t",
++				"upload"
++			],
++			"isBackground": false,
++			"problemMatcher": [
++				"$platformio"
++			],
++			"group": "build"
++		},
+ 		{
+ 			"label": "OPERATIVE - Build (esp32s3-USB-cco)",
+ 			"type": "shell",
+@@ -529,6 +580,90 @@
+ 				"$msCompile"
+ 			],
+ 			"group": "build"
++		},
++		{
++			"label": "Upload (esp32s3-USB-sniff)",
++			"type": "shell",
++			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
++			"args": [
++				"run",
++				"-e",
++				"esp32s3-USB-sniff",
++				"-t",
++				"upload"
++			],
++			"isBackground": false
++		},
++		{
++			"label": "Upload (esp32s3-USB-sniff)",
++			"type": "shell",
++			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
++			"args": [
++				"run",
++				"-e",
++				"esp32s3-USB-sniff",
++				"-t",
++				"upload"
++			],
++			"isBackground": false
++		},
++		{
++			"label": "Build (esp32s3-USB-sniff)",
++			"type": "shell",
++			"command": "cmd",
++			"args": [
++				"/c",
++				"\"C:\\Users\\krist\\.platformio\\penv\\Scripts\\pio.exe\" run -e esp32s3-USB-sniff"
++			],
++			"isBackground": false
++		},
++		{
++			"label": "Upload (esp32s3-USB-sniff)",
++			"type": "shell",
++			"command": "cmd",
++			"args": [
++				"/c",
++				"\"C:\\Users\\krist\\.platformio\\penv\\Scripts\\pio.exe\" run -e esp32s3-USB-sniff -t upload"
++			],
++			"isBackground": false
++		},
++		{
++			"label": "Upload (esp32s3-USB-sniff2)",
++			"type": "shell",
++			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
++			"args": [
++				"run",
++				"-e",
++				"esp32s3-USB-sniff2",
++				"-t",
++				"upload"
++			],
++			"isBackground": false,
++			"group": "build"
++		},
++		{
++			"label": "Create Restore Point",
++			"type": "shell",
++			"command": "powershell",
++			"args": [
++				"-NoProfile",
++				"-Command",
++				"$ts = Get-Date -Format 'yyyyMMdd_HHmmss'; $dir = \"backups/restore_$ts\"; New-Item -ItemType Directory -Path $dir -Force | Out-Null; git rev-parse HEAD | Out-File -FilePath \"$dir/rollback_base.txt\" -Encoding ascii; git status --porcelain=v1 | Out-File -FilePath \"$dir/rollback_status.txt\" -Encoding ascii; git ls-files --others --exclude-standard | Out-File -FilePath \"$dir/rollback_untracked.txt\" -Encoding ascii; git diff | Out-File -FilePath \"$dir/rollback_before.patch\" -Encoding ascii; git diff --staged | Out-File -FilePath \"$dir/rollback_staged.patch\" -Encoding ascii; git bundle create \"$dir/repo_backup_$ts.bundle\" --all; Write-Output \"RESTORE_POINT=$dir\""
++			],
++			"isBackground": false
++		},
++		{
++			"label": "Create Restore Point (Scripted)",
++			"type": "shell",
++			"command": "powershell",
++			"args": [
++				"-NoProfile",
++				"-ExecutionPolicy",
++				"Bypass",
++				"-File",
++				"backups/create_restore_point.ps1"
++			],
++			"isBackground": false
+ 		}
+ 	]
+ }
+\ No newline at end of file
+diff --git a/data/index.html b/data/index.html
+index 3957ddf..f7018b8 100644
+--- a/data/index.html
++++ b/data/index.html
+@@ -1023,6 +1023,14 @@
+         </span>
+       </div>
+ 
++      <div class="can-monitor-row">
++        <span class="can-monitor-label">Mode</span>
++        <span class="can-monitor-value can-monitor-stepper">
++          <button id="canMon1d4ModeToggle" class="can-monitor-step-btn" type="button">MANUAL</button>
++          <span id="canMon1d4Mode" class="can-monitor-step-target">manual</span>
++        </span>
++      </div>
++
+       <div class="can-monitor-row">
+         <span class="can-monitor-label">Torque demand RAW</span>
+         <span id="canMon1d4TxRaw" class="can-monitor-value">---</span>
+@@ -1413,6 +1421,7 @@
+     let autoGenerateReportEnabled = false;
+     let autoGenerateReportTriggered = false;
+     let leaf1d4TxTargetNm = 0.0;
++    let leaf1d4Mode = "manual";
+     const kLeaf1d4TxStepNm = 0.1;
+     const kLeaf1d4TxMinNm = -512.0;
+     const kLeaf1d4TxMaxNm = 511.75;
+@@ -1655,6 +1664,15 @@
+       }
+     }
+ 
++    function updateLeaf1d4ModeUi(value) {
++      const normalized = String(value || "manual").toLowerCase() === "auto" ? "auto" : "manual";
++      leaf1d4Mode = normalized;
++      const modeEl = document.getElementById("canMon1d4Mode");
++      const toggleEl = document.getElementById("canMon1d4ModeToggle");
++      if (modeEl) modeEl.textContent = normalized;
++      if (toggleEl) toggleEl.textContent = normalized === "auto" ? "AUTO" : "MANUAL";
++    }
++
+     function sendLeaf1d4TxTargetNm(value) {
+       if (!ws || ws.readyState !== WebSocket.OPEN) {
+         showToast("WebSocket not connected");
+@@ -1670,6 +1688,20 @@
+       sendLeaf1d4TxTargetNm(updated);
+     }
+ 
++    function sendLeaf1d4Mode(mode) {
++      if (!ws || ws.readyState !== WebSocket.OPEN) {
++        showToast("WebSocket not connected");
++        return;
++      }
++      ws.send("SET_SINGLE:leaf1d4Mode=" + mode);
++    }
++
++    function toggleLeaf1d4Mode() {
++      const nextMode = leaf1d4Mode === "auto" ? "manual" : "auto";
++      updateLeaf1d4ModeUi(nextMode);
++      sendLeaf1d4Mode(nextMode);
++    }
++
+     function updateCanMonitor(telemetry) {
+       if (!telemetry) return;
+ 
+@@ -3567,6 +3599,9 @@ else if (msg.type === "info" || msg.type === "status") {
+     document.getElementById("canMon1d4TxTargetInc").onclick = function() {
+       adjustLeaf1d4TxTargetNm(kLeaf1d4TxStepNm);
+     };
++    document.getElementById("canMon1d4ModeToggle").onclick = function() {
++      toggleLeaf1d4Mode();
++    };
+     
+     document.getElementById("confirmManual").onclick = function() {
+       currentCustomer = document.getElementById("manualCustomerName").value.trim();
+diff --git a/include/CANBus.h b/include/CANBus.h
+index c620422..4179b6b 100644
+--- a/include/CANBus.h
++++ b/include/CANBus.h
+@@ -91,5 +91,7 @@ bool send(uint32_t id, const uint8_t* data, uint8_t len);
+ bool isReady();
+ const LeafInvFeedback& feedback();
+ const Stats& stats();
++uint8_t get1d4RingCount();
++bool get1d4RingFrame(uint8_t ageFromNewest, uint8_t* outData, uint8_t* outLen = nullptr);
+ 
+ } // namespace MetaSense::CANBus
+diff --git a/include/LeafCan.h b/include/LeafCan.h
+index 6ed937a..64404a9 100644
+--- a/include/LeafCan.h
++++ b/include/LeafCan.h
+@@ -3,6 +3,10 @@
+ #include <stdbool.h>
+ #include <stdint.h>
+ 
++#ifndef METASENSE_LEAF_1DA_SNIFF_DECODE
++#define METASENSE_LEAF_1DA_SNIFF_DECODE 0
++#endif
++
+ #include "driver/twai.h"
+ 
+ struct LeafInvFeedback
+@@ -59,6 +63,12 @@ struct LeafInvFeedback
+     uint8_t mg_error_codes;
+     uint8_t crc_1da;
+     uint8_t id1da_raw[8]; // Raw 8-byte payload of last 0x1DA/0x01A frame
++    uint8_t id1da_status_byte; // Source byte used for extra 1DA status/fault bit decode
++    uint8_t id1da_status_bits;  // Decoded low-nibble status/fault bitmask for sniff diagnostics
++    bool id1da_status_ready;
++    bool id1da_status_fault;
++    bool id1da_status_warning;
++    bool id1da_status_limp;
+     float id1da_ze1_rpm;  // ZE1 Motorola-decoded RPM candidate
+     float id1da_leg_rpm;  // Legacy LE word RPM candidate
+     float id1da_ze1_tq;   // ZE1 Motorola-decoded torque candidate (Nm)
+diff --git a/lib/HAL_CAN/CanHAL.cpp b/lib/HAL_CAN/CanHAL.cpp
+index aab7977..b29e89c 100644
+--- a/lib/HAL_CAN/CanHAL.cpp
++++ b/lib/HAL_CAN/CanHAL.cpp
+@@ -3,12 +3,18 @@
+ #include <cstring>
+ #include "HardwareSerial.h"
+ #include <driver/gpio.h>
++#include <esp_err.h>
+ 
+ #ifndef METASENSE_LEAF_CAN_TX_ENABLED
+ // Safety default: allow Leaf CAN receive/monitoring, block all outbound frames.
+ #define METASENSE_LEAF_CAN_TX_ENABLED 0
+ #endif
+ 
++#ifndef METASENSE_LEAF_CAN_RX_ENABLED
++// Default to receive enabled so 0x1DA/0x55A monitoring remains active.
++#define METASENSE_LEAF_CAN_RX_ENABLED 1
++#endif
++
+ #ifndef METASENSE_LEAF_CAN_TX_SINGLE_SHOT
+ // Test-oriented default: one transmit attempt per scheduler tick, no auto-retry storm.
+ #define METASENSE_LEAF_CAN_TX_SINGLE_SHOT 1
+@@ -23,6 +29,10 @@
+ #define METASENSE_LEAF_CAN_BITRATE_KBPS 500
+ #endif
+ 
++#ifndef METASENSE_CAN_HAL_RX_DIAG
++#define METASENSE_CAN_HAL_RX_DIAG 0
++#endif
++
+ bool CanHAL::begin(int txPin, int rxPin) {
+     if (started_ && txPin_ == txPin && rxPin_ == rxPin) {
+         return true;
+@@ -56,9 +66,13 @@ bool CanHAL::begin(int txPin, int rxPin) {
+     } else {
+         Serial.printf("[CAN-INIT] NORMAL mode\n");
+     }
+-    
+-    Serial.printf("[CAN-INIT] mode=%d rx_pin=%d tx_pin=%d filter=ACCEPT_ALL\n", 
+-                  static_cast<int>(mode), rxPin, txPin);
++
++    Serial.printf("[CAN-INIT] mode=%d bitrate=%uk rx_pin=%d tx_pin=%d rx_enabled=%d filter=ACCEPT_ALL\n",
++                  static_cast<int>(mode),
++                  static_cast<unsigned>(METASENSE_LEAF_CAN_BITRATE_KBPS),
++                  rxPin,
++                  txPin,
++                  static_cast<int>(METASENSE_LEAF_CAN_RX_ENABLED));
+ 
+     if (twai_driver_install(&g_config, &t_config, &f_config) != ESP_OK) {
+         Serial.println("[CAN-INIT] twai_driver_install FAILED");
+@@ -109,7 +123,20 @@ bool CanHAL::send(uint32_t id, const uint8_t* data, uint8_t len) {
+     msg.flags = TWAI_MSG_FLAG_SS;
+ #endif
+     memcpy(msg.data, data, len);
+-    return twai_transmit(&msg, pdMS_TO_TICKS(10)) == ESP_OK;
++    const esp_err_t err = twai_transmit(&msg, pdMS_TO_TICKS(10));
++    if (err != ESP_OK) {
++        Serial.printf("[CAN-TX] failed id=0x%03lX len=%u err=0x%x\n",
++                      static_cast<unsigned long>(id),
++                      static_cast<unsigned>(len),
++                      static_cast<unsigned>(err));
++        return false;
++    }
++    if (id == 0x1D4U) {
++        Serial.printf("[CAN-TX] ok id=0x%03lX len=%u\n",
++                      static_cast<unsigned long>(id),
++                      static_cast<unsigned>(len));
++    }
++    return true;
+ #endif
+ }
+ 
+@@ -118,6 +145,14 @@ bool CanHAL::receive(uint32_t& id, uint8_t* data, uint8_t& len, bool& isExtended
+         return false;
+     }
+ 
++#if !METASENSE_LEAF_CAN_RX_ENABLED
++    (void)id;
++    (void)data;
++    (void)len;
++    (void)isExtended;
++    return false;
++#endif
++
+     twai_message_t msg;
+     if (twai_receive(&msg, 0) != ESP_OK) return false;
+ 
+@@ -130,19 +165,21 @@ bool CanHAL::receive(uint32_t& id, uint8_t* data, uint8_t& len, bool& isExtended
+     
+     // Surface standard vs extended distribution to upper layers.
+     isExtended = (msg.flags & TWAI_MSG_FLAG_EXTD) != 0;
++#if METASENSE_CAN_HAL_RX_DIAG
+     if (id == 0x55BU || (isExtended && id == 0x55BU)) {
+-        Serial.printf("[HAL-RX-55B] id=0x%03lX flags=0x%02X dlc=%u extd=%d\n", 
++        Serial.printf("[HAL-RX-55B] id=0x%03lX flags=0x%02X dlc=%u extd=%d\n",
+                       static_cast<unsigned long>(id),
+                       static_cast<unsigned>(msg.flags),
+                       static_cast<unsigned>(msg.data_length_code),
+                       isExtended ? 1 : 0);
+     }
+-    
+-    // Log ALL frame formats every 100 frames to catch frame type distribution
++
++    // Optional frame format heartbeat for deep bus diagnostics only.
+     static uint32_t receiveCount = 0;
+     if ((++receiveCount % 100) == 0) {
+-        Serial.printf("[HAL-RX-STATS] frames_rx=%lu (checking for ext/std distribution)\n", receiveCount);
++        Serial.printf("[HAL-RX-STATS] frames_rx=%lu\n", static_cast<unsigned long>(receiveCount));
+     }
++#endif
+     
+     return true;
+ }
+diff --git a/platformio.ini b/platformio.ini
+index 2fbdd99..e185cc8 100644
+--- a/platformio.ini
++++ b/platformio.ini
+@@ -38,8 +38,8 @@ build_flags =
+     -D METASENSE_LEAF_CAN_TX_PIN=4
+     -D METASENSE_LEAF_CAN_RX_PIN=5
+     -D METASENSE_LEAF_VARIANT_120_55A=1
+-    -D METASENSE_LEAF_VCM_DIAGNOSTICS=1
+-    -D METASENSE_CAN_RAW_CSV_LOG=1
++    -D METASENSE_LEAF_VCM_DIAGNOSTICS=0
++    -D METASENSE_CAN_RAW_CSV_LOG=0
+     -D METASENSE_HEARTBEAT_PERIOD_MS=15000
+     -D METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS=0
+     -D METASENSE_RBPLUS_RELAY_ENABLED=1
+@@ -48,8 +48,8 @@ build_flags =
+     -D METASENSE_LEAF_TX_GAP_TEST_ENABLE=0
+     -D METASENSE_LEAF_TX_GAP_TEST_PERIOD_MS=15000
+     -D METASENSE_LEAF_TX_GAP_TEST_DURATION_MS=500
+-    -D METASENSE_TORQUE_STEP_SEQUENCER_ENABLED=1
+-    -D METASENSE_LEAF_120_TX_COMMIT_ENABLED=1
++    -D METASENSE_TORQUE_STEP_SEQUENCER_ENABLED=0
++    -D METASENSE_LEAF_120_TX_COMMIT_ENABLED=0
+     -I include
+ lib_ldf_mode    = deep+
+ lib_compat_mode = strict
+@@ -87,16 +87,21 @@ build_flags =
+     -D METASENSE_LEAF_CAN_RX_ENABLED=1
+     -D METASENSE_LEAF_CAN_TX_ENABLED=1
+     -D METASENSE_LEAF_CAN_LISTEN_ONLY=0
+-    -D METASENSE_LEAF_CAN_HANDSHAKE_ON_FIRST_1DA=0
++    -D METASENSE_LEAF_CAN_HANDSHAKE_ON_FIRST_1DA=1
+     -D METASENSE_LEAF_CAN_TX_PIN=4
+     -D METASENSE_LEAF_CAN_RX_PIN=5
+     -D METASENSE_LEAF_VARIANT_120_55A=1
+-    -D METASENSE_LEAF_VCM_DIAGNOSTICS=1
+-    -D METASENSE_CAN_RAW_CSV_LOG=1
++    -D METASENSE_LEAF_VCM_DIAGNOSTICS=0
++    -D METASENSE_CAN_RAW_CSV_LOG=0
+     -D METASENSE_HEARTBEAT_PERIOD_MS=15000
+     -D METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS=0
+     -D METASENSE_RBPLUS_RELAY_ENABLED=1
+-    -D METASENSE_LEAF_120_TX_COMMIT_ENABLED=1
++    -D METASENSE_LEAF_120_TX_COMMIT_ENABLED=0
++    -D METASENSE_LEAF_1D4_RINGBUF_ENABLE=0
++    -D METASENSE_LEAF_1D4_RINGBUF_SIZE=64
++    -D METASENSE_LEAF_1D4_TEMPLATE_TX_MODE=0
++    -D METASENSE_LEAF_1D4_RING_TX_SOURCE_AGE=0
++    -D VCU_switch=0
+     -I include
+ lib_ldf_mode    = deep+
+ lib_compat_mode = strict
+@@ -116,173 +121,17 @@ monitor_port = COM6
+ monitor_dtr = 0
+ monitor_rts = 0
+ 
+-[env:esp32s3-USB-sniff]
++[env:esp32s3-USB-sniff2]
+ extends = env:esp32s3-USB
+-build_unflags =
+-    -D METASENSE_LEAF_CAN_TX_ENABLED=1
+-    -D METASENSE_LEAF_CAN_LISTEN_ONLY=0
+-    -D METASENSE_LEAF_120_TX_COMMIT_ENABLED=1
+ build_flags =
++    ; Baseline comes from env:esp32s3-USB via the inherited Rx/Tx/build switches.
++    ; Add only the sniff-specific overrides needed for frame identification.
+     ${env:esp32s3-USB.build_flags}
++    -D METASENSE_CAN_LOG_KEY_FRAMES=1
++    -D METASENSE_CAN_LOG_ALL_FRAMES=1
++    -D METASENSE_CAN_SNIFF_ONLY=1
+     -D METASENSE_LEAF_CAN_TX_ENABLED=0
+-    -D METASENSE_LEAF_CAN_LISTEN_ONLY=0
+-    -D METASENSE_LEAF_120_TX_COMMIT_ENABLED=0
+-
+-; Legacy/experimental environments preserved below for reference only.
+-;
+-;[env:esp32s3-USB-real]
+-;extends = env:esp32s3-USB
+-;build_unflags =
+-;    -D METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS=0
+-;build_flags =
+-;    ${env:esp32s3-USB.build_flags}
+-;    -D METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS=0
+-;    -D VCU_switch=1
+-;    -D METASENSE_RBPLUS_RELAY_ENABLED=1
+-;
+-;[env:esp32s3-USB-diag-listen]
+-;extends = env:esp32s3-USB
+-;build_unflags =
+-;    -D METASENSE_LEAF_CAN_TX_ENABLED=1
+-;build_flags =
+-;    ${env:esp32s3-USB.build_flags}
+-;    -D METASENSE_LEAF_CAN_LISTEN_ONLY=1
+-;    -D METASENSE_LEAF_CAN_TX_ENABLED=0
+-;
+-;[env:esp32s3-USB-diag-listen-rx16]
+-;extends = env:esp32s3-USB-diag-listen
+-;build_unflags =
+-;    -D METASENSE_LEAF_CAN_RX_PIN=5
+-;build_flags =
+-;    ${env:esp32s3-USB-diag-listen.build_flags}
+-;    -D METASENSE_LEAF_CAN_RX_PIN=16
+-;
+-;
+-;[env:esp32s3-USB-diag-listen-rx16-250k]
+-;extends = env:esp32s3-USB-diag-listen-rx16
+-;build_flags =
+-;    ${env:esp32s3-USB-diag-listen-rx16.build_flags}
+-;    -D METASENSE_LEAF_CAN_BITRATE_KBPS=250
+-;
+-;[env:esp32s3-USB-diag-listen-rx16-125k]
+-;extends = env:esp32s3-USB-diag-listen-rx16
+-;build_flags =
+-;    ${env:esp32s3-USB-diag-listen-rx16.build_flags}
+-;    -D METASENSE_LEAF_CAN_BITRATE_KBPS=125
+-;
+-;[env:esp32s3-USB-cco]
+-;platform      = espressif32
+-;board         = esp32-s3-devkitc-1
+-;framework     = arduino
+-;build_src_filter =
+-;    +<*>
+-;    -<egt_diag.cpp>
+-;board_build.partitions = partitions/esp32s3_8mb_ota_littlefs.csv
+-;board_build.filesystem = littlefs
+-;build_type    = release
+-;build_flags =
+-;    -D ARDUINO_USB_MODE=1
+-;    -D ARDUINO_USB_CDC_ON_BOOT=1
+-;    -D METASENSE_CCO_PROJECT=1
+-;    -D METASENSE_VCU_OWNS_HV_RPLUS_PRECHARGE=0
+-;    -D METASENSE_VCU_SIM_MODE=1
+-;    -D METASENSE_GPIO_RPLUS_PIN=37
+-;    -D METASENSE_GPIO_PRECHARGE_PIN=42
+-;    -I include
+-;lib_ldf_mode    = deep+
+-;lib_compat_mode = strict
+-;lib_deps =
+-;    adafruit/Adafruit NeoPixel @ 1.15.5
+-;    adafruit/Adafruit MCP9600 Library @ 2.0.4
+-;    me-no-dev/ESPAsyncWebServer @ 3.6.0
+-;    me-no-dev/AsyncTCP @ 3.3.2 
+-;    adafruit/Adafruit BME680 Library @ ^2.0.4
+-;    bblanchon/ArduinoJson @ ^7.0.0
+-;lib_ignore =
+-;upload_protocol = esptool
+-;upload_port = COM4
+-;monitor_speed = 115200
+-;monitor_port = COM4
+-;monitor_dtr = 0
+-;monitor_rts = 0
+-;
+-;[env:esp32s3-ota]
+-;extends = env:esp32s3-USB
+-;build_unflags =
+-;    -D METASENSE_LEAF_CAN_TX_ENABLED=0
+-;    -D METASENSE_LEAF_CAN_HANDSHAKE_ON_FIRST_1DA=1
+-;    -D METASENSE_LEAF_VCM_CHECKLIST_MODE=1
+-;    -D METASENSE_TEST_TORQUE_OVERRIDE_ENABLED=1
+-;    -D METASENSE_TEST_TORQUE_OVERRIDE_NM=25.0f
+-;    -D METASENSE_LEAF_VARIANT_120_55A=1
+-;build_flags =
+-;    ${env:esp32s3-USB.build_flags}
+-;    -D METASENSE_LEAF_CAN_TX_ENABLED=1
+-;    -D METASENSE_LEAF_CAN_LISTEN_ONLY=0
+-;    -D METASENSE_LEAF_CAN_HANDSHAKE_ON_FIRST_1DA=0
+-;    -D METASENSE_LEAF_VCM_CHECKLIST_MODE=0
+-;    -D METASENSE_PRECHARGE_TEST_ACCEPT_TIMEOUT=1
+-;    -D METASENSE_LEAF_VARIANT_120_55A=1
+-;    -D METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS=0
+-;    -D METASENSE_LEAF_TX_GAP_TEST_ENABLE=0
+-;    -D METASENSE_LEAF_TX_GAP_TEST_PERIOD_MS=15000
+-;    -D METASENSE_LEAF_TX_GAP_TEST_DURATION_MS=500
+-;    -D METASENSE_TORQUE_STEP_SEQUENCER_ENABLED=1
+-;    -D METASENSE_LEAF_120_TX_COMMIT_ENABLED=1
+-;upload_protocol = espota
+-;upload_port = 192.168.0.211
+-;upload_flags =
+-;    --auth=metasense
+-;
+-;[env:esp32s3-USB-120-compare]
+-;extends = env:esp32s3-USB
+-;build_flags =
+-;    ${env:esp32s3-USB.build_flags}
+-;    -D METASENSE_LEAF_120_COMPARE_COPY_RX=1
+-;
+-;[env:esp32s3-ota-120-compare]
+-;extends = env:esp32s3-ota
+-;build_flags =
+-;    ${env:esp32s3-ota.build_flags}
+-;    -D METASENSE_LEAF_120_COMPARE_COPY_RX=1
+-;
+-;[env:esp32s3-USB-120-compare-sign]
+-;extends = env:esp32s3-USB-120-compare
+-;build_flags =
+-;    ${env:esp32s3-USB-120-compare.build_flags}
+-;    -D METASENSE_LEAF_120_SHADOW_STATE_STRATEGY=1
+-;    -D METASENSE_LEAF_120_SHADOW_TORQUE_DEADBAND_NM=1.0f
+-;
+-;[env:esp32s3-ota-120-compare-sign]
+-;extends = env:esp32s3-ota-120-compare
+-;build_flags =
+-;    ${env:esp32s3-ota-120-compare.build_flags}
+-;    -D METASENSE_LEAF_120_SHADOW_STATE_STRATEGY=1
+-;    -D METASENSE_LEAF_120_SHADOW_TORQUE_DEADBAND_NM=1.0f
+-;
+-;[env:esp32s3-ota-120-compare-sign-neutral]
+-;extends = env:esp32s3-ota-120-compare-sign
+-;build_flags =
+-;    ${env:esp32s3-ota-120-compare-sign.build_flags}
+-;    -D METASENSE_LEAF_120_SHADOW_NEUTRAL_STARTUP_MS=1500
+-;
+-;[env:esp32s3-USB-120-compare-quadrant]
+-;extends = env:esp32s3-USB-120-compare
+-;build_flags =
+-;    ${env:esp32s3-USB-120-compare.build_flags}
+-;    -D METASENSE_LEAF_120_SHADOW_STATE_STRATEGY=2
+-;    -D METASENSE_LEAF_120_SHADOW_TORQUE_DEADBAND_NM=1.0f
+-;    -D METASENSE_LEAF_120_SHADOW_REVERSE_RPM_DEADBAND=30.0f
+-;    -D METASENSE_LEAF_120_NOISE_DB_NM=0.10f
+-;    -D METASENSE_LEAF_120_NOISE_OUTLIER_ABS_NM=5.0f
+-;
+-;[env:esp32s3-ota-120-compare-quadrant]
+-;extends = env:esp32s3-ota-120-compare
+-;build_flags =
+-;    ${env:esp32s3-ota-120-compare.build_flags}
+-;    -D METASENSE_LEAF_120_SHADOW_STATE_STRATEGY=2
+-;    -D METASENSE_LEAF_120_SHADOW_TORQUE_DEADBAND_NM=1.0f
+-;    -D METASENSE_LEAF_120_SHADOW_REVERSE_RPM_DEADBAND=30.0f
+-;    -D METASENSE_LEAF_120_NOISE_DB_NM=0.10f
+-;    -D METASENSE_LEAF_120_NOISE_OUTLIER_ABS_NM=5.0f
++    -D METASENSE_LEAF_CAN_LISTEN_ONLY=1
++    -D METASENSE_LEAF_CAN_HANDSHAKE_ON_FIRST_1DA=0
++    -D METASENSE_LEAF_CAN_BITRATE_KBPS=500
+ 
+diff --git a/src/CANBus.cpp b/src/CANBus.cpp
+index 4b501d4..70bf253 100644
+--- a/src/CANBus.cpp
++++ b/src/CANBus.cpp
+@@ -21,6 +21,22 @@
+ #define METASENSE_CAN_ID_SCAN 1
+ #endif
+ 
++#ifndef METASENSE_CAN_SNIFF_ONLY
++#define METASENSE_CAN_SNIFF_ONLY 0
++#endif
++
++#ifndef METASENSE_LEAF_1D4_SNIFF_RX_ENABLED
++#define METASENSE_LEAF_1D4_SNIFF_RX_ENABLED 1
++#endif
++
++#ifndef METASENSE_LEAF_1D4_RINGBUF_ENABLE
++#define METASENSE_LEAF_1D4_RINGBUF_ENABLE 0
++#endif
++
++#ifndef METASENSE_LEAF_1D4_RINGBUF_SIZE
++#define METASENSE_LEAF_1D4_RINGBUF_SIZE 64U
++#endif
++
+ namespace MetaSense::CANBus {
+ 
+ namespace {
+@@ -31,7 +47,124 @@ bool s_configured = false;
+ LeafInvFeedback s_feedback{};
+ Stats s_stats;
+ 
++#if METASENSE_LEAF_1D4_RINGBUF_ENABLE
++constexpr uint8_t kLeaf1d4RingSize = static_cast<uint8_t>(METASENSE_LEAF_1D4_RINGBUF_SIZE);
++static uint8_t s_leaf1d4Ring[kLeaf1d4RingSize][8] = {{0U}};
++static uint8_t s_leaf1d4RingLen[kLeaf1d4RingSize] = {0U};
++static uint8_t s_leaf1d4RingHead = 0U;  // Next write slot.
++static uint8_t s_leaf1d4RingCount = 0U;
++
++static void resetLeaf1d4Ring()
++{
++    memset(s_leaf1d4Ring, 0, sizeof(s_leaf1d4Ring));
++    memset(s_leaf1d4RingLen, 0, sizeof(s_leaf1d4RingLen));
++    s_leaf1d4RingHead = 0U;
++    s_leaf1d4RingCount = 0U;
++}
++
++static void pushLeaf1d4Ring(const uint8_t* data, uint8_t len)
++{
++    if (data == nullptr || kLeaf1d4RingSize == 0U) {
++        return;
++    }
++
++    const uint8_t slot = s_leaf1d4RingHead;
++    const uint8_t copyLen = (len <= 8U) ? len : 8U;
++
++    memset(s_leaf1d4Ring[slot], 0, sizeof(s_leaf1d4Ring[slot]));
++    memcpy(s_leaf1d4Ring[slot], data, copyLen);
++    s_leaf1d4RingLen[slot] = copyLen;
++
++    s_leaf1d4RingHead = static_cast<uint8_t>((s_leaf1d4RingHead + 1U) % kLeaf1d4RingSize);
++    if (s_leaf1d4RingCount < kLeaf1d4RingSize) {
++        ++s_leaf1d4RingCount;
++    }
++}
++
++static bool readLeaf1d4Ring(uint8_t ageFromNewest, uint8_t* outData, uint8_t* outLen)
++{
++    if (s_leaf1d4RingCount == 0U || outData == nullptr || ageFromNewest >= s_leaf1d4RingCount) {
++        return false;
++    }
++
++    const uint8_t newestSlot = static_cast<uint8_t>((s_leaf1d4RingHead + kLeaf1d4RingSize - 1U) % kLeaf1d4RingSize);
++    const uint8_t slot = static_cast<uint8_t>((newestSlot + kLeaf1d4RingSize - (ageFromNewest % kLeaf1d4RingSize)) % kLeaf1d4RingSize);
++    memcpy(outData, s_leaf1d4Ring[slot], 8U);
++    if (outLen != nullptr) {
++        *outLen = s_leaf1d4RingLen[slot];
++    }
++    return true;
++}
++#endif
++
+ #if METASENSE_CAN_ID_SCAN
++struct SniffIdEntry {
++    uint32_t id = 0xFFFFFFFFU;
++    uint8_t len = 0U;
++    uint8_t data[8] = {0U};
++    bool seen = false;
++};
++
++constexpr size_t kSniffIdSlots = 64U;
++SniffIdEntry s_sniffIdEntries[kSniffIdSlots];
++
++static void clearSniffIdEntries()
++{
++    memset(s_sniffIdEntries, 0, sizeof(s_sniffIdEntries));
++}
++
++static bool noteSniffId(uint32_t id, const uint8_t* data, uint8_t len)
++{
++    if (data == nullptr) {
++        return false;
++    }
++
++    for (size_t i = 0U; i < kSniffIdSlots; ++i) {
++        if (s_sniffIdEntries[i].seen && s_sniffIdEntries[i].id == id) {
++            return false;
++        }
++        if (!s_sniffIdEntries[i].seen) {
++            s_sniffIdEntries[i].id = id;
++            s_sniffIdEntries[i].len = (len <= 8U) ? len : 8U;
++            s_sniffIdEntries[i].seen = true;
++            memset(s_sniffIdEntries[i].data, 0, sizeof(s_sniffIdEntries[i].data));
++            memcpy(s_sniffIdEntries[i].data, data, s_sniffIdEntries[i].len);
++            return true;
++        }
++    }
++    return false;
++}
++
++static size_t countSniffIds()
++{
++    size_t count = 0U;
++    for (size_t i = 0U; i < kSniffIdSlots; ++i) {
++        if (s_sniffIdEntries[i].seen) {
++            ++count;
++        }
++    }
++    return count;
++}
++
++static void printSniffIdSnapshot()
++{
++    const size_t count = countSniffIds();
++    Serial.printf("CAN-SNIFF-SNAPSHOT total=%u\n", static_cast<unsigned>(count));
++    for (size_t i = 0U; i < kSniffIdSlots; ++i) {
++        if (!s_sniffIdEntries[i].seen) {
++            continue;
++        }
++        Serial.printf("0x%03lX ", static_cast<unsigned long>(s_sniffIdEntries[i].id));
++        for (uint8_t b = 0U; b < s_sniffIdEntries[i].len; ++b) {
++            Serial.printf("%02X", static_cast<unsigned>(s_sniffIdEntries[i].data[b]));
++            if (b + 1U < s_sniffIdEntries[i].len) {
++                Serial.print(' ');
++            }
++        }
++        Serial.println();
++    }
++}
++
+ struct UnknownIdScanEntry {
+     uint32_t id = 0xFFFFFFFFU;
+     uint32_t frames = 0U;
+@@ -215,7 +348,11 @@ bool ensureReady(uint32_t nowMs)
+     s_stats.lastInitAttemptMs = nowMs;
+     s_stats.ready = s_canHal.begin(s_config.txPin, s_config.rxPin);
+     if (s_stats.ready) {
++#if METASENSE_CAN_SNIFF_ONLY
++        Serial.println("[CAN-SNIFF] passive-listen active");
++#else
+         LeafCan::reset(s_feedback);
++#endif
+     }
+     return s_stats.ready;
+ }
+@@ -248,6 +385,12 @@ void reset()
+     s_canHal.stop();
+     LeafCan::reset(s_feedback);
+     s_stats = Stats{};
++#if METASENSE_CAN_ID_SCAN
++    clearSniffIdEntries();
++#endif
++#if METASENSE_LEAF_1D4_RINGBUF_ENABLE
++    resetLeaf1d4Ring();
++#endif
+ }
+ 
+ void poll(uint32_t nowMs)
+@@ -260,6 +403,9 @@ void poll(uint32_t nowMs)
+     static uint32_t lastRateMs = 0;
+     static uint32_t lastUnknownScanMs = 0;
+     static uint32_t lastUnknownAtScan = 0;
++    static uint32_t lastSniffSummaryMs = 0;
++    static uint32_t lastSniffPrintMs = 0;
++    static uint32_t lastSniffSnapshotCount = 0;
+     static uint32_t lastRx1daFrames = 0;
+     static uint32_t lastRx1d4CmdFrames = 0;
+     static uint32_t lastRx1dcFrames = 0;
+@@ -298,6 +444,7 @@ void poll(uint32_t nowMs)
+     }
+     
+     // Periodic diagnostic: show queue status
++#if !METASENSE_CAN_SNIFF_ONLY
+     if (lastDiagMs == 0U || (nowMs - lastDiagMs) >= DIAG_PERIOD_MS) {
+         lastDiagMs = nowMs;
+         Serial.printf("[CAN-POLL-DIAG] queued=%lu missed=%lu overrun=%lu arb_lost=%lu bus_err=%lu tx_err=%u rx_err=%u state=%u rx_frames_total=%lu leaf_frames=%lu unk_frames=%lu\n",
+@@ -313,6 +460,29 @@ void poll(uint32_t nowMs)
+                       static_cast<unsigned long>(s_stats.rxLeafFrames),
+                       static_cast<unsigned long>(s_stats.rxUnknownFrames));
+     }
++#else
++    if (lastDiagMs == 0U || (nowMs - lastDiagMs) >= DIAG_PERIOD_MS) {
++        lastDiagMs = nowMs;
++        const uint32_t lastRxAgeMs = (s_stats.lastRxMs == 0U) ? 0U : (nowMs - s_stats.lastRxMs);
++        Serial.printf("[CAN-SNIFF-DIAG] state=%u queued=%lu missed=%lu overrun=%lu arb_lost=%lu bus_err=%lu rx_total=%lu std=%lu ext=%lu leaf=%lu 1da=%lu 55a=%lu 11a=%lu unk=%lu last_id=0x%03lX last_age=%lu\n",
++                      static_cast<unsigned>(twaiStatus.state),
++                      static_cast<unsigned long>(twaiStatus.msgs_to_rx),
++                      static_cast<unsigned long>(twaiStatus.rx_missed_count),
++                      static_cast<unsigned long>(twaiStatus.rx_overrun_count),
++                      static_cast<unsigned long>(twaiStatus.arb_lost_count),
++                      static_cast<unsigned long>(twaiStatus.bus_error_count),
++                      static_cast<unsigned long>(s_stats.rxFrames),
++                      static_cast<unsigned long>(s_stats.rxStdFrames),
++                      static_cast<unsigned long>(s_stats.rxExtFrames),
++                      static_cast<unsigned long>(s_stats.rxLeafFrames),
++                      static_cast<unsigned long>(s_stats.rx1daFrames),
++                      static_cast<unsigned long>(s_stats.rx55aFrames),
++                      static_cast<unsigned long>(s_stats.rx11aFrames),
++                      static_cast<unsigned long>(s_stats.rxUnknownFrames),
++                      static_cast<unsigned long>(s_stats.lastRxId),
++                      static_cast<unsigned long>(lastRxAgeMs));
++    }
++#endif
+ 
+     uint32_t framesThisPoll = 0;
+     uint32_t extFramesThisPoll = 0;
+@@ -335,6 +505,20 @@ void poll(uint32_t nowMs)
+         ++framesThisPoll;
+ 
+         const uint32_t decodeId = normalizeLeafIdForDecode(id);
++#if METASENSE_CAN_ID_SCAN
++        const bool newSniffId = noteSniffId(id, data, len);
++        if (newSniffId && (lastSniffPrintMs == 0U || (nowMs - lastSniffPrintMs) >= 50U)) {
++            lastSniffPrintMs = nowMs;
++            Serial.printf("0x%03lX ", static_cast<unsigned long>(id));
++            for (uint8_t b = 0U; b < len; ++b) {
++                Serial.printf("%02X", static_cast<unsigned>(data[b]));
++                if (b + 1U < len) {
++                    Serial.print(' ');
++                }
++            }
++            Serial.println();
++        }
++#endif
+ 
+         twai_message_t msg = {};
+         msg.identifier = decodeId;
+@@ -349,6 +533,10 @@ void poll(uint32_t nowMs)
+             memcpy(s_stats.last55aData, data, len);
+         }
+         if (id == 0x1D4U) {
++    #if METASENSE_LEAF_1D4_RINGBUF_ENABLE
++            pushLeaf1d4Ring(data, len);
++    #endif
++    #if METASENSE_LEAF_1D4_SNIFF_RX_ENABLED
+             ++s_stats.rx1d4SniffFrames;
+             s_stats.last1d4SniffMs = nowMs;
+             s_stats.last1d4SniffLen = len;
+@@ -359,9 +547,12 @@ void poll(uint32_t nowMs)
+             s_stats.last1d4CmdLen = len;
+             memset(s_stats.last1d4CmdData, 0, sizeof(s_stats.last1d4CmdData));
+             memcpy(s_stats.last1d4CmdData, data, len);
++    #endif
+         }
+ 
+         if (isAcceptedLeafId(decodeId)) {
++            // Decode accepted telemetry in both normal and sniff-only modes so
++            // monitor fields (e.g. 0x55A temperatures) stay live.
+             LeafCan::decodeFrame(msg, s_feedback, nowMs);
+             ++s_stats.rxLeafFrames;
+             if (decodeId == 0x1DAU) {
+@@ -448,17 +639,22 @@ void poll(uint32_t nowMs)
+ 
+         // Optional full-frame log.
+     #if METASENSE_CAN_LOG_ALL_FRAMES
+-        Serial.printf("[CAN-FRAME-RX] id=0x%03lX len=%u data=%02X %02X %02X %02X\n",
++        Serial.printf("[CAN-FRAME-RX] id=0x%03lX len=%u data=%02X %02X %02X %02X %02X %02X %02X %02X\n",
+                       static_cast<unsigned long>(id),
+                       static_cast<unsigned>(len),
+                       static_cast<unsigned>(data[0]),
+                       static_cast<unsigned>(data[1]),
+                       static_cast<unsigned>(data[2]),
+-                      static_cast<unsigned>(data[3]));
++                  static_cast<unsigned>(data[3]),
++                  static_cast<unsigned>(data[4]),
++                  static_cast<unsigned>(data[5]),
++                  static_cast<unsigned>(data[6]),
++                  static_cast<unsigned>(data[7]));
+     #endif
+         
+     }
+     
++#if !METASENSE_CAN_SNIFF_ONLY
+     if (lastDiagMs == 0U || (nowMs - lastDiagMs) >= DIAG_PERIOD_MS) {
+         Serial.printf("[CAN-POLL-FRAME-COUNT] this_poll=%lu ext_frames=%lu\n", static_cast<unsigned long>(framesThisPoll), static_cast<unsigned long>(extFramesThisPoll));
+     }
+@@ -499,8 +695,17 @@ void poll(uint32_t nowMs)
+         lastRxExtFrames = s_stats.rxExtFrames;
+         (void)dunk;
+     }
++#endif
+ 
+ #if METASENSE_CAN_ID_SCAN
++    const size_t sniffIdCount = countSniffIds();
++    if ((lastSniffSummaryMs == 0U || (nowMs - lastSniffSummaryMs) >= 5000U) &&
++        (sniffIdCount != lastSniffSnapshotCount || lastSniffSummaryMs == 0U)) {
++        printSniffIdSnapshot();
++        lastSniffSummaryMs = nowMs;
++        lastSniffSnapshotCount = static_cast<uint32_t>(sniffIdCount);
++    }
++
+     if (lastUnknownScanMs == 0U || (nowMs - lastUnknownScanMs) >= 5000U) {
+         if (s_stats.rxUnknownFrames != lastUnknownAtScan) {
+             printUnknownIdScan(nowMs);
+@@ -570,4 +775,27 @@ const Stats& stats()
+     return s_stats;
+ }
+ 
++uint8_t get1d4RingCount()
++{
++#if METASENSE_LEAF_1D4_RINGBUF_ENABLE
++    return s_leaf1d4RingCount;
++#else
++    return 0U;
++#endif
++}
++
++bool get1d4RingFrame(uint8_t ageFromNewest, uint8_t* outData, uint8_t* outLen)
++{
++#if METASENSE_LEAF_1D4_RINGBUF_ENABLE
++    return readLeaf1d4Ring(ageFromNewest, outData, outLen);
++#else
++    (void)ageFromNewest;
++    (void)outData;
++    if (outLen != nullptr) {
++        *outLen = 0U;
++    }
++    return false;
++#endif
++}
++
+ } // namespace MetaSense::CANBus
+diff --git a/src/CommandRouter.cpp b/src/CommandRouter.cpp
+index e177f23..09fae86 100644
+--- a/src/CommandRouter.cpp
++++ b/src/CommandRouter.cpp
+@@ -790,6 +790,12 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
+         if (key == "leaf1d4TorqueNm") {
+             MetaSense::Input::setLeafUiTorqueDemandNm(fval);
+             persistSettings = false;
++        } else if (key == "leaf1d4Mode") {
++            const String mode = val;
++            MetaSense::Input::setLeaf1d4AutoTrapezEnabled(mode.equalsIgnoreCase("auto") ||
++                                                          mode == "1" ||
++                                                          mode.equalsIgnoreCase("true"));
++            persistSettings = false;
+         } else if (key == "rpmFilter") {
+             MetaSense::Settings::filterAlpha = fval;
+         } else if (key == "loadAvgN") {
+diff --git a/src/HardwareOutputStateMachine.cpp b/src/HardwareOutputStateMachine.cpp
+index 90350a2..5b276b7 100644
+--- a/src/HardwareOutputStateMachine.cpp
++++ b/src/HardwareOutputStateMachine.cpp
+@@ -640,7 +640,7 @@ void update(float engineThrottlePercent,
+     const bool dynoCondition = dynoRpmCondition;
+     const bool motorSetpointCondition = setPoint > kIdleSetpointZeroThresholdRpm;
+ 
+-    if (inverterStatusReady) {
++    if (inverterStatusReady || canTelemetryReady) {
+         inverterStatusInitialized = true;
+     }
+ 
+@@ -659,7 +659,9 @@ void update(float engineThrottlePercent,
+         startSetpointWaitStartMs = 0;
+     }
+ 
+-    const bool hardwareReady = inverterStatusReady;
++    // CAN activity is treated as inverter readiness during INIT so the startup
++    // gate can advance once the bus is alive and producing traffic.
++    const bool hardwareReady = inverterStatusReady || canTelemetryReady;
+     // Telemetry is useful for the UI, but it should not keep the controller
+     // stuck in INIT/white LED during boot when the core hardware and sensors
+     // are already healthy. Poor or intermittent telemetry should not block the
+diff --git a/src/Input.cpp b/src/Input.cpp
+index 76c6c12..53bc7bd 100644
+--- a/src/Input.cpp
++++ b/src/Input.cpp
+@@ -20,6 +20,7 @@
+ #include "TempHAL.h"
+ #include "Inverter.h"
+ #include "CANBus.h"
++#include "Leaf1d4ReplaySeries.h"
+ #include "globals.h"
+ 
+ namespace MetaSense::WebSocketServer {
+@@ -143,9 +144,20 @@ static float vcuDebugTorqueDemandNm = 0.0f;
+ static float s_torqueStepSeqNm = 0.0f;
+ static int8_t s_torqueStepSeqDir = 1;
+ static uint32_t s_torqueStepSeqLastMs = 0;
++static float s_keepAliveTrapNm = 0.1f;
++static int8_t s_keepAliveTrapDir = 1;
++static uint32_t s_keepAliveTrapLastStepMs = 0U;
++static bool s_keepAliveTrapKickIssued = false;
++static uint32_t s_keepAliveLastZeroCrossMs = 0U;
++static uint32_t s_keepAliveZeroPulseStartMs = 0U;
++static bool s_keepAliveZeroPulseActive = false;
++static uint8_t s_keepAliveZeroPulsePhase = 0U;
++static uint32_t s_keepAliveArmMs = 0U;
++static uint32_t s_keepAliveLastActiveMs = 0U;
+ static float s_leafLastSentTorqueNm = 0.0f;
+ static uint32_t s_leafLastSentTorqueMs = 0;
+ static uint8_t s_leaf1d4RollingCounter = 0U;
++static uint8_t s_leaf1d4ReplayIndex = 0U;
+ static uint8_t s_leafLast1d4TxData[8] = {0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U};
+ static uint8_t s_leafLast1d4TxLen = 0U;
+ static uint32_t s_leafLast1d4TxMs = 0;
+@@ -159,6 +171,10 @@ static uint8_t s_leaf1d4PayloadCrc = 0U;
+ static uint8_t s_leaf1d4PayloadCrcCalc = 0U;
+ static int8_t s_leaf1d4PayloadCrcOk = -1;
+ static uint32_t s_leaf1d4PayloadMs = 0;
++static bool s_leaf1d4TxUsedRingBase = false;
++static uint8_t s_leaf1d4TxRingBaseLen = 0U;
++static uint8_t s_leaf1d4TxRingSourceAge = 0xFFU;
++static uint32_t s_leaf1d4TxRingFallbackCount = 0U;
+ static uint32_t s_leafTorqueTrackStartMs = 0;
+ static uint16_t s_leafTorqueTrackLatencyMs = 0;
+ static bool s_leafTorqueTrackPending = false;
+@@ -191,6 +207,9 @@ static uint32_t leaf1daCrcProofMatches = 0U;
+ static uint32_t leaf1daCrcProofLastRxFrames = 0U;
+ static bool leaf1daCrcFailSeen = false;
+ static uint32_t leaf1daCrcLastFailMs = 0U;
++static uint32_t leaf1daMonIdLoResidueByClock[4][256] = {{0U}};
++static uint8_t leaf1daMonTopResidueByClock[4] = {0U, 0U, 0U, 0U};
++static uint32_t leaf1daMonTopResidueCountByClock[4] = {0U, 0U, 0U, 0U};
+ static uint32_t leaf1d4CrcProofSamples = 0U;
+ static uint32_t leaf1d4CrcProofMatches = 0U;
+ static uint32_t leaf1d4CrcProofLastRxFrames = 0U;
+@@ -463,8 +482,13 @@ static bool s_leafTxGapTestActive = false;
+ static bool s_leafTxGapTestLoggedStart = false;
+ static bool s_leafTxGapTestLoggedEnd = false;
+ static volatile float s_leafUiTorqueDemandNm = 0.0f;
++static volatile bool s_leaf1d4AutoTrapezEnabled = false;
+ static volatile bool s_leafTxPacerEnabled = false;
+ static volatile float s_leafTxPacerTorqueNm = 0.0f;
++static uint8_t s_torqueNibbleCounter = 1U;
++static int8_t s_torqueNibbleDir = 1;
++static uint32_t s_torqueNibbleLastStepMs = 0U;
++static uint32_t s_hcmClockLastStepMs = 0U;
+ static volatile bool s_leafTxPacerReadyBit = false;
+ static volatile bool s_leafTxPacerHvOkBit = false;
+ static volatile bool s_leafTxPacerBrakeBit = false;
+@@ -515,6 +539,56 @@ constexpr uint32_t kLeafHandshakeAttemptPeriodMs = 20;
+ // CRC8 MSB poly 0x1D over [idLo + payload7], then XOR by HCM clock bin.
+ #define METASENSE_LEAF_1D4_CRC_CLOCK_XOR_ENABLE 1
+ #endif
++#ifndef METASENSE_LEAF_1D4_SNIFF_RX_ENABLED
++#define METASENSE_LEAF_1D4_SNIFF_RX_ENABLED 1
++#endif
++#ifndef METASENSE_LEAF_1D4_TEMPLATE_TX_MODE
++// 0: Build 0x1D4 command fields from logic.
++// 1: Start from a known-good Thunderstruck template frame and only patch
++//    selected fields (torque + clock + CRC) for controlled acceptance tests.
++// 2: Replay a captured clock-continuous 0x1D4 frame loop exactly as generated
++//    by tools/analyze_1d4_sniff.py --emit-loop-header.
++// 3: Use newest captured 0x1D4 ring-buffer frame as TX base, then patch
++//    torque + clock + CRC; if ring is empty, fallback to mode 0 builder.
++// 4: Strict raw replay from 0x1D4 ring-buffer frame (no patching, no builder fallback).
++#define METASENSE_LEAF_1D4_TEMPLATE_TX_MODE 0
++#endif
++#ifndef METASENSE_LEAF_1D4_RING_TX_SOURCE_AGE
++// 0 reads newest ring frame, 1 previous, etc.
++#define METASENSE_LEAF_1D4_RING_TX_SOURCE_AGE 0
++#endif
++#ifndef METASENSE_LEAF_1D4_REPLAY_RECALC_CRC
++// Keep enabled to harden generated loop frames against accidental edits.
++#define METASENSE_LEAF_1D4_REPLAY_RECALC_CRC 1
++#endif
++#ifndef METASENSE_LEAF_1D4_TEMPLATE_MAX_ABS_TORQUE_NM
++// Keep template TX in a conservative region while validating inverter acceptance.
++#define METASENSE_LEAF_1D4_TEMPLATE_MAX_ABS_TORQUE_NM 3.75f
++#endif
++#ifndef METASENSE_LEAF_1D4_TEMPLATE_B0
++#define METASENSE_LEAF_1D4_TEMPLATE_B0 0x6EU
++#endif
++#ifndef METASENSE_LEAF_1D4_TEMPLATE_B1
++#define METASENSE_LEAF_1D4_TEMPLATE_B1 0x6EU
++#endif
++#ifndef METASENSE_LEAF_1D4_TEMPLATE_B2
++#define METASENSE_LEAF_1D4_TEMPLATE_B2 0x00U
++#endif
++#ifndef METASENSE_LEAF_1D4_TEMPLATE_B3
++#define METASENSE_LEAF_1D4_TEMPLATE_B3 0x00U
++#endif
++#ifndef METASENSE_LEAF_1D4_TEMPLATE_B4
++#define METASENSE_LEAF_1D4_TEMPLATE_B4 0xC7U
++#endif
++#ifndef METASENSE_LEAF_1D4_TEMPLATE_B5
++#define METASENSE_LEAF_1D4_TEMPLATE_B5 0x44U
++#endif
++#ifndef METASENSE_LEAF_1D4_TEMPLATE_B6
++#define METASENSE_LEAF_1D4_TEMPLATE_B6 0x01U
++#endif
++#ifndef METASENSE_LEAF_1D4_TEMPLATE_B7
++#define METASENSE_LEAF_1D4_TEMPLATE_B7 0xE4U
++#endif
+ #ifndef METASENSE_LEAF_CAN_TX_PIN
+ #define METASENSE_LEAF_CAN_TX_PIN 4
+ #endif
+@@ -539,6 +613,52 @@ constexpr uint32_t kLeafHandshakeAttemptPeriodMs = 20;
+ #define METASENSE_FORCE_TACHO_RPM_SOURCE 0
+ #endif
+ 
++#ifndef METASENSE_LEAF_1D4_RAW_SNIFF_ONLY
++#define METASENSE_LEAF_1D4_RAW_SNIFF_ONLY 0
++#endif
++
++#ifndef METASENSE_LEAF_1D4_KEEPALIVE_TRAPEZOID_ENABLE
++#define METASENSE_LEAF_1D4_KEEPALIVE_TRAPEZOID_ENABLE 1
++#endif
++#ifndef METASENSE_LEAF_1D4_KEEPALIVE_TRAPEZOID_MIN_NM
++#define METASENSE_LEAF_1D4_KEEPALIVE_TRAPEZOID_MIN_NM 0.35f
++#endif
++#ifndef METASENSE_LEAF_1D4_KEEPALIVE_TRAPEZOID_MAX_NM
++#define METASENSE_LEAF_1D4_KEEPALIVE_TRAPEZOID_MAX_NM 0.60f
++#endif
++#ifndef METASENSE_LEAF_1D4_KEEPALIVE_TRAPEZOID_STEP_NM
++#define METASENSE_LEAF_1D4_KEEPALIVE_TRAPEZOID_STEP_NM 0.25f
++#endif
++#ifndef METASENSE_LEAF_1D4_KEEPALIVE_TRAPEZOID_STEP_MS
++#define METASENSE_LEAF_1D4_KEEPALIVE_TRAPEZOID_STEP_MS 100U
++#endif
++#ifndef METASENSE_LEAF_1D4_KEEPALIVE_TRAPEZOID_START_NEG_NM
++#define METASENSE_LEAF_1D4_KEEPALIVE_TRAPEZOID_START_NEG_NM -0.6f
++#endif
++#ifndef METASENSE_LEAF_1D4_KEEPALIVE_TRAPEZOID_START_DELAY_MS
++#define METASENSE_LEAF_1D4_KEEPALIVE_TRAPEZOID_START_DELAY_MS 10000U
++#endif
++#ifndef METASENSE_LEAF_1D4_KEEPALIVE_TRAPEZOID_HOLD_MS
++#define METASENSE_LEAF_1D4_KEEPALIVE_TRAPEZOID_HOLD_MS 1000U
++#endif
++#ifndef METASENSE_LEAF_1D4_KEEPALIVE_ZERO_REFRESH_MS
++// Periodically re-issue a zero-cross pulse to refresh inverter state before timeout fallback.
++#define METASENSE_LEAF_1D4_KEEPALIVE_ZERO_REFRESH_MS 500U
++#endif
++#ifndef METASENSE_LEAF_1D4_KEEPALIVE_ZERO_PULSE_MS
++// Keep the negative pulse long enough to cover multiple 10 ms TX frames.
++#define METASENSE_LEAF_1D4_KEEPALIVE_ZERO_PULSE_MS 20U
++#endif
++#ifndef METASENSE_LEAF_1D4_KEEPALIVE_ZERO_POS_NM
++#define METASENSE_LEAF_1D4_KEEPALIVE_ZERO_POS_NM 0.60f
++#endif
++#ifndef METASENSE_LEAF_1D4_KEEPALIVE_ZERO_PRE_POS_MS
++#define METASENSE_LEAF_1D4_KEEPALIVE_ZERO_PRE_POS_MS 20U
++#endif
++#ifndef METASENSE_LEAF_1D4_KEEPALIVE_ZERO_POST_POS_MS
++#define METASENSE_LEAF_1D4_KEEPALIVE_ZERO_POST_POS_MS 20U
++#endif
++
+ constexpr bool kLeafCanHandshakeOnFirst1da = (METASENSE_LEAF_CAN_HANDSHAKE_ON_FIRST_1DA != 0);
+ constexpr bool kLeafCanTxActive = (METASENSE_LEAF_CAN_TX_ENABLED != 0) &&
+                                   (METASENSE_LEAF_CAN_LISTEN_ONLY == 0) &&
+@@ -681,6 +801,16 @@ void setLeafUiTorqueDemandNmInternal(float torqueNm)
+     s_leafUiTorqueDemandNm = constrain(torqueFinite, -512.0f, 511.75f);
+ }
+ 
++void setLeaf1d4AutoTrapezEnabledInternal(bool enabled)
++{
++    s_leaf1d4AutoTrapezEnabled = enabled;
++}
++
++bool isLeaf1d4AutoTrapezEnabledInternal()
++{
++    return s_leaf1d4AutoTrapezEnabled;
++}
++
+ float getLeafUiTorqueDemandNmInternal()
+ {
+     return s_leafUiTorqueDemandNm;
+@@ -900,6 +1030,26 @@ uint8_t computeLeaf1d4CrcConformant(const uint8_t* payload7)
+ #endif
+ }
+ 
++uint8_t computeLeaf1daCrcForMonitor(const uint8_t* payload8, uint8_t payloadLen)
++{
++    if (payload8 == nullptr || payloadLen < 8U) {
++        return 0U;
++    }
++
++    static constexpr uint8_t kClockXor[4] = {0xC0U, 0x67U, 0x0BU, 0xACU};
++    uint8_t p[8] = {0U};
++    p[0] = 0xDAU;
++    memcpy(&p[1], payload8, 7U);
++
++    const uint8_t base = crc8MsbGeneric(p, 8U, 0x1DU, 0xFFU, 0xFFU);
++    const uint8_t clock = static_cast<uint8_t>(payload8[6] & 0x03U);
++    const uint8_t fixed = static_cast<uint8_t>(base ^ kClockXor[clock]);
++    if (leaf1daMonTopResidueCountByClock[clock] > 0U) {
++        return static_cast<uint8_t>(base ^ leaf1daMonTopResidueByClock[clock]);
++    }
++    return fixed;
++}
++
+ struct Leaf1d4FrameFields {
+     float torqueDemandNm = 0.0f;
+     int16_t torqueDemandRaw = 0;
+@@ -909,35 +1059,6 @@ struct Leaf1d4FrameFields {
+     uint8_t cmdClock = 0U;
+ };
+ 
+-int16_t encodeLeaf1d4TorqueRaw(float torqueDemandNm)
+-{
+-    const float tqClamped = constrain(torqueDemandNm, -512.0f, 511.75f);
+-    return static_cast<int16_t>(lroundf(tqClamped / 0.25f));
+-}
+-
+-void patchLeaf1d4TorqueFieldMotorola23_12(uint8_t (&frame)[8], int16_t torqueRaw)
+-{
+-    // DBC: SG_ MotorAmpTorqueRequest : 23|12@0- (0.25,0)
+-    // 12-bit signed two's complement placed as Motorola at start bit 23.
+-    const uint16_t raw12 = static_cast<uint16_t>(torqueRaw) & 0x0FFFU;
+-    frame[2] = static_cast<uint8_t>((raw12 >> 4) & 0xFFU);
+-    frame[3] = static_cast<uint8_t>((frame[3] & 0x0FU) | ((raw12 & 0x000FU) << 4));
+-}
+-
+-void patchLeaf1d4FrameFields(const Leaf1d4FrameFields& fields,
+-                             uint8_t (&out)[8])
+-{
+-    memset(out, 0, 8U);
+-
+-    patchLeaf1d4TorqueFieldMotorola23_12(out, fields.torqueDemandRaw);
+-    setIntelUnsigned(out, 8U, 34U, 1U, fields.hvStatus ? 1U : 0U);
+-    setIntelUnsigned(out, 8U, 46U, 1U, fields.rbPlus ? 1U : 0U);
+-    out[6] = fields.chargeStatus;
+-    setIntelUnsigned(out, 8U, 38U, 2U, static_cast<uint32_t>(fields.cmdClock & 0x03U));
+-
+-    out[7] = computeLeaf1d4CrcConformant(out);
+-}
+-
+ struct Leaf1d4CommandDecode {
+     int16_t motorAmpTorqueRaw = 0;
+     float motorAmpTorqueNm = 0.0f;
+@@ -956,34 +1077,58 @@ Leaf1d4CommandDecode decodeLeaf1d4Command(const uint8_t* data, uint8_t len)
+         return decoded;
+     }
+ 
+-    const uint32_t torqueRawUnsigned = extractMotorolaUnsigned(data, len, 23, 12U);
+-    decoded.motorAmpTorqueRaw = static_cast<int16_t>(signExtendBits(torqueRawUnsigned, 12U));
++    decoded.motorAmpTorqueRaw = static_cast<int16_t>(((static_cast<uint16_t>(data[2]) << 4) |
++                                                      (static_cast<uint16_t>(data[3]) & 0x0FU)) & 0x0FFFU);
++    if ((decoded.motorAmpTorqueRaw & 0x0800) != 0) {
++        decoded.motorAmpTorqueRaw = static_cast<int16_t>(decoded.motorAmpTorqueRaw | static_cast<int16_t>(0xF000));
++    }
+     decoded.motorAmpTorqueNm = static_cast<float>(decoded.motorAmpTorqueRaw) * 0.25f;
+-    decoded.hvSupplyStatus = extractIntelUnsigned(data, len, 34U, 1U) != 0U;
+     decoded.hcmClock = static_cast<uint8_t>(extractIntelUnsigned(data, len, 38U, 2U) & 0x03U);
++    decoded.hvSupplyStatus = extractIntelUnsigned(data, len, 34U, 1U) != 0U;
+     decoded.relayPlusStatus = extractIntelUnsigned(data, len, 46U, 1U) != 0U;
+-    // DBC: SG_ ChargeStatus : 48|8@1+
+     decoded.chargeStatus = data[6];
+     decoded.crc1d4 = data[7];
+     decoded.valid = true;
+     return decoded;
+ }
+ 
+-#if defined(METASENSE_LEAF_VCM_DIAGNOSTICS) && (METASENSE_LEAF_VCM_DIAGNOSTICS != 0)
+-struct Leaf120TopValue {
+-    uint8_t value = 0U;
+-    uint32_t count = 0U;
+-};
++int16_t encodeLeaf1d4TorqueRaw(float torqueDemandNm)
++{
++    const float tqClamped = constrain(torqueDemandNm, -512.0f, 511.75f);
++    return static_cast<int16_t>(lroundf(tqClamped / 0.25f));
++}
+ 
+-uint8_t crc8Msb(const uint8_t* data, uint8_t len, uint8_t poly, uint8_t init, uint8_t xorOut)
++void patchLeaf1d4TorqueFieldMotorola23_12(uint8_t (&frame)[8], int16_t torqueRaw)
++{
++    // DBC: SG_ MotorAmpTorqueRequest : 23|12@0- (0.25,0)
++    // 12-bit signed two's complement placed as Motorola at start bit 23.
++    const uint16_t raw12 = static_cast<uint16_t>(torqueRaw) & 0x0FFFU;
++    frame[2] = static_cast<uint8_t>((raw12 >> 4) & 0xFFU);
++    frame[3] = static_cast<uint8_t>((frame[3] & 0xF0U) | (raw12 & 0x000FU));
++}
++
++void patchLeaf1d4FrameFields(const Leaf1d4FrameFields& fields,
++                             uint8_t (&out)[8])
++{
++    memset(out, 0, 8U);
++
++    patchLeaf1d4TorqueFieldMotorola23_12(out, fields.torqueDemandRaw);
++    setIntelUnsigned(out, 8U, 34U, 1U, fields.hvStatus ? 1U : 0U);
++    setIntelUnsigned(out, 8U, 46U, 1U, fields.rbPlus ? 1U : 0U);
++    out[6] = fields.chargeStatus;
++    setIntelUnsigned(out, 8U, 38U, 2U, static_cast<uint32_t>(fields.cmdClock & 0x03U));
++    out[7] = computeLeaf1d4CrcConformant(out);
++}
++
++uint8_t crc8Lsb(const uint8_t* data, uint8_t len, uint8_t poly, uint8_t init, uint8_t xorOut)
+ {
+     uint8_t crc = init;
+     for (uint8_t i = 0U; i < len; ++i) {
+         crc ^= data[i];
+         for (uint8_t bit = 0U; bit < 8U; ++bit) {
+-            const bool msb = (crc & 0x80U) != 0U;
+-            crc <<= 1;
+-            if (msb) {
++            const bool lsb = (crc & 0x01U) != 0U;
++            crc >>= 1;
++            if (lsb) {
+                 crc ^= poly;
+             }
+         }
+@@ -991,15 +1136,15 @@ uint8_t crc8Msb(const uint8_t* data, uint8_t len, uint8_t poly, uint8_t init, ui
+     return static_cast<uint8_t>(crc ^ xorOut);
+ }
+ 
+-uint8_t crc8Lsb(const uint8_t* data, uint8_t len, uint8_t poly, uint8_t init, uint8_t xorOut)
++uint8_t crc8Msb(const uint8_t* data, uint8_t len, uint8_t poly, uint8_t init, uint8_t xorOut)
+ {
+     uint8_t crc = init;
+     for (uint8_t i = 0U; i < len; ++i) {
+         crc ^= data[i];
+         for (uint8_t bit = 0U; bit < 8U; ++bit) {
+-            const bool lsb = (crc & 0x01U) != 0U;
+-            crc >>= 1;
+-            if (lsb) {
++            const bool msb = (crc & 0x80U) != 0U;
++            crc <<= 1;
++            if (msb) {
+                 crc ^= poly;
+             }
+         }
+@@ -1135,14 +1280,18 @@ uint8_t computeLeaf1daCrcClockCorrected(const uint8_t* payload7, uint8_t payload
+     }
+ 
+     const uint8_t base = computeLeafCrcMsb1DIdLo(payload7, 0xDAU);
++#if METASENSE_LEAF_1D4_CRC_CLOCK_XOR_ENABLE
++    // 0x1DA follows the same clock-binned residue model as conformant 0x1D4.
++    static constexpr uint8_t kClockXor[4] = {0xC0U, 0x67U, 0x0BU, 0xACU};
+     const uint8_t clock = static_cast<uint8_t>(payload7[6] & 0x03U);
+-    // Use learned residue only after at least one sample was observed for that clock bin.
+-    if (leaf1daIdLoTopResidueCountByClock[clock] > 0U) {
+-        return static_cast<uint8_t>(base ^ leaf1daIdLoTopResidueByClock[clock]);
+-    }
++    return static_cast<uint8_t>(base ^ kClockXor[clock]);
++#else
+     return base;
++#endif
+ }
+ 
++constexpr uint8_t kLeaf1daResidueCandidateCount = 8U;
++
+ void computeLeaf1daResidues(const uint8_t* data, uint8_t len, uint8_t (&out)[kLeaf1daResidueCandidateCount])
+ {
+     for (uint8_t i = 0U; i < kLeaf1daResidueCandidateCount; ++i) {
+@@ -1198,6 +1347,11 @@ uint32_t computeLeaf1daAutosarCandidateMask(const uint8_t* data, uint8_t len)
+         ((crcRx == c2FClockInjected) ? (1U << 3) : 0U));
+ }
+ 
++struct Leaf120TopValue {
++    uint8_t value = 0U;
++    uint32_t count = 0U;
++};
++
+ uint8_t findTopByteValue(const uint32_t* counts, uint32_t& outCount)
+ {
+     uint8_t topValue = 0U;
+@@ -1273,7 +1427,6 @@ void formatLeaf120TopValues(const uint32_t* counts, char* out, size_t outSize)
+         used += advanced;
+     }
+ }
+-#endif
+ 
+ void formatCanPayloadHex(const uint8_t* data, uint8_t len, char* out, size_t outSize)
+ {
+@@ -1841,19 +1994,20 @@ static uint32_t s_canStartRxFrames = 0U;
+ static uint32_t s_canStartLeafFrames = 0U;
+ static uint32_t s_canStart1daFrames = 0U;
+ static bool s_canStartReadyLatched = false;
++static uint32_t s_initCanTxLastMs = 0U;
+ 
+ static bool evaluateCanStartReadiness(uint32_t now,
+                                       const MetaSense::CANBus::Stats& canStats)
+ {
+-    const bool has1daFrame = (canStats.last1daMs != 0U) &&
+-                             (canStats.last1daLen >= 8U);
+-    const bool id1daFresh = has1daFrame &&
+-                            (elapsedMsSafe(now, canStats.last1daMs) <= CAN_TEMP_TIMEOUT_MS);
+     const bool busFresh = (canStats.lastRxMs != 0U) &&
+                           (elapsedMsSafe(now, canStats.lastRxMs) <= CAN_TEMP_TIMEOUT_MS);
+     const bool counterAdvancing = (canStats.rxFrames > s_canStartRxFrames) ||
+                                    (canStats.rxLeafFrames > s_canStartLeafFrames) ||
+                                    (canStats.rx1daFrames > s_canStart1daFrames);
++    const bool hasAnyActivity = busFresh &&
++                                ((canStats.rxFrames > 0U) ||
++                                 (canStats.rxLeafFrames > 0U) ||
++                                 (canStats.last1daMs != 0U));
+ 
+     if (counterAdvancing) {
+         s_canStartRxFrames = canStats.rxFrames;
+@@ -1861,19 +2015,16 @@ static bool evaluateCanStartReadiness(uint32_t now,
+         s_canStart1daFrames = canStats.rx1daFrames;
+     }
+ 
+-    if (!busFresh || !id1daFresh) {
++    if (!busFresh) {
+         s_canStartReadyLatched = false;
+         return false;
+     }
+ 
+-    if (counterAdvancing || s_canStartReadyLatched) {
++    if (counterAdvancing || s_canStartReadyLatched || hasAnyActivity) {
+         s_canStartReadyLatched = true;
+         return true;
+     }
+ 
+-    // Keep INIT waiting until a real 0x1DA frame has been observed. This is the
+-    // correct behavior when the inverter is still silent before the operator turns
+-    // it on manually.
+     return false;
+ }
+ 
+@@ -2585,6 +2736,15 @@ void pollLeafCanFrames(uint32_t nowMs)
+         canReadyLogged = true;
+     }
+ 
++    const char* hwState = MetaSense::HardwareOutputStateMachine::stateName();
++    const bool inInitOrStart = (hwState != nullptr) &&
++                               ((strcmp(hwState, "INIT") == 0) ||
++                                (strcmp(hwState, "START") == 0));
++    if (inInitOrStart && (nowMs - s_initCanTxLastMs) >= 100U) {
++        s_initCanTxLastMs = nowMs;
++        (void)MetaSense::Input::sendLeafTorqueCommand1d4FinalZero();
++    }
++
+     const LeafInvFeedback& leafFb = MetaSense::CANBus::feedback();
+     if (!s_leafCanPartnerSeen &&
+         (leafFb.rpm_frames > 0U ||
+@@ -2944,11 +3104,20 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
+         json += "\"leaf_rpm\":" + String(data.leaf_rpm, 0) + ",";
+         json += "\"leaf_torque\":" + String(data.leaf_torqueNm, 2) + ",";
+         json += "\"leaf_torque_demand\":" + String(data.leaf_torqueDemandNm, 2) + ",";
++        json += "\"leaf_1d4_mode\":\"" + String(isLeaf1d4AutoTrapezEnabledInternal() ? "auto" : "manual") + "\",";
+         json += "\"leaf_1da_input_v\":" + String(leafFbDiag.input_voltage, 1) + ",";
+         json += "\"leaf_1da_torque_nm\":" + String(leafFbDiag.torque_nm, 2) + ",";
+         json += "\"leaf_1da_rpm\":" + String(leafFbDiag.rpm, 0) + ",";
+         json += "\"leaf_1da_clock\":" + String(static_cast<unsigned long>(leafFbDiag.mg_clock)) + ",";
+         json += "\"leaf_1da_err\":" + String(static_cast<unsigned long>(leafFbDiag.mg_error_codes)) + ",";
++#if METASENSE_LEAF_1DA_SNIFF_DECODE
++        json += "\"leaf_1da_status_byte\":" + String(static_cast<unsigned>(leafFbDiag.id1da_status_byte)) + ",";
++        json += "\"leaf_1da_status_bits\":" + String(static_cast<unsigned>(leafFbDiag.id1da_status_bits)) + ",";
++        json += "\"leaf_1da_status_ready\":" + String(leafFbDiag.id1da_status_ready ? 1 : 0) + ",";
++        json += "\"leaf_1da_status_fault\":" + String(leafFbDiag.id1da_status_fault ? 1 : 0) + ",";
++        json += "\"leaf_1da_status_warning\":" + String(leafFbDiag.id1da_status_warning ? 1 : 0) + ",";
++        json += "\"leaf_1da_status_limp\":" + String(leafFbDiag.id1da_status_limp ? 1 : 0) + ",";
++#endif
+         json += "\"leaf_id1da_frames\":" + String(static_cast<unsigned long>(leafFbDiag.rpm_frames)) + ",";
+         json += "\"leaf_id1da_age_ms\":" + String(static_cast<unsigned long>(elapsedMsSafe(nowMs, leafFbDiag.rpm_update_ms))) + ",";
+         json += "\"leaf_1da_b0\":" + String(static_cast<unsigned>(canStats.last1daLen > 0U ? canStats.last1daData[0] : 0U)) + ",";
+@@ -2962,9 +3131,21 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
+         if (canStats.rx1daFrames != leaf1daCrcProofLastRxFrames) {
+             leaf1daCrcProofLastRxFrames = canStats.rx1daFrames;
+             if (canStats.last1daLen >= 8U) {
++                const uint8_t crc1daClock = static_cast<uint8_t>(canStats.last1daData[6] & 0x03U);
++                uint8_t payload1daWithIdLo[8] = {0U};
++                payload1daWithIdLo[0] = 0xDAU;
++                memcpy(&payload1daWithIdLo[1], canStats.last1daData, 7U);
++                const uint8_t crc1daBase = crc8MsbGeneric(payload1daWithIdLo, 8U, 0x1DU, 0xFFU, 0xFFU);
++                const uint8_t crc1daResidue = static_cast<uint8_t>(canStats.last1daData[7] ^ crc1daBase);
++                const uint32_t residueCount = ++leaf1daMonIdLoResidueByClock[crc1daClock][crc1daResidue];
++                if (residueCount > leaf1daMonTopResidueCountByClock[crc1daClock]) {
++                    leaf1daMonTopResidueCountByClock[crc1daClock] = residueCount;
++                    leaf1daMonTopResidueByClock[crc1daClock] = crc1daResidue;
++                }
++
+                 ++leaf1daCrcProofSamples;
+-                const uint8_t crc1daCalc = computeLeaf1daCrcClockCorrected(canStats.last1daData,
+-                                                                            canStats.last1daLen);
++                const uint8_t crc1daCalc = computeLeaf1daCrcForMonitor(canStats.last1daData,
++                                                                        canStats.last1daLen);
+                 if (crc1daCalc == canStats.last1daData[7]) {
+                     ++leaf1daCrcProofMatches;
+                 } else {
+@@ -2976,7 +3157,7 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
+         const bool id1daCrcPresent = (canStats.last1daLen >= 8U);
+         const uint8_t id1daCrcRxUi = id1daCrcPresent ? canStats.last1daData[7] : 0U;
+         const uint8_t id1daCrcCalcUi = id1daCrcPresent
+-            ? computeLeaf1daCrcClockCorrected(canStats.last1daData, canStats.last1daLen)
++            ? computeLeaf1daCrcForMonitor(canStats.last1daData, canStats.last1daLen)
+             : 0U;
+         const bool id1daCrcOkUi = id1daCrcPresent && (id1daCrcRxUi == id1daCrcCalcUi);
+         const uint8_t id1daCrcResidueUi = static_cast<uint8_t>(id1daCrcRxUi ^ id1daCrcCalcUi);
+@@ -2997,8 +3178,13 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
+                 ? static_cast<int32_t>(elapsedMsSafe(nowMs, leaf1daCrcLastFailMs))
+                 : -2);
+         json += "\"leaf_1da_crc_fail_age_ms\":" + String(id1daCrcFailAgeMsUi) + ",";
+-        const uint8_t* id1d4UiData = canStats.last1d4SniffData;
+-        const uint8_t id1d4UiLen = canStats.last1d4SniffLen;
++        uint8_t id1d4RingData[8] = {0U};
++        uint8_t id1d4RingLen = 0U;
++        const uint8_t id1d4RingCount = MetaSense::CANBus::get1d4RingCount();
++        const bool id1d4RingHasNewest = MetaSense::CANBus::get1d4RingFrame(0U, id1d4RingData, &id1d4RingLen);
++
++        const uint8_t* id1d4UiData = id1d4RingHasNewest ? id1d4RingData : canStats.last1d4SniffData;
++        const uint8_t id1d4UiLen = id1d4RingHasNewest ? id1d4RingLen : canStats.last1d4SniffLen;
+         const uint32_t id1d4UiFrames = canStats.rx1d4SniffFrames;
+         const uint32_t id1d4UiLastMs = canStats.last1d4SniffMs;
+ 
+@@ -3035,11 +3221,14 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
+         json += "\"leaf_1d4_crc_residue\":" + String(static_cast<unsigned>(id1d4CrcResidueUi)) + ",";
+         json += "\"leaf_1d4_crc_samples\":" + String(static_cast<unsigned long>(leaf1d4CrcProofSamples)) + ",";
+         json += "\"leaf_1d4_crc_matches\":" + String(static_cast<unsigned long>(leaf1d4CrcProofMatches)) + ",";
++        json += "\"leaf_1d4_ring_count\":" + String(static_cast<unsigned>(id1d4RingCount)) + ",";
++        json += "\"leaf_1d4_ring_newest_valid\":" + String(id1d4RingHasNewest ? 1 : 0) + ",";
++        json += "\"leaf_1d4_ring_newest_len\":" + String(static_cast<unsigned>(id1d4UiLen)) + ",";
+ 
+         json += "\"leaf_1d4_sniff_frames\":" + String(static_cast<unsigned long>(canStats.rx1d4SniffFrames)) + ",";
+         json += "\"leaf_1d4_sniff_age_ms\":" + String(static_cast<unsigned long>(elapsedMsSafe(nowMs, canStats.last1d4SniffMs))) + ",";
+-        const Leaf1d4CommandDecode id1d4Sniff = decodeLeaf1d4Command(canStats.last1d4SniffData,
+-                                          canStats.last1d4SniffLen);
++        const Leaf1d4CommandDecode id1d4Sniff = decodeLeaf1d4Command(id1d4UiData,
++                          id1d4UiLen);
+         json += "\"leaf_1d4_sniff_torque_nm\":" + String(id1d4Sniff.valid ? id1d4Sniff.motorAmpTorqueNm : 0.0f, 2) + ",";
+         json += "\"leaf_1d4_sniff_torque_raw\":" + String(static_cast<int>(id1d4Sniff.valid ? id1d4Sniff.motorAmpTorqueRaw : 0)) + ",";
+         json += "\"leaf_1d4_sniff_hv_status\":" + String((id1d4Sniff.valid && id1d4Sniff.hvSupplyStatus) ? 1 : 0) + ",";
+@@ -3047,19 +3236,30 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
+         json += "\"leaf_1d4_sniff_charge_status\":" + String(static_cast<unsigned>(id1d4Sniff.valid ? id1d4Sniff.chargeStatus : 0U)) + ",";
+         json += "\"leaf_1d4_sniff_clock\":" + String(static_cast<unsigned>(id1d4Sniff.valid ? id1d4Sniff.hcmClock : 0U)) + ",";
+         json += "\"leaf_1d4_sniff_crc\":" + String(static_cast<unsigned>(id1d4Sniff.valid ? id1d4Sniff.crc1d4 : 0U)) + ",";
+-        json += "\"leaf_1d4_sniff_b0\":" + String(static_cast<unsigned>(canStats.last1d4SniffLen > 0U ? canStats.last1d4SniffData[0] : 0U)) + ",";
+-        json += "\"leaf_1d4_sniff_b1\":" + String(static_cast<unsigned>(canStats.last1d4SniffLen > 1U ? canStats.last1d4SniffData[1] : 0U)) + ",";
+-        json += "\"leaf_1d4_sniff_b2\":" + String(static_cast<unsigned>(canStats.last1d4SniffLen > 2U ? canStats.last1d4SniffData[2] : 0U)) + ",";
+-        json += "\"leaf_1d4_sniff_b3\":" + String(static_cast<unsigned>(canStats.last1d4SniffLen > 3U ? canStats.last1d4SniffData[3] : 0U)) + ",";
+-        json += "\"leaf_1d4_sniff_b4\":" + String(static_cast<unsigned>(canStats.last1d4SniffLen > 4U ? canStats.last1d4SniffData[4] : 0U)) + ",";
+-        json += "\"leaf_1d4_sniff_b5\":" + String(static_cast<unsigned>(canStats.last1d4SniffLen > 5U ? canStats.last1d4SniffData[5] : 0U)) + ",";
+-        json += "\"leaf_1d4_sniff_b6\":" + String(static_cast<unsigned>(canStats.last1d4SniffLen > 6U ? canStats.last1d4SniffData[6] : 0U)) + ",";
+-        json += "\"leaf_1d4_sniff_b7\":" + String(static_cast<unsigned>(canStats.last1d4SniffLen > 7U ? canStats.last1d4SniffData[7] : 0U)) + ",";
+-
+-        const uint8_t* id1d4TxData = canStats.last1d4CmdData;
+-        const uint8_t id1d4TxLen = canStats.last1d4CmdLen;
+-        const uint32_t id1d4TxFrames = canStats.rx1d4CmdFrames;
+-        const uint32_t id1d4TxLastMs = canStats.last1d4CmdMs;
++        json += "\"leaf_1d4_sniff_b0\":" + String(static_cast<unsigned>(id1d4UiLen > 0U ? id1d4UiData[0] : 0U)) + ",";
++        json += "\"leaf_1d4_sniff_b1\":" + String(static_cast<unsigned>(id1d4UiLen > 1U ? id1d4UiData[1] : 0U)) + ",";
++        json += "\"leaf_1d4_sniff_b2\":" + String(static_cast<unsigned>(id1d4UiLen > 2U ? id1d4UiData[2] : 0U)) + ",";
++        json += "\"leaf_1d4_sniff_b3\":" + String(static_cast<unsigned>(id1d4UiLen > 3U ? id1d4UiData[3] : 0U)) + ",";
++        json += "\"leaf_1d4_sniff_b4\":" + String(static_cast<unsigned>(id1d4UiLen > 4U ? id1d4UiData[4] : 0U)) + ",";
++        json += "\"leaf_1d4_sniff_b5\":" + String(static_cast<unsigned>(id1d4UiLen > 5U ? id1d4UiData[5] : 0U)) + ",";
++        json += "\"leaf_1d4_sniff_b6\":" + String(static_cast<unsigned>(id1d4UiLen > 6U ? id1d4UiData[6] : 0U)) + ",";
++        json += "\"leaf_1d4_sniff_b7\":" + String(static_cast<unsigned>(id1d4UiLen > 7U ? id1d4UiData[7] : 0U)) + ",";
++
++        const uint8_t* id1d4TxData = canStats.last1d4TxData;
++        const uint8_t id1d4TxLen = canStats.last1d4TxLen;
++        const uint32_t id1d4TxFrames = canStats.tx1d4Frames;
++        const uint32_t id1d4TxLastMs = canStats.last1d4TxMs;
++        uint8_t id1d4TxVsSniffDiffMask = 0U;
++        for (uint8_t bi = 0U; bi < 8U; ++bi) {
++            const uint8_t txByte = (id1d4TxLen > bi) ? id1d4TxData[bi] : 0U;
++            const uint8_t sniffByte = (id1d4UiLen > bi) ? id1d4UiData[bi] : 0U;
++            if (txByte != sniffByte) {
++                id1d4TxVsSniffDiffMask |= static_cast<uint8_t>(1U << bi);
++            }
++        }
++        const int8_t id1d4TxEqSniff = (id1d4TxLen >= 8U && id1d4UiLen >= 8U)
++            ? ((id1d4TxVsSniffDiffMask == 0U) ? 1 : 0)
++            : -1;
+         json += "\"leaf_1d4_tx_torque_nm\":" + String(s_leaf1d4PayloadTorqueNm, 2) + ",";
+         json += "\"leaf_1d4_tx_torque_raw\":" + String(static_cast<int>(s_leaf1d4PayloadTorqueRaw)) + ",";
+         json += "\"leaf_1d4_tx_target_nm\":" + String(s_leafUiTorqueDemandNm, 2) + ",";
+@@ -3070,6 +3270,13 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
+         json += "\"leaf_1d4_tx_crc\":" + String(static_cast<unsigned>(s_leaf1d4PayloadCrc)) + ",";
+         json += "\"leaf_1d4_tx_crc_calc\":" + String(static_cast<unsigned>(s_leaf1d4PayloadCrcCalc)) + ",";
+         json += "\"leaf_1d4_tx_crc_ok\":" + String(static_cast<int>(s_leaf1d4PayloadCrcOk)) + ",";
++        json += "\"leaf_1d4_tx_source_mode\":" + String(static_cast<int>(METASENSE_LEAF_1D4_TEMPLATE_TX_MODE)) + ",";
++        json += "\"leaf_1d4_tx_ring_base_used\":" + String(s_leaf1d4TxUsedRingBase ? 1 : 0) + ",";
++        json += "\"leaf_1d4_tx_ring_base_len\":" + String(static_cast<unsigned>(s_leaf1d4TxRingBaseLen)) + ",";
++        json += "\"leaf_1d4_tx_ring_source_age\":" + String(static_cast<unsigned>(s_leaf1d4TxRingSourceAge)) + ",";
++        json += "\"leaf_1d4_tx_ring_fallback_total\":" + String(static_cast<unsigned long>(s_leaf1d4TxRingFallbackCount)) + ",";
++        json += "\"leaf_1d4_tx_eq_sniff\":" + String(static_cast<int>(id1d4TxEqSniff)) + ",";
++        json += "\"leaf_1d4_tx_diff_mask_vs_sniff\":" + String(static_cast<unsigned>(id1d4TxVsSniffDiffMask)) + ",";
+         json += "\"leaf_1d4_tx_frames\":" + String(static_cast<unsigned long>(id1d4TxFrames)) + ",";
+         json += "\"leaf_1d4_tx_age_ms\":" + String(static_cast<unsigned long>(elapsedMsSafe(nowMs, id1d4TxLastMs))) + ",";
+         json += "\"leaf_1d4_tx_b0\":" + String(static_cast<unsigned>(id1d4TxLen > 0U ? id1d4TxData[0] : 0U)) + ",";
+@@ -3657,6 +3864,14 @@ bool isVcuReady()
+ 
+ const char* vcuReadySource()
+ {
++    if (!MetaSense::Globals::kVcuSwitch) {
++        return "bench_forced";
++    }
++
++    if (!tele.vcuReady) {
++        return "not_ready";
++    }
++
+     const uint32_t now = millis();
+     const LeafInvFeedback& fb = MetaSense::CANBus::feedback();
+     const MetaSense::CANBus::Stats& canStats = MetaSense::CANBus::stats();
+@@ -3667,10 +3882,6 @@ const char* vcuReadySource()
+     const bool id55aFreshForFallback = (canStats.last55aMs != 0U) &&
+                                        (elapsedMsSafe(now, canStats.last55aMs) <= CAN_RX_TARGET_MAX_AGE_MS);
+ 
+-    if (!tele.vcuReady) {
+-        return "not_ready";
+-    }
+-
+     if (nativeStatusFresh) {
+         return "native_1d4";
+     }
+@@ -3683,7 +3894,7 @@ const char* vcuReadySource()
+         return "fallback_rpm_1da";
+     }
+ 
+-    return "unknown";
++    return "gpio_rb_plus";
+ }
+ 
+ void setUiModeHintTrend(bool trendMode)
+@@ -3784,18 +3995,12 @@ bool sendLeafTorqueCommand1d4(float torqueDemandNm,
+                               bool brakeBit,
+                               bool gearDriveBit)
+ {
+-    (void)hvOkBit;
+-    const float torqueClamped = constrain(torqueDemandNm, -512.0f, 511.75f);
+-    const uint32_t nowMs = millis();
+-    const LeafInvFeedback& leafFb = MetaSense::CANBus::feedback();
+-    const bool canHvFresh = (leafFb.rpm_update_ms != 0U) &&
+-                            (elapsedMsSafe(nowMs, leafFb.rpm_update_ms) < CAN_TEMP_TIMEOUT_MS);
+-    const float effectiveHvVoltage = canHvFresh ? leafFb.input_voltage : vcuDebugHvVoltage;
+-    const bool hvStatusBit = (effectiveHvVoltage > 300.0f);
+-    const bool relayPlusBit = vcuDebugRPlus || MetaSense::HardwareOutputStateMachine::isRbPlusCommandedActive();
++    (void)readyBit;
++    (void)brakeBit;
++    (void)gearDriveBit;
+ 
+-    // Keep charge status initialized to 0x01 for 0x1D4 command framing.
+-    uint8_t chargeStatus = 0x01U;
++    const uint32_t nowMs = millis();
++    const float torqueClamped = constrain(torqueDemandNm, -512.0f, 511.75f);
+ 
+     const uint8_t hcmClock = static_cast<uint8_t>(s_leaf1d4RollingCounter & 0x03U);
+     s_leaf1d4RollingCounter = static_cast<uint8_t>((s_leaf1d4RollingCounter + 1U) & 0x03U);
+@@ -3803,40 +4008,46 @@ bool sendLeafTorqueCommand1d4(float torqueDemandNm,
+     Leaf1d4FrameFields fields;
+     fields.torqueDemandNm = torqueClamped;
+     fields.torqueDemandRaw = encodeLeaf1d4TorqueRaw(torqueClamped);
+-    fields.hvStatus = hvStatusBit;
+-    fields.rbPlus = relayPlusBit;
+-    fields.chargeStatus = chargeStatus;
++    fields.hvStatus = hvOkBit;
++    fields.rbPlus = vcuDebugRPlus || MetaSense::HardwareOutputStateMachine::isRbPlusCommandedActive();
++    fields.chargeStatus = 0x01U;
+     fields.cmdClock = hcmClock;
+ 
+-    uint8_t data[8] = {0U};
+-    patchLeaf1d4FrameFields(fields, data);
++    // Start from known-good sniff template, then patch dynamic fields.
++    uint8_t data[8] = {
++        METASENSE_LEAF_1D4_TEMPLATE_B0,
++        METASENSE_LEAF_1D4_TEMPLATE_B1,
++        METASENSE_LEAF_1D4_TEMPLATE_B2,
++        METASENSE_LEAF_1D4_TEMPLATE_B3,
++        METASENSE_LEAF_1D4_TEMPLATE_B4,
++        METASENSE_LEAF_1D4_TEMPLATE_B5,
++        METASENSE_LEAF_1D4_TEMPLATE_B6,
++        METASENSE_LEAF_1D4_TEMPLATE_B7
++    };
+ 
+-    memcpy(s_leafLast1d4TxData, data, sizeof(s_leafLast1d4TxData));
+-    s_leafLast1d4TxLen = sizeof(data);
+-    s_leafLast1d4TxMs = nowMs;
++    patchLeaf1d4TorqueFieldMotorola23_12(data, fields.torqueDemandRaw);
++    setIntelUnsigned(data, 8U, 38U, 2U, static_cast<uint32_t>(fields.cmdClock & 0x03U));
++    data[7] = computeLeaf1d4CrcConformant(data);
+ 
+-    s_leaf1d4PayloadTorqueNm = fields.torqueDemandNm;
+-    s_leaf1d4PayloadTorqueRaw = fields.torqueDemandRaw;
+-    s_leaf1d4PayloadHvStatus = fields.hvStatus;
+-    s_leaf1d4PayloadRelayPlus = fields.rbPlus;
+-    s_leaf1d4PayloadChargeStatus = fields.chargeStatus;
+-    s_leaf1d4PayloadClock = fields.cmdClock;
+-    s_leaf1d4PayloadCrc = data[7];
+-    s_leaf1d4PayloadCrcCalc = computeLeaf1d4CrcConformant(data);
+-    s_leaf1d4PayloadCrcOk = (s_leaf1d4PayloadCrc == s_leaf1d4PayloadCrcCalc) ? 1 : 0;
+-    s_leaf1d4PayloadMs = nowMs;
++    const int16_t torqueRaw = fields.torqueDemandRaw;
+ 
+     const bool sent = MetaSense::CANBus::send(0x1D4U, data, sizeof(data));
+     if (sent) {
+-        const float previousCmd = s_leafLastSentTorqueNm;
++        memcpy(s_leafLast1d4TxData, data, sizeof(s_leafLast1d4TxData));
++        s_leafLast1d4TxLen = sizeof(data);
++        s_leafLast1d4TxMs = nowMs;
+         s_leafLastSentTorqueNm = torqueClamped;
+         s_leafLastSentTorqueMs = nowMs;
+-
+-        if (fabsf(torqueClamped - previousCmd) >= kLeafTorqueTrackStepNm) {
+-            s_leafTorqueTrackStartMs = nowMs;
+-            s_leafTorqueTrackTargetNm = torqueClamped;
+-            s_leafTorqueTrackPending = true;
+-        }
++        s_leaf1d4PayloadTorqueNm = torqueClamped;
++        s_leaf1d4PayloadTorqueRaw = torqueRaw;
++        s_leaf1d4PayloadHvStatus = fields.hvStatus;
++        s_leaf1d4PayloadRelayPlus = fields.rbPlus;
++        s_leaf1d4PayloadChargeStatus = 0x01U;
++        s_leaf1d4PayloadClock = hcmClock;
++        s_leaf1d4PayloadCrc = data[7];
++        s_leaf1d4PayloadCrcCalc = computeLeaf1d4CrcConformant(data);
++        s_leaf1d4PayloadCrcOk = (s_leaf1d4PayloadCrc == s_leaf1d4PayloadCrcCalc) ? 1 : 0;
++        s_leaf1d4PayloadMs = nowMs;
+     }
+ 
+     return sent;
+@@ -3888,6 +4099,16 @@ const char* leaf120ShadowStateClassName(Leaf120ShadowStateClass stateClass)
+     return "IDLE";
+ }
+ 
++void setLeaf1d4AutoTrapezEnabled(bool enabled)
++{
++    setLeaf1d4AutoTrapezEnabledInternal(enabled);
++}
++
++bool isLeaf1d4AutoTrapezEnabled()
++{
++    return isLeaf1d4AutoTrapezEnabledInternal();
++}
++
+ constexpr uint8_t kLeaf120StateClassCount = 5U;
+ constexpr uint8_t kLeaf120SlopeClassCount = 4U;
+ 
+@@ -4138,12 +4359,119 @@ float computeTorqueStepSequence(uint32_t nowMs, bool torqueGateArmed, bool inver
+ #endif
+ }
+ 
++float computeKeepAliveTrapezoidNm(uint32_t nowMs, bool enabled)
++{
++    const float minNm = METASENSE_LEAF_1D4_KEEPALIVE_TRAPEZOID_MIN_NM;
++    const float maxNm = METASENSE_LEAF_1D4_KEEPALIVE_TRAPEZOID_MAX_NM;
++    const float stepNm = METASENSE_LEAF_1D4_KEEPALIVE_TRAPEZOID_STEP_NM;
++    const float startNegNm = METASENSE_LEAF_1D4_KEEPALIVE_TRAPEZOID_START_NEG_NM;
++    const float zeroPosNm = METASENSE_LEAF_1D4_KEEPALIVE_ZERO_POS_NM;
++
++    if (!enabled) {
++        s_keepAliveTrapNm = minNm;
++        s_keepAliveTrapDir = 1;
++        s_keepAliveTrapLastStepMs = 0U;
++        s_keepAliveTrapKickIssued = false;
++        s_keepAliveLastZeroCrossMs = 0U;
++        s_keepAliveZeroPulseStartMs = 0U;
++        s_keepAliveZeroPulseActive = false;
++        s_keepAliveZeroPulsePhase = 0U;
++        return 0.0f;
++    }
++
++    if (!s_keepAliveTrapKickIssued) {
++        s_keepAliveTrapKickIssued = true;
++        s_keepAliveTrapLastStepMs = nowMs;
++        s_keepAliveTrapNm = minNm;
++        s_keepAliveTrapDir = 1;
++        s_keepAliveLastZeroCrossMs = nowMs;
++        s_keepAliveZeroPulseStartMs = nowMs;
++        s_keepAliveZeroPulseActive = true;
++        s_keepAliveZeroPulsePhase = 1U;
++        return zeroPosNm;
++    }
++
++    if (!s_keepAliveZeroPulseActive) {
++        const bool refreshDue = (s_keepAliveLastZeroCrossMs == 0U) ||
++                                (elapsedMsSafe(nowMs, s_keepAliveLastZeroCrossMs) >=
++                                 METASENSE_LEAF_1D4_KEEPALIVE_ZERO_REFRESH_MS);
++        if (refreshDue) {
++            s_keepAliveLastZeroCrossMs = nowMs;
++            s_keepAliveZeroPulseStartMs = nowMs;
++            s_keepAliveZeroPulseActive = true;
++            s_keepAliveZeroPulsePhase = 1U;
++        }
++    }
++
++    if (s_keepAliveZeroPulseActive) {
++        const uint32_t phaseElapsedMs = elapsedMsSafe(nowMs, s_keepAliveZeroPulseStartMs);
++        if (s_keepAliveZeroPulsePhase == 1U) {
++            if (phaseElapsedMs < METASENSE_LEAF_1D4_KEEPALIVE_ZERO_PRE_POS_MS) {
++                return zeroPosNm;
++            }
++            s_keepAliveZeroPulsePhase = 2U;
++            s_keepAliveZeroPulseStartMs = nowMs;
++            return startNegNm;
++        }
++
++        if (s_keepAliveZeroPulsePhase == 2U) {
++            if (phaseElapsedMs < METASENSE_LEAF_1D4_KEEPALIVE_ZERO_PULSE_MS) {
++                return startNegNm;
++            }
++            s_keepAliveZeroPulsePhase = 3U;
++            s_keepAliveZeroPulseStartMs = nowMs;
++            return zeroPosNm;
++        }
++
++        if (s_keepAliveZeroPulsePhase == 3U) {
++            if (phaseElapsedMs < METASENSE_LEAF_1D4_KEEPALIVE_ZERO_POST_POS_MS) {
++                return zeroPosNm;
++            }
++            s_keepAliveZeroPulseActive = false;
++            s_keepAliveZeroPulsePhase = 0U;
++        } else {
++            s_keepAliveZeroPulseActive = false;
++            s_keepAliveZeroPulsePhase = 0U;
++        }
++
++        if (s_keepAliveZeroPulseActive) {
++            return startNegNm;
++        }
++    }
++
++    if (s_keepAliveTrapLastStepMs == 0U) {
++        s_keepAliveTrapLastStepMs = nowMs;
++        s_keepAliveTrapNm = minNm;
++        s_keepAliveTrapDir = 1;
++        return s_keepAliveTrapNm;
++    }
++
++    if ((nowMs - s_keepAliveTrapLastStepMs) >= METASENSE_LEAF_1D4_KEEPALIVE_TRAPEZOID_STEP_MS) {
++        s_keepAliveTrapLastStepMs = nowMs;
++        s_keepAliveTrapNm += static_cast<float>(s_keepAliveTrapDir) * stepNm;
++
++        if (s_keepAliveTrapNm >= maxNm) {
++            s_keepAliveTrapNm = maxNm;
++            s_keepAliveTrapDir = -1;
++        } else if (s_keepAliveTrapNm <= minNm) {
++            s_keepAliveTrapNm = minNm;
++            s_keepAliveTrapDir = 1;
++        }
++    }
++
++    return constrain(s_keepAliveTrapNm, minNm, maxNm);
++}
++
+ void leafTxPacerTask(void* /*param*/)
+ {
+     TickType_t lastWake = xTaskGetTickCount();
+     for (;;) {
+         vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(CAN_TX_PERIOD_MS));
+ 
++        if (!s_leafTxPacerEnabled) {
++            continue;
++        }
++
+         const float torqueToSend = s_leafTxPacerTorqueNm;
+         const bool readyBit = s_leafTxPacerReadyBit;
+         const bool hvOkBit = s_leafTxPacerHvOkBit;
+@@ -4188,6 +4516,7 @@ void begin()
+     s_leafHandshakeLastAttemptMs = 0;
+     s_leafHandshakePromotedLogPrinted = false;
+     setLeafUiTorqueDemandNmInternal(0.0f);
++    setLeaf1d4AutoTrapezEnabledInternal(false);
+     s_leafTxPacerEnabled = false;
+     s_leafTxPacerTorqueNm = 0.0f;
+     s_leafTxPacerReadyBit = false;
+@@ -4197,6 +4526,7 @@ void begin()
+     s_leafLastSentTorqueNm = 0.0f;
+     s_leafLastSentTorqueMs = 0;
+     s_leaf1d4RollingCounter = 0U;
++    s_leaf1d4ReplayIndex = 0U;
+     memset(s_leafLast1d4TxData, 0, sizeof(s_leafLast1d4TxData));
+     s_leafLast1d4TxLen = 0U;
+     s_leafLast1d4TxMs = 0;
+@@ -4210,6 +4540,10 @@ void begin()
+     s_leaf1d4PayloadCrcCalc = 0U;
+     s_leaf1d4PayloadCrcOk = -1;
+     s_leaf1d4PayloadMs = 0;
++    s_leaf1d4TxUsedRingBase = false;
++    s_leaf1d4TxRingBaseLen = 0U;
++    s_leaf1d4TxRingSourceAge = 0xFFU;
++    s_leaf1d4TxRingFallbackCount = 0U;
+     s_leafTorqueTrackStartMs = 0;
+     s_leafTorqueTrackLatencyMs = 0;
+     s_leafTorqueTrackPending = false;
+@@ -4527,11 +4861,12 @@ void loop()
+ 
+     const float manualRpmTarget = readRpmSetpointPot();
+ 
+-    // VCU ready for bring-up is driven by inverter status response on CAN.
+-    // Keep OFF until fresh status indicates inverter-ready and no active fault/limp.
+-    const bool inverterStatusFresh = (lastCanStatusUpdate != 0U) &&
+-                                     (elapsedMsSafe(now, lastCanStatusUpdate) < CAN_TEMP_TIMEOUT_MS);
+-    const bool vcuReadyBase = inverterStatusFresh && canInvReady && !canInvFault && !canInvLimp;
++    // VCU ready for bring-up follows the configured source:
++    // - VCU_switch=1 uses the RB+ input pin (normal hardware path)
++    // - VCU_switch=0 forces VCU-ready true so bench bring-up can proceed without a live inverter.
++    const bool vcuReadyBase = MetaSense::Globals::kVcuSwitch
++        ? (digitalRead(MetaSense::Globals::kRbPlusInputPin) == HIGH)
++        : true;
+     tele.vcuReady = vcuReadyBase;
+ 
+     // --- SW switch recording toggle (GPIO 35, active HIGH, debounced) ---
+@@ -4839,12 +5174,13 @@ void loop()
+     const float engineThrottlePercent = throttleSafetyCut ? 0.0f : readThrottlePotPercent();
+     tele.throttlePercent = engineThrottlePercent;
+ 
+-    const bool relayInverterStatusReady = tele.vcuReady;
+-    const bool relayInverterReady = tele.vcuReady;
+-    const bool relayInverterFault = tele.leaf_invFault ||
+-                                    tele.leaf_invLimp;
+     const MetaSense::CANBus::Stats& canStatsForStart = MetaSense::CANBus::stats();
+     const bool canTelemetryReadyForStart = evaluateCanStartReadiness(now, canStatsForStart);
++    const bool canActivityReady = canInvReady || canTelemetryReadyForStart;
++    const bool relayInverterStatusReady = canActivityReady || tele.vcuReady;
++    const bool relayInverterReady = canActivityReady || tele.vcuReady;
++    const bool relayInverterFault = tele.leaf_invFault ||
++                                    tele.leaf_invLimp;
+     const bool sensorsReadyForStart = isfinite(tele.rpm) &&
+                                       isfinite(tele.loadKg) &&
+                                       isfinite(tele.lambdaValue);
+@@ -5179,7 +5515,24 @@ void loop()
+     }
+ 
+     if (canStatsDiag.rx1daFrames != s_corrLast1daFrames) {
++        const uint32_t crc1daCandidateMask = computeLeaf1daCrcCandidateMask(leafFbDiag.id1da_raw, 8U);
++        ++leaf1daCrcSamples;
++        for (uint8_t bit = 0U; bit < kLeaf1daCrcCandidateCount; ++bit) {
++            if ((crc1daCandidateMask & static_cast<uint32_t>(1U << bit)) != 0U) {
++                ++leaf1daCrcCandidateMatches[bit];
++            }
++        }
++
++        uint8_t crc1daResidues[kLeaf1daResidueCandidateCount] = {0U};
++        computeLeaf1daResidues(leafFbDiag.id1da_raw, 8U, crc1daResidues);
+         const uint8_t crc1daClock = static_cast<uint8_t>(leafFbDiag.id1da_raw[6] & 0x03U);
++        ++leaf1daResidueSamples;
++        ++leaf1daClockSamples[crc1daClock];
++        for (uint8_t candidate = 0U; candidate < kLeaf1daResidueCandidateCount; ++candidate) {
++            ++leaf1daResidueCounts[candidate][crc1daResidues[candidate]];
++            ++leaf1daResidueByClock[candidate][crc1daClock][crc1daResidues[candidate]];
++        }
++
+         const uint8_t crc1daRx = leafFbDiag.id1da_raw[7];
+         uint8_t payload1daWithIdLo[8] = {0U};
+         payload1daWithIdLo[0] = static_cast<uint8_t>(0x01DAU & 0xFFU);
+@@ -5195,23 +5548,6 @@ void loop()
+         if (crc1daClockCorrected == crc1daRx) {
+             ++leaf1daIdLoClockCorrectedMatches;
+         }
+-        ++leaf1daCrcSamples;
+-#if METASENSE_LEAF_CRC_CANDIDATE_HUNT
+-        const uint32_t crc1daCandidateMask = computeLeaf1daCrcCandidateMask(leafFbDiag.id1da_raw, 8U);
+-        for (uint8_t bit = 0U; bit < kLeaf1daCrcCandidateCount; ++bit) {
+-            if ((crc1daCandidateMask & static_cast<uint32_t>(1U << bit)) != 0U) {
+-                ++leaf1daCrcCandidateMatches[bit];
+-            }
+-        }
+-
+-        uint8_t crc1daResidues[kLeaf1daResidueCandidateCount] = {0U};
+-        computeLeaf1daResidues(leafFbDiag.id1da_raw, 8U, crc1daResidues);
+-        ++leaf1daResidueSamples;
+-        ++leaf1daClockSamples[crc1daClock];
+-        for (uint8_t candidate = 0U; candidate < kLeaf1daResidueCandidateCount; ++candidate) {
+-            ++leaf1daResidueCounts[candidate][crc1daResidues[candidate]];
+-            ++leaf1daResidueByClock[candidate][crc1daClock][crc1daResidues[candidate]];
+-        }
+ 
+         const uint32_t autosar1daMask = computeLeaf1daAutosarCandidateMask(leafFbDiag.id1da_raw, 8U);
+         ++leaf1daAutosarSamples;
+@@ -5220,11 +5556,11 @@ void loop()
+                 ++leaf1daAutosarCandidateMatches[bit];
+             }
+         }
+-#endif
+ 
+         s_corrLast1daFrames = canStatsDiag.rx1daFrames;
+     }
+ 
++    #if !METASENSE_LEAF_1D4_RAW_SNIFF_ONLY
+     if (canStatsDiag.rx1d4SniffFrames != s_corrLast1d4SniffFrames && canStatsDiag.last1d4SniffLen >= 8U) {
+         const uint8_t crc1d4Clock = static_cast<uint8_t>(extractIntelUnsigned(canStatsDiag.last1d4SniffData,
+                                                                               7U,
+@@ -5258,6 +5594,7 @@ void loop()
+ 
+         s_corrLast1d4SniffFrames = canStatsDiag.rx1d4SniffFrames;
+     }
++    #endif
+ 
+     if (s_leafPreStatusLastMs == 0U || (now - s_leafPreStatusLastMs) >= CAN_PRE_DIAG_LOG_PERIOD_MS) {
+         const unsigned long feedbackAgeMs = static_cast<unsigned long>(elapsedMsSafe(now, lastCanLeafAnyUpdate));
+@@ -5274,6 +5611,44 @@ void loop()
+                                         canStatsDiag.last120Len);
+         const Leaf1d4CommandDecode id1d4Cmd = decodeLeaf1d4Command(canStatsDiag.last1d4CmdData,
+                                                                     canStatsDiag.last1d4CmdLen);
++    #if METASENSE_LEAF_1D4_SNIFF_RX_ENABLED
++        #if METASENSE_LEAF_1D4_RAW_SNIFF_ONLY
++        if (canStatsDiag.last1d4SniffLen >= 8U) {
++            Serial.printf("[VCM-1D4-SNIFF-RAW] n=%lu age=%lu len=%u data=%02X %02X %02X %02X %02X %02X %02X %02X\n",
++                          static_cast<unsigned long>(canStatsDiag.rx1d4SniffFrames),
++                          static_cast<unsigned long>(elapsedMsSafe(now, canStatsDiag.last1d4SniffMs)),
++                          static_cast<unsigned>(canStatsDiag.last1d4SniffLen),
++                          static_cast<unsigned>(canStatsDiag.last1d4SniffData[0]),
++                          static_cast<unsigned>(canStatsDiag.last1d4SniffData[1]),
++                          static_cast<unsigned>(canStatsDiag.last1d4SniffData[2]),
++                          static_cast<unsigned>(canStatsDiag.last1d4SniffData[3]),
++                          static_cast<unsigned>(canStatsDiag.last1d4SniffData[4]),
++                          static_cast<unsigned>(canStatsDiag.last1d4SniffData[5]),
++                          static_cast<unsigned>(canStatsDiag.last1d4SniffData[6]),
++                          static_cast<unsigned>(canStatsDiag.last1d4SniffData[7]));
++            Serial0.printf("[VCM-1D4-SNIFF-RAW] n=%lu age=%lu len=%u data=%02X %02X %02X %02X %02X %02X %02X %02X\n",
++                           static_cast<unsigned long>(canStatsDiag.rx1d4SniffFrames),
++                           static_cast<unsigned long>(elapsedMsSafe(now, canStatsDiag.last1d4SniffMs)),
++                           static_cast<unsigned>(canStatsDiag.last1d4SniffLen),
++                           static_cast<unsigned>(canStatsDiag.last1d4SniffData[0]),
++                           static_cast<unsigned>(canStatsDiag.last1d4SniffData[1]),
++                           static_cast<unsigned>(canStatsDiag.last1d4SniffData[2]),
++                           static_cast<unsigned>(canStatsDiag.last1d4SniffData[3]),
++                           static_cast<unsigned>(canStatsDiag.last1d4SniffData[4]),
++                           static_cast<unsigned>(canStatsDiag.last1d4SniffData[5]),
++                           static_cast<unsigned>(canStatsDiag.last1d4SniffData[6]),
++                           static_cast<unsigned>(canStatsDiag.last1d4SniffData[7]));
++        } else {
++            Serial.printf("[VCM-1D4-SNIFF-RAW] n=%lu age=%lu len=%u (waiting for full 8-byte frame)\n",
++                          static_cast<unsigned long>(canStatsDiag.rx1d4SniffFrames),
++                          static_cast<unsigned long>(elapsedMsSafe(now, canStatsDiag.last1d4SniffMs)),
++                          static_cast<unsigned>(canStatsDiag.last1d4SniffLen));
++            Serial0.printf("[VCM-1D4-SNIFF-RAW] n=%lu age=%lu len=%u (waiting for full 8-byte frame)\n",
++                           static_cast<unsigned long>(canStatsDiag.rx1d4SniffFrames),
++                           static_cast<unsigned long>(elapsedMsSafe(now, canStatsDiag.last1d4SniffMs)),
++                           static_cast<unsigned>(canStatsDiag.last1d4SniffLen));
++        }
++        #else
+         const Leaf1d4CommandDecode id1d4Sniff = decodeLeaf1d4Command(canStatsDiag.last1d4SniffData,
+                                                                       canStatsDiag.last1d4SniffLen);
+         if (id1d4Sniff.valid) {
+@@ -5321,6 +5696,8 @@ void loop()
+                            static_cast<unsigned long>(elapsedMsSafe(now, canStatsDiag.last1d4SniffMs)),
+                            static_cast<unsigned>(canStatsDiag.last1d4SniffLen));
+         }
++        #endif
++#endif
+         const int16_t id120Sbe01ForCmd = id120Decoded.torqueDemandSignedBe;
+         const float beCorrNow = corrValue(s_corr120Be01Torque);
+         const bool useFitModelNow = (s_corr120Be01Torque.n >= METASENSE_LEAF_120_CMD_MIN_FIT_SAMPLES);
+@@ -6165,6 +6542,7 @@ void loop()
+                            static_cast<unsigned>(clkTopMsb1D[3]),
+                            static_cast<unsigned long>(clkTopCountMsb1D[3]));
+         #endif
++        #if !METASENSE_LEAF_1D4_RAW_SNIFF_ONLY
+             const float crc1daClockFixPct = (leaf1daCrcSamples > 0U)
+                 ? (100.0f * static_cast<float>(leaf1daIdLoClockCorrectedMatches) / static_cast<float>(leaf1daCrcSamples))
+                 : 0.0f;
+@@ -6271,6 +6649,7 @@ void loop()
+                            static_cast<unsigned long>(leaf1d4IdLoTopResidueCountByClock[2]),
+                            static_cast<unsigned>(leaf1d4IdLoTopResidueByClock[3]),
+                            static_cast<unsigned long>(leaf1d4IdLoTopResidueCountByClock[3]));
++        #endif
+         #endif
+             lastCanAltDiagMs = now;
+             lastCanAlt120FramesLogged = canStatsDiag.rx120Frames;
+@@ -7047,13 +7426,44 @@ void loop()
+         }
+ 
+ #if (METASENSE_LEAF_120_TX_COMMIT_ENABLED == 0)
++        const bool hvOkPreview = tele.vcuReady;
++        const bool inverterReadyPreview = tele.leaf_invReady;
++        const bool brakePreview = (tele.mode == MetaSense::DynoMode::Brake);
++        const bool gearDrivePreview = (tele.rpmTarget > 100.0f) || tele.recording;
++        const bool autoTrapezActive = isLeaf1d4AutoTrapezEnabledInternal();
++        const float uiTorquePreview = getLeafUiTorqueDemandNmInternal();
++        const bool manualPreviewActive = fabsf(uiTorquePreview) > 0.001f;
++        const float autoTorquePreview = autoTrapezActive
++                                            ? computeKeepAliveTrapezoidNm(now, true)
++                                            : 0.0f;
++        if (!autoTrapezActive) {
++            (void)computeKeepAliveTrapezoidNm(now, false);
++        }
++        const bool previewTxActive = autoTrapezActive || manualPreviewActive;
++        const float previewTorqueNm = autoTrapezActive ? autoTorquePreview : uiTorquePreview;
++
++        // In passive mode, run both manual and auto over the same 10 ms transmit path.
++        if (previewTxActive && ((now - lastLeafTxMs) >= CAN_TX_PERIOD_MS)) {
++            const bool sentManual = MetaSense::Input::sendLeafTorqueCommand1d4(previewTorqueNm,
++                                                                                inverterReadyPreview,
++                                                                                hvOkPreview,
++                                                                                brakePreview,
++                                                                                gearDrivePreview);
++            logLeaf1d4ShadowFrame(now,
++                                  previewTorqueNm,
++                                  inverterReadyPreview,
++                                  hvOkPreview,
++                                  brakePreview,
++                                  gearDrivePreview,
++                                  sentManual);
++            lastLeafTxMs = now;
++        }
++
+         // Generate a sampled 0x1D4 frame snapshot for monitor visibility at telemetry cadence.
+         if ((now - lastLeaf1d4MonitorSampleMs) >= LEAF_1D4_MONITOR_SAMPLE_PERIOD_MS) {
+-            const bool hvOkPreview = tele.vcuReady;
+-            const bool inverterReadyPreview = tele.leaf_invReady;
+-            const bool brakePreview = (tele.mode == MetaSense::DynoMode::Brake);
+-            const bool gearDrivePreview = (tele.rpmTarget > 100.0f) || tele.recording;
+-            const float torquePreview = (safe && hvOkPreview && inverterReadyPreview) ? torqueCmd : 0.0f;
++            const float torquePreview = previewTxActive
++                                          ? previewTorqueNm
++                                          : ((safe && hvOkPreview && inverterReadyPreview) ? torqueCmd : 0.0f);
+             (void)MetaSense::Input::sendLeafTorqueCommand1d4(torquePreview,
+                                                              inverterReadyPreview,
+                                                              hvOkPreview,
+@@ -7292,6 +7702,77 @@ void loop()
+         }
+ #endif
+ 
++#if METASENSE_LEAF_1D4_KEEPALIVE_TRAPEZOID_ENABLE
++        const bool autoTrapezActive = isLeaf1d4AutoTrapezEnabledInternal();
++        const bool keepAliveCandidate = safetyOk &&
++                                        canBusReady &&
++                                        s_leafCanPartnerSeen &&
++                                        !s_leafSimFeedbackActive;
++
++        if (keepAliveCandidate) {
++            s_keepAliveLastActiveMs = now;
++        }
++
++        const bool keepAliveHold = (s_keepAliveLastActiveMs != 0U) &&
++                                   (elapsedMsSafe(now, s_keepAliveLastActiveMs) <=
++                                    METASENSE_LEAF_1D4_KEEPALIVE_TRAPEZOID_HOLD_MS);
++        const bool keepAliveActive = keepAliveCandidate || keepAliveHold;
++
++        if (autoTrapezActive && keepAliveActive) {
++            if (s_keepAliveArmMs == 0U) {
++                s_keepAliveArmMs = now;
++            }
++
++            const bool delayElapsed = elapsedMsSafe(now, s_keepAliveArmMs) >=
++                                      METASENSE_LEAF_1D4_KEEPALIVE_TRAPEZOID_START_DELAY_MS;
++            if (delayElapsed) {
++                torqueToSend = computeKeepAliveTrapezoidNm(now, true);
++            } else {
++                // Hold the positive floor so auto mode starts in the milder 011 region.
++                torqueToSend = METASENSE_LEAF_1D4_KEEPALIVE_TRAPEZOID_MIN_NM;
++            }
++        } else if (!autoTrapezActive) {
++            s_keepAliveArmMs = 0U;
++            s_keepAliveLastActiveMs = 0U;
++            (void)computeKeepAliveTrapezoidNm(now, false);
++            torqueToSend = uiTorqueDemandNm;
++        } else if (!keepAliveActive) {
++            s_keepAliveArmMs = 0U;
++            s_keepAliveLastActiveMs = 0U;
++            (void)computeKeepAliveTrapezoidNm(now, false);
++        } else {
++            torqueToSend = 0.0f;
++        }
++#endif
++
++    #if METASENSE_LEAF_120_TX_COMMIT_ENABLED == 0
++        // Keep passive 0x1D4 TX responsive in either manual or auto mode.
++        if ((now - lastLeafTxMs) >= CAN_TX_PERIOD_MS) {
++            const bool hvOkPreview = tele.vcuReady;
++            const bool inverterReadyPreview = tele.leaf_invReady;
++            const bool brakePreview = (tele.mode == MetaSense::DynoMode::Brake);
++            const bool gearDrivePreview = (tele.rpmTarget > 100.0f) || tele.recording;
++            const bool autoTrapezActive = isLeaf1d4AutoTrapezEnabledInternal();
++            const float uiTorquePreview = getLeafUiTorqueDemandNmInternal();
++            const float torquePreview = autoTrapezActive
++                          ? computeKeepAliveTrapezoidNm(now, true)
++                          : uiTorquePreview;
++            const bool sentPreview = MetaSense::Input::sendLeafTorqueCommand1d4(torquePreview,
++                                            inverterReadyPreview,
++                                            hvOkPreview,
++                                            brakePreview,
++                                            gearDrivePreview);
++            logLeaf1d4ShadowFrame(now,
++                      torquePreview,
++                      inverterReadyPreview,
++                      hvOkPreview,
++                      brakePreview,
++                      gearDrivePreview,
++                      sentPreview);
++            lastLeafTxMs = now;
++        }
++    #endif
++
+         bool skipTxForGapTest = false;
+ #if METASENSE_LEAF_TX_GAP_TEST_ENABLE
+         if (s_leafVcmState == LeafVcmBringupState::Ready) {
+diff --git a/src/Input.h b/src/Input.h
+index 17af023..2878946 100644
+--- a/src/Input.h
++++ b/src/Input.h
+@@ -40,11 +40,14 @@ namespace MetaSense::Input {
+     void updateCanStatus(bool ready, bool fault, bool warning, bool limp);
+     void setLeafUiTorqueDemandNm(float torqueNm);
+     float getLeafUiTorqueDemandNm();
++    void setLeaf1d4AutoTrapezEnabled(bool enabled);
++    bool isLeaf1d4AutoTrapezEnabled();
+     bool sendLeafTorqueCommand1d4(float torqueDemandNm,
+                                   bool inverterReadyBit,
+                                   bool hvOkBit,
+                                   bool brakeBit,
+                                   bool gearDriveBit);
++    bool sendLeafTorqueCommand1d4FinalZero();
+     void updateVcuDebug(bool simMode,
+                         bool inv12v,
+                         float hvVoltage,
+diff --git a/src/LeafCan.cpp b/src/LeafCan.cpp
+index fb46715..fd0d4d9 100644
+--- a/src/LeafCan.cpp
++++ b/src/LeafCan.cpp
+@@ -1,5 +1,6 @@
+ #include "LeafCan.h"
+ 
++#include <Arduino.h>
+ #include <math.h>
+ 
+ #ifndef METASENSE_LEAF_VARIANT_120_55A
+@@ -18,6 +19,19 @@ static inline float decodeMotorSpeed(const uint8_t *d)
+     return static_cast<float>((raw23 != 0U || raw01 == 0U) ? raw23 : raw01);
+ }
+ 
++static inline float selectRpmCandidate(float ze1Rpm, float legacyRpm)
++{
++    const bool ze1Valid = isfinite(ze1Rpm) && (fabsf(ze1Rpm) <= 20000.0f);
++    const bool legacyValid = isfinite(legacyRpm) && (fabsf(legacyRpm) <= 20000.0f);
++    if (ze1Valid) {
++        return ze1Rpm;
++    }
++    if (legacyValid) {
++        return legacyRpm;
++    }
++    return 0.0f;
++}
++
+ static inline float decodeInputVoltage(const uint8_t *d)
+ {
+     // BO_ 0x1DA INVmc
+@@ -84,7 +98,16 @@ static inline uint8_t decodeZe1Clock(const uint8_t* d)
+ static inline uint8_t decodeZe1ErrorCodes(const uint8_t* d)
+ {
+     // SG_ MG_ErrorCodes : 50|6@1+
+-    return static_cast<uint8_t>((d[6] >> 2) & 0x3FU);
++    const uint8_t b6 = d[6];
++    const uint8_t stateNoClock = static_cast<uint8_t>(b6 & 0xFCU);
++
++    // Observed benign Thunderstruck-driven states: 0x24 (+clock in bits 0..1)
++    // and occasionally 0x18 (+clock). These should not be shown as active errors.
++    if (stateNoClock == 0x24U || stateNoClock == 0x18U) {
++        return 0U;
++    }
++
++    return static_cast<uint8_t>((b6 >> 2) & 0x3FU);
+ }
+ 
+ static inline uint8_t decodeZe1Crc(const uint8_t* d)
+@@ -220,6 +243,66 @@ static inline void decodeStatus(const uint8_t *d,
+     limp = directLimp || shiftedLimp;
+ }
+ 
++static inline void decode1daStatusBits(const uint8_t* d,
++                                        uint8_t dlc,
++                                        uint8_t& statusByte,
++                                        uint8_t& statusBits,
++                                        bool& ready,
++                                        bool& fault,
++                                        bool& warning,
++                                        bool& limp)
++{
++    statusByte = 0U;
++    statusBits = 0U;
++    ready = false;
++    fault = false;
++    warning = false;
++    limp = false;
++
++#if METASENSE_LEAF_1DA_SNIFF_DECODE
++    if (dlc == 0U) {
++        return;
++    }
++
++    const uint8_t byteCount = (dlc < 8U) ? dlc : 8U;
++    for (uint8_t byteIdx = 0U; byteIdx < byteCount; ++byteIdx) {
++        const uint8_t rawByte = d[byteIdx];
++        const uint8_t lowNibble = static_cast<uint8_t>(rawByte & 0x0FU);
++        const uint8_t highNibble = static_cast<uint8_t>((rawByte >> 4U) & 0x0FU);
++
++        const uint8_t candidateBytes[2] = {lowNibble, highNibble};
++        for (uint8_t candidateIdx = 0U; candidateIdx < 2U; ++candidateIdx) {
++            const uint8_t candidateNibble = candidateBytes[candidateIdx];
++            const bool candidateIsBenign = (candidateNibble == 0x00U) || (candidateNibble == 0x08U) || (candidateNibble == 0x04U) || (candidateNibble == 0x0CU);
++            if (candidateNibble == 0U && byteIdx >= 2U) {
++                continue;
++            }
++            if (candidateIsBenign && candidateNibble == 0U) {
++                continue;
++            }
++
++            statusByte = rawByte;
++            statusBits = candidateNibble;
++            ready = (statusBits & 0x01U) != 0U;
++            fault = (statusBits & 0x02U) != 0U;
++            warning = (statusBits & 0x04U) != 0U;
++            limp = (statusBits & 0x08U) != 0U;
++            if (statusBits != 0U) {
++                return;
++            }
++        }
++    }
++
++    // Fallback to the previous byte-6 assumption when nothing else looks useful.
++    statusByte = (byteCount > 6U) ? d[6] : d[0];
++    statusBits = static_cast<uint8_t>(statusByte & 0x0FU);
++    ready = (statusBits & 0x01U) != 0U;
++    fault = (statusBits & 0x02U) != 0U;
++    warning = (statusBits & 0x04U) != 0U;
++    limp = (statusBits & 0x08U) != 0U;
++#endif
++}
++
+ static inline void decode1daLikeFrame(const uint8_t* d,
+                                       uint8_t dlc,
+                                       uint16_t& raw01Le,
+@@ -262,7 +345,7 @@ static inline void decode1daLikeFrame(const uint8_t* d,
+ 
+     const float ze1Rpm = decodeZe1OutputRevolution(d);
+     const float legacyRpm = decodeMotorSpeed(d);
+-    rpm = (fabsf(ze1Rpm) <= 20000.0f) ? ze1Rpm : legacyRpm;
++    rpm = selectRpmCandidate(ze1Rpm, legacyRpm);
+ 
+     if (dlc < 8U) {
+         return;
+@@ -306,7 +389,7 @@ void LeafCan::decodeFrame(const twai_message_t &msg,
+ 
+                 const float ze1Rpm = decodeZe1OutputRevolution(d);
+                 const float legacyRpm = decodeMotorSpeed(d);
+-                fb.rpm = (fabsf(ze1Rpm) <= 20000.0f) ? ze1Rpm : legacyRpm;
++                fb.rpm = selectRpmCandidate(ze1Rpm, legacyRpm);
+                 fb.id1da_ze1_rpm = ze1Rpm;
+                 fb.id1da_leg_rpm = legacyRpm;
+ 
+@@ -328,6 +411,32 @@ void LeafCan::decodeFrame(const twai_message_t &msg,
+                     ++fb.torque_primary_frames;
+                 }
+ 
++#if METASENSE_LEAF_1DA_SNIFF_DECODE
++                if (dlc >= 1U) {
++                    uint8_t statusByte = 0U;
++                    uint8_t statusBits = 0U;
++                    bool statusReady = false;
++                    bool statusFault = false;
++                    bool statusWarning = false;
++                    bool statusLimp = false;
++                    decode1daStatusBits(d, dlc, statusByte, statusBits, statusReady, statusFault, statusWarning, statusLimp);
++                    fb.id1da_status_byte = statusByte;
++                    fb.id1da_status_bits = statusBits;
++                    fb.id1da_status_ready = statusReady;
++                    fb.id1da_status_fault = statusFault;
++                    fb.id1da_status_warning = statusWarning;
++                    fb.id1da_status_limp = statusLimp;
++                    Serial.printf("[1DA-SNIFF] len=%u selected_byte=0x%02X status_bits=0x%02X ready=%u fault=%u warning=%u limp=%u\n",
++                                  static_cast<unsigned>(dlc),
++                                  static_cast<unsigned>(statusByte),
++                                  static_cast<unsigned>(statusBits),
++                                  statusReady ? 1U : 0U,
++                                  statusFault ? 1U : 0U,
++                                  statusWarning ? 1U : 0U,
++                                  statusLimp ? 1U : 0U);
++                }
++#endif
++
+                 float invFallback = 0.0f;
+                 float statorFallback = 0.0f;
+                 float coolantFallback = 0.0f;
+@@ -346,6 +455,25 @@ void LeafCan::decodeFrame(const twai_message_t &msg,
+             }
+             break;
+ 
++        case 0x1DB: // MotorTorque (accepted)
++            if (dlc >= 4U) {
++                fb.torque_raw01_le = static_cast<int16_t>(
++                    static_cast<uint16_t>(d[0]) | (static_cast<uint16_t>(d[1]) << 8));
++                fb.torque_raw01_be = static_cast<int16_t>(
++                    (static_cast<uint16_t>(d[0]) << 8) | static_cast<uint16_t>(d[1]));
++                fb.torque_raw23_le = static_cast<int16_t>(
++                    static_cast<uint16_t>(d[2]) | (static_cast<uint16_t>(d[3]) << 8));
++                fb.torque_raw23_be = static_cast<int16_t>(
++                    (static_cast<uint16_t>(d[2]) << 8) | static_cast<uint16_t>(d[3]));
++                fb.torque_nm = decodeMotorTorque(d);
++                fb.torque_update_ms = now_ms;
++                fb.torque_primary_update_ms = now_ms;
++                fb.last_update_ms = now_ms;
++                ++fb.torque_frames;
++                ++fb.torque_primary_frames;
++            }
++            break;
++
+         case 0x1DC: // InverterTemps (accepted)
+             if (dlc >= 3U) {
+                 decodeTemps(d, fb.inverter_temp, fb.stator_temp, fb.coolant_temp);
+@@ -451,6 +579,12 @@ void LeafCan::reset(LeafInvFeedback &fb)
+     fb.mg_clock = 0;
+     fb.mg_error_codes = 0;
+     fb.crc_1da = 0;
++    fb.id1da_status_byte = 0;
++    fb.id1da_status_bits = 0;
++    fb.id1da_status_ready = false;
++    fb.id1da_status_fault = false;
++    fb.id1da_status_warning = false;
++    fb.id1da_status_limp = false;
+     for (uint8_t i = 0U; i < 8U; ++i) fb.id1da_raw[i] = 0U;
+     fb.id1da_ze1_rpm = 0.0f;
+     fb.id1da_leg_rpm = 0.0f;

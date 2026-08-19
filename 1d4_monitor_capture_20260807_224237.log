@@ -1,0 +1,97 @@
+# capture_start 2026-08-07T22:42:37.0772017+02:00 port=COM6 baud=115200
+ESP-ROM:esp32s3-20210327
+Build:Mar 27 2021
+rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fce3808,len:0x4bc
+load:0x403c9700,len:0xbd8
+load:0x403cc700,len:0x2a0c
+entry 0x403c98d0
+[BOOT] MetaSense startup
+[BOOT] I2C ready (SDA=17, SCL=18)
+[BOOT] I2C timing: 50000 Hz, timeout=50 ms
+[BOOT] Settings loaded from storage (if available)
+[BOOT] Build profile: vcu_gpio=0, vcu_sim=0, hv_vcu_owner=0
+[BOOT] Build profile: leaf_can_rx=1, leaf_can_tx=0, can_listen_only=0, can_bitrate_kbps=500, can_tx_pin=4, can_rx_pin=5, leaf_sim_feedback=0
+[BOOT] I2C device found @ 0x2A
+[BOOT] I2C device found @ 0x67
+[BOOT] I2C device found @ 0x77
+[BOOT] I2C scan complete: 3 device(s)
+[BOOT] WiFi config:
+[BOOT]  - Mode: STA
+[BOOT]  - SSID: TP-Link_458C
+[BOOT]  - OTA hostname: dyno-controller
+[BOOT]  - OTA auth: enabled
+[Input] VCU ready source: CAN_INVERTER_STATUS (legacy_cfg_gpio=0, RB+=0)
+[HWSM][CHECK] invalid combo state=INIT RSS=1 RB-=1
+[HWSM][CHECK] invalid combo state=START RSS=1 RB-=1
+[HWSM][CHECK] invalid combo state=IDLE RSS=1 RB-=1
+[HWSM][CHECK] invalid combo state=MOTOR RSS=1 RB-=1
+[HWSM][CHECK] invalid combo state=DYNO RSS=1 RB-=1
+[Input] Ambient source ready (BME680)
+[TempHAL] MCP9600 ACK at 0x67
+[TempHAL] MCP9600 boot retries used: 2
+[TempHAL] MCP9600 EGT sensor ready at 0x67 (ID=0x40)
+[Input] EGT digital source ready (MCP9600)
+[Input] Load-cell ADC source ready (NAU7802 @ 0x2A, ldo=1, cal=1)
+[Input] I2C devices: 0x2A,0x67,0x77
+[BOOT] No factory profile found in FS
+[WiFi] DHCP mode
+[BOOT] WiFi connecting to SSID 'TP-Link_458C'
+[Input] Leaf CAN RX initialized
+[BOOT] setup complete
+[VCM-1D4-SNIFF] n=0 age=0 len=0 (waiting for full 8-byte frame)
+[VCM-1DA-CRC-OK] clockFix=0/0(0.0%)
+[VCM-1D4-CRC-STATS] frames=0 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=0/0(0.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=0/0 c0=0x00:0 c1=0x00:0 c2=0x00:0 c3=0x00:0)
+[BOOTSTATUS] vcu_mode=can_inverter_status, vcu_ready=0, rb_plus=0, ssr=0, nau_ldo=1, nau_cal=1, nau_cal_attempts=1
+[VCM] Passive RX mode active: periodic TX checklist/state machine disabled
+[CAN-EVENT] ready=1 state=1 tx_fail=1 tx_not_ready=1 recov=0 bus_off=0 status_q_fail=0 twai(rxq=0 txq=0 rx_miss=0 rx_ovr=0 arb_lost=0 bus_err=0 tec=0 rec=0)
+[HWSM] state=IDLE gate=0 completed=0 active=0 start=0 now=5466
+[WiFi] Associated to AP
+[WiFi] Got IP: 192.168.1.100
+[BOOT] WiFi connected, IP: 192.168.1.100
+[BOOT] WiFi MAC: AC:A7:04:27:D2:78
+[BOOT] Web UI: http://dyno-controller.local/
+[BOOT] OTA ready
+[BOOT] NTP sync requested
+[BOOT] Web server ready on port 80
+[VCM-1D4-SNIFF] n=192 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=2 crc=0x23 data=6E 6E 00 00 87 44 01 23
+[VCM-1DA-CRC-OK] clockFix=162/175(92.6%)
+[VCM-1D4-CRC-STATS] frames=190 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=190/190(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=190/190 c0=0xC0:44 c1=0x67:49 c2=0x0B:48 c3=0xAC:49)
+[VCM-1D4-SNIFF] n=385 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=3 crc=0xE4 data=6E 6E 00 00 C7 44 01 E4
+[VCM-1DA-CRC-OK] clockFix=339/352(96.3%)
+[VCM-1D4-CRC-STATS] frames=381 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=381/381(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=381/381 c0=0xC0:91 c1=0x67:95 c2=0x0B:96 c3=0xAC:99)
+[VCM-1D4-SNIFF] n=577 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=3 crc=0xE4 data=6E 6E 00 00 C7 44 01 E4
+[VCM-1DA-CRC-OK] clockFix=514/527(97.5%)
+[VCM-1D4-CRC-STATS] frames=572 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=572/572(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=572/572 c0=0xC0:139 c1=0x67:142 c2=0x0B:143 c3=0xAC:148)
+[VCM-1D4-SNIFF] n=762 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=0 crc=0x28 data=6E 6E 00 00 07 44 01 28
+[VCM-1DA-CRC-OK] clockFix=693/706(98.2%)
+[VCM-1D4-CRC-STATS] frames=755 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=755/755(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=755/755 c0=0xC0:188 c1=0x67:187 c2=0x0B:190 c3=0xAC:190)
+[HEARTBEAT] ts=15, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=fallback_55a, prestart_warn=0, rb_plus=1, ssr=1, torque=-0.67, egt_hot=16.5, amb=17.5, press=1020.2, rh=67.7, rho=1.216, cf=0.9898, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, rpm_raw01_le=12960, rpm_raw01_be=41010, rpm_raw23_le=88, rpm_raw23_be=22528, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[VCM-1D4-SNIFF] n=949 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=0 crc=0x28 data=6E 6E 00 00 07 44 01 28
+[VCM-1DA-CRC-OK] clockFix=872/885(98.5%)
+[VCM-1D4-CRC-STATS] frames=940 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=940/940(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=940/940 c0=0xC0:237 c1=0x67:230 c2=0x0B:239 c3=0xAC:234)
+[VCM-1D4-SNIFF] n=1141 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=1 crc=0xEF data=6E 6E 00 00 47 44 01 EF
+[VCM-1DA-CRC-OK] clockFix=1048/1061(98.8%)
+[VCM-1D4-CRC-STATS] frames=1110 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=1110/1110(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=1110/1110 c0=0xC0:280 c1=0x67:273 c2=0x0B:279 c3=0xAC:278)
+[VCM-1D4-SNIFF] n=1331 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=1 crc=0xEF data=6E 6E 00 00 47 44 01 EF
+[VCM-1DA-CRC-OK] clockFix=1224/1237(98.9%)
+[VCM-1D4-CRC-STATS] frames=1282 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=1282/1282(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=1282/1282 c0=0xC0:323 c1=0x67:313 c2=0x0B:326 c3=0xAC:320)
+# capture_end 2026-08-07T22:42:57.3313410+02:00

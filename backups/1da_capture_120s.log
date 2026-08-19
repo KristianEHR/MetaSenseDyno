@@ -1,0 +1,531 @@
+le=16547, rpm_raw01_be=41792, rpm_raw23_le=64, rpm_raw23_bESP-ROM:esp32s3-20210327
+Build:Mar 27 2021
+rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fce3808,len:0x4bc
+load:0x403c9700,len:0xbd8
+load:0x403cc700,len:0x2a0c
+entry 0x403c98d0
+[BOOT] MetaSense startup
+[BOOT] I2C ready (SDA=17, SCL=18)
+[BOOT] I2C timing: 50000 Hz, timeout=50 ms
+[BOOT] Settings loaded from storage (if available)
+[BOOT] Build profile: vcu_gpio=0, vcu_sim=0, hv_vcu_owner=0
+[BOOT] Build profile: leaf_can_rx=1, leaf_can_tx=1, can_listen_only=0, can_bitrate_kbps=500, can_tx_pin=4, can_rx_pin=5, leaf_sim_feedback=0
+[FW-ID] id=unknown hb_ms=3000
+[BOOT] I2C device found @ 0x2A
+[BOOT] I2C device found @ 0x67
+[BOOT] I2C device found @ 0x77
+[BOOT] I2C scan complete: 3 device(s)
+[BOOT] WiFi config:
+[BOOT]  - Mode: STA
+[BOOT]  - SSID: TP-Link_458C
+[BOOT]  - OTA hostname: dyno-controller
+[BOOT]  - OTA auth: enabled
+[Input] VCU ready source: CAN_INVERTER_STATUS (legacy_cfg_gpio=0, RB+=0)
+[HWSM][CHECK] invalid combo state=INIT RSS=1 RB-=1
+[HWSM][CHECK] invalid combo state=START RSS=1 RB-=1
+[HWSM][CHECK] invalid combo state=IDLE RSS=1 RB-=1
+[HWSM][CHECK] invalid combo state=MOTOR RSS=1 RB-=1
+[HWSM][CHECK] invalid combo state=DYNO RSS=1 RB-=1
+[Input] Ambient source ready (BME680)
+[TempHAL] MCP9600 ACK at 0x67
+[TempHAL] MCP9600 device at 0x67 rejected init
+[TempHAL] MCP9600 ACK at 0x67
+[TempHAL] MCP9600 boot retries used: 1
+[TempHAL] MCP9600 EGT sensor ready at 0x67 (ID=0x40)
+[Input] EGT digital source ready (MCP9600)
+[Input] Load-cell ADC source ready (NAU7802 @ 0x2A, ldo=1, cal=1)
+[Input] I2C devices: 0x2A,0x67,0x77
+[BOOT] No factory profile found in FS
+[WiFi] DHCP mode
+[BOOT] WiFi connecting to SSID 'TP-Link_458C'
+[CAN-POLL-HEART] now=5210 configured=1 ready=0
+[CAN-RX] no-frame timeout on twai_receive
+[Input] Leaf CAN RX initialized
+[BOOT] setup complete
+[VCM-1D4-SNIFF] n=0 age=0 len=0 (waiting for full 8-byte frame)
+[VCM-1DA-CRC-OK] clockFix=1/1(100.0%)
+[VCM-1D4-CRC-STATS] frames=0 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=0/0(0.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=0/0 c0=0x00:0 c1=0x00:0 c2=0x00:0 c3=0x00:0)
+[WiFi] Status transition: 0 (WL_IDLE_STATUS) -> 6 (WL_DISCONNECTED)
+[WiFi] Retry connect (status=6 WL_DISCONNECTED)
+[CAN-EVENT] ready=1 state=1 tx_total=5 tx_1d4=2 tx_11a=3 tx1d4_chg=0xFF tx11a_chg=0xFF tx1d4_b6=0x30 tx1d4_b7=0xBC tx11a_b6=0x02 tx11a_b7=0xD6 tx_fail=0 tx_not_ready=0 recov=0 bus_off=0 status_q_fail=0 twai(rxq=0 txq=0 rx_miss=0 rx_ovr=0 arb_lost=0 bus_err=0 tec=0 rec=0)
+[WiFi] Disconnected, reason: 8 — reconnecting...
+[1DA-CRC-BAD] n=1 clk=0 rx=0xE8 calc=0x7E base=0xBE res_rx=0x56 res_calc=0xC0 data=9B 40 40 00 00 00 E0 E8
+[BOOTSTATUS] vcu_mode=can_inverter_status, vcu_ready=1, rb_plus=0, ssr=0, nau_ldo=1, nau_cal=1, nau_cal_attempts=1
+[HWSM] state=IDLE gate=0 completed=0 active=0 start=0 now=5293
+[HEARTBEAT] ts=5, ssid=TP-Link_458C, wifi=6 (WL_DISCONNECTED), ip=0.0.0.0, ota=not-ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=0, ssr=0, torque=2.39, egt_hot=17.9, amb=20.0, press=1013.2, rh=50.0, rho=1.199, cf=1.0044, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=9, can_last_id=0x120, can_11a=0, can_50b=0, rpm_raw01_le=163, rpm_raw01_be=41728, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[WiFi] Associated to AP
+[WiFi] Status transition: 6 (WL_DISCONNECTED) -> 0 (WL_IDLE_STATUS)
+[WiFi] Got IP: 192.168.1.100
+[BOOT] WiFi connected, IP: 192.168.1.100
+[BOOT] WiFi MAC: AC:A7:04:27:D2:78
+[BOOT] Web UI: http://dyno-controller.local/
+[BOOT] OTA ready
+[BOOT] NTP sync requested
+[BOOT] Web server ready on port 80
+[WiFi] Status transition: 0 (WL_IDLE_STATUS) -> 3 (WL_CONNECTED)
+[CAN-POLL-HEART] now=7214 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=320 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=1 crc=0xBC data=F7 07 00 00 47 44 30 BC
+[VCM-1DA-CRC-OK] clockFix=157/160(98.1%)
+[VCM-1D4-CRC-STATS] frames=173 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=173/173(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=173/173 c0=0xC0:43 c1=0xC0:43 c2=0xC0:42 c3=0xC0:45)
+[HEARTBEAT] ts=8, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.26, egt_hot=17.8, amb=19.2, press=1014.0, rh=67.9, rho=1.202, cf=1.0021, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=627, can_last_id=0x120, can_11a=261, can_50b=0, rpm_raw01_le=163, rpm_raw01_be=41728, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-POLL-HEART] now=9223 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=651 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=0 crc=0xDC data=F7 07 00 00 07 44 30 DC
+[VCM-1DA-CRC-OK] clockFix=327/330(99.1%)
+[VCM-1D4-CRC-STATS] frames=349 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=349/349(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=349/349 c0=0xC0:80 c1=0xC0:94 c2=0xC0:80 c3=0xC0:95)
+[CAN-EVENT] ready=1 state=1 tx_total=1262 tx_1d4=822 tx_11a=440 tx1d4_chg=0x90 tx11a_chg=0xC0 tx1d4_b6=0x30 tx1d4_b7=0xBC tx11a_b6=0x03 tx11a_b7=0x6C tx_fail=0 tx_not_ready=0 recov=0 bus_off=0 status_q_fail=0 twai(rxq=0 txq=0 rx_miss=15 rx_ovr=0 arb_lost=24 bus_err=0 tec=0 rec=0)
+[CAN-POLL-HEART] now=11223 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=976 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=1 crc=0xBC data=F7 07 00 00 47 44 30 BC
+[VCM-1DA-CRC-OK] clockFix=493/496(99.4%)
+[VCM-1D4-CRC-STATS] frames=523 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=523/523(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=523/523 c0=0xC0:130 c1=0xC0:133 c2=0xC0:125 c3=0xC0:135)
+[HEARTBEAT] ts=11, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.43, egt_hot=17.8, amb=19.1, press=1014.0, rh=68.0, rho=1.202, cf=1.0020, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=1250, can_last_id=0x1DA, can_11a=519, can_50b=0, rpm_raw01_le=163, rpm_raw01_be=41728, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-POLL-HEART] now=13231 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=1307 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=0 crc=0xDC data=F7 07 00 00 07 44 30 DC
+[VCM-1DA-CRC-OK] clockFix=661/664(99.5%)
+[VCM-1D4-CRC-STATS] frames=702 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=702/702(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=702/702 c0=0xC0:186 c1=0xC0:166 c2=0xC0:180 c3=0xC0:170)
+[HEARTBEAT] ts=14, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.32, egt_hot=17.8, amb=19.1, press=1014.0, rh=68.2, rho=1.202, cf=1.0020, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=1881, can_last_id=0x1DA, can_11a=782, can_50b=0, rpm_raw01_le=16547, rpm_raw01_be=41792, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-POLL-HEART] now=15234 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=1628 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=1 crc=0xBC data=F7 07 00 00 47 44 30 BC
+[VCM-1DA-CRC-OK] clockFix=826/829(99.6%)
+[VCM-1D4-CRC-STATS] frames=880 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=880/880(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=880/880 c0=0xC0:232 c1=0xC0:209 c2=0xC0:230 c3=0xC0:209)
+[CAN-EVENT] ready=1 state=1 tx_total=2511 tx_1d4=1637 tx_11a=874 tx1d4_chg=0x00 tx11a_chg=0xC0 tx1d4_b6=0x30 tx1d4_b7=0xDC tx11a_b6=0x01 tx11a_b7=0x9D tx_fail=0 tx_not_ready=0 recov=0 bus_off=0 status_q_fail=0 twai(rxq=5 txq=0 rx_miss=23 rx_ovr=0 arb_lost=46 bus_err=0 tec=0 rec=0)
+[CAN-POLL-HEART] now=17235 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=1950 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=3 crc=0x7C data=F7 07 00 00 C7 44 30 7C
+[VCM-1DA-CRC-OK] clockFix=995/998(99.7%)
+[VCM-1D4-CRC-STATS] frames=1055 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=1055/1055(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=1055/1055 c0=0xC0:264 c1=0xC0:262 c2=0xC0:266 c3=0xC0:263)
+[HEARTBEAT] ts=17, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.43, egt_hot=17.8, amb=19.1, press=1013.9, rh=68.3, rho=1.202, cf=1.0020, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=2503, can_last_id=0x120, can_11a=1041, can_50b=0, rpm_raw01_le=163, rpm_raw01_be=41728, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-POLL-HEART] now=19254 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=2267 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=0 crc=0xDC data=F7 07 00 00 07 44 30 DC
+[VCM-1DA-CRC-OK] clockFix=1162/1165(99.7%)
+[VCM-1D4-CRC-STATS] frames=1228 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=1228/1228(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=1228/1228 c0=0xC0:308 c1=0xC0:303 c2=0xC0:313 c3=0xC0:304)
+[CAN-EVENT] ready=1 state=1 tx_total=3751 tx_1d4=2443 tx_11a=1308 tx1d4_chg=0x90 tx11a_chg=0xC0 tx1d4_b6=0x30 tx1d4_b7=0x1C tx11a_b6=0x03 tx11a_b7=0x6C tx_fail=0 tx_not_ready=0 recov=0 bus_off=0 status_q_fail=0 twai(rxq=3 txq=0 rx_miss=30 rx_ovr=0 arb_lost=70 bus_err=0 tec=0 rec=0)
+[HEARTBEAT] ts=20, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.34, egt_hot=17.8, amb=19.1, press=1014.0, rh=68.4, rho=1.202, cf=1.0019, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=3135, can_last_id=0x1DA, can_11a=1304, can_50b=0, rpm_raw01_le=163, rpm_raw01_be=41728, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-POLL-HEART] now=21262 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=2608 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=1 crc=0xBC data=F7 07 00 00 47 44 30 BC
+[VCM-1DA-CRC-OK] clockFix=1332/1335(99.8%)
+[VCM-1D4-CRC-STATS] frames=1405 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=1405/1405(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=1405/1405 c0=0xC0:345 c1=0xC0:357 c2=0xC0:351 c3=0xC0:352)
+[CAN-POLL-HEART] now=23265 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=2943 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=0 crc=0xDC data=F7 07 00 00 07 44 30 DC
+[VCM-1DA-CRC-OK] clockFix=1499/1502(99.8%)
+[VCM-1D4-CRC-STATS] frames=1583 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=1583/1583(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=1583/1583 c0=0xC0:388 c1=0xC0:405 c2=0xC0:391 c3=0xC0:399)
+[HEARTBEAT] ts=23, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.28, egt_hot=17.8, amb=19.1, press=1014.0, rh=68.5, rho=1.202, cf=1.0020, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=3760, can_last_id=0x120, can_11a=1570, can_50b=0, rpm_raw01_le=16547, rpm_raw01_be=41792, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-EVENT] ready=1 state=1 tx_total=5023 tx_1d4=3274 tx_11a=1749 tx1d4_chg=0x90 tx11a_chg=0xC0 tx1d4_b6=0x30 tx1d4_b7=0xBC tx11a_b6=0x00 tx11a_b7=0x27 tx_fail=0 tx_not_ready=0 recov=0 bus_off=0 status_q_fail=0 twai(rxq=2 txq=0 rx_miss=35 rx_ovr=0 arb_lost=90 bus_err=0 tec=0 rec=0)
+[CAN-POLL-HEART] now=25274 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=3270 age=3 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=3 crc=0x7C data=F7 07 00 00 C7 44 30 7C
+[VCM-1DA-CRC-OK] clockFix=1668/1671(99.8%)
+[VCM-1D4-CRC-STATS] frames=1757 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=1757/1757(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=1757/1757 c0=0xC0:440 c1=0xC0:442 c2=0xC0:441 c3=0xC0:434)
+[HEARTBEAT] ts=26, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.26, egt_hot=17.8, amb=19.1, press=1014.0, rh=68.5, rho=1.202, cf=1.0020, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=4393, can_last_id=0x1DA, can_11a=1831, can_50b=0, rpm_raw01_le=16547, rpm_raw01_be=41792, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-POLL-HEART] now=27279 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=3591 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=0 crc=0xDC data=F7 07 00 00 07 44 30 DC
+[VCM-1DA-CRC-OK] clockFix=1836/1839(99.8%)
+[VCM-1D4-CRC-STATS] frames=1933 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=1933/1933(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=1933/1933 c0=0xC0:480 c1=0xC0:490 c2=0xC0:481 c3=0xC0:482)
+[CAN-POLL-HEART] now=29286 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=3929 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=2 crc=0x1C data=F7 07 00 00 87 44 30 1C
+[VCM-1DA-CRC-OK] clockFix=2004/2007(99.9%)
+[VCM-1D4-CRC-STATS] frames=2112 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=2112/2112(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=2112/2112 c0=0xC0:525 c1=0xC0:535 c2=0xC0:521 c3=0xC0:531)
+[HEARTBEAT] ts=29, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.36, egt_hot=17.8, amb=19.1, press=1014.0, rh=68.5, rho=1.202, cf=1.0020, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=5017, can_last_id=0x120, can_11a=2099, can_50b=0, rpm_raw01_le=163, rpm_raw01_be=41728, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-EVENT] ready=1 state=1 tx_total=6291 tx_1d4=4100 tx_11a=2191 tx1d4_chg=0x90 tx11a_chg=0xC0 tx1d4_b6=0x30 tx1d4_b7=0x7C tx11a_b6=0x02 tx11a_b7=0xD6 tx_fail=0 tx_not_ready=0 recov=0 bus_off=0 status_q_fail=0 twai(rxq=2 txq=0 rx_miss=44 rx_ovr=0 arb_lost=107 bus_err=0 tec=0 rec=0)
+[CAN-POLL-HEART] now=31295 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=4271 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=0 crc=0xDC data=F7 07 00 00 07 44 30 DC
+[VCM-1DA-CRC-OK] clockFix=2169/2172(99.9%)
+[VCM-1D4-CRC-STATS] frames=2288 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=2288/2288(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=2288/2288 c0=0xC0:565 c1=0xC0:587 c2=0xC0:562 c3=0xC0:574)
+[HEARTBEAT] ts=32, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.35, egt_hot=17.8, amb=19.1, press=1014.0, rh=68.6, rho=1.202, cf=1.0020, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=5648, can_last_id=0x120, can_11a=2370, can_50b=0, rpm_raw01_le=163, rpm_raw01_be=41728, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-POLL-HEART] now=33300 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=4613 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=2 crc=0x1C data=F7 07 00 00 87 44 30 1C
+[VCM-1DA-CRC-OK] clockFix=2334/2337(99.9%)
+[VCM-1D4-CRC-STATS] frames=2465 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=2465/2465(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=2465/2465 c0=0xC0:600 c1=0xC0:644 c2=0xC0:592 c3=0xC0:629)
+[CAN-EVENT] ready=1 state=1 tx_total=7566 tx_1d4=4931 tx_11a=2635 tx1d4_chg=0x90 tx11a_chg=0xC0 tx1d4_b6=0x30 tx1d4_b7=0x1C tx11a_b6=0x02 tx11a_b7=0xD6 tx_fail=0 tx_not_ready=0 recov=0 bus_off=0 status_q_fail=0 twai(rxq=2 txq=0 rx_miss=48 rx_ovr=0 arb_lost=138 bus_err=0 tec=0 rec=0)
+[CAN-POLL-HEART] now=35311 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=4931 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=0 crc=0xDC data=F7 07 00 00 07 44 30 DC
+[VCM-1DA-CRC-OK] clockFix=2500/2503(99.9%)
+[VCM-1D4-CRC-STATS] frames=2640 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=2640/2640(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=2640/2640 c0=0xC0:646 c1=0xC0:685 c2=0xC0:638 c3=0xC0:671)
+[HEARTBEAT] ts=35, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.26, egt_hot=17.8, amb=19.1, press=1014.0, rh=68.6, rho=1.202, cf=1.0020, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=6275, can_last_id=0x120, can_11a=2634, can_50b=0, rpm_raw01_le=163, rpm_raw01_be=41728, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-POLL-HEART] now=37317 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=5258 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=3 crc=0x7C data=F7 07 00 00 C7 44 30 7C
+[VCM-1DA-CRC-OK] clockFix=2667/2670(99.9%)
+[VCM-1D4-CRC-STATS] frames=2816 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=2816/2816(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=2816/2816 c0=0xC0:683 c1=0xC0:736 c2=0xC0:674 c3=0xC0:723)
+[HEARTBEAT] ts=38, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.41, egt_hot=17.8, amb=19.1, press=1014.0, rh=68.6, rho=1.202, cf=1.0020, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=6906, can_last_id=0x120, can_11a=2894, can_50b=0, rpm_raw01_le=16547, rpm_raw01_be=41792, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-POLL-HEART] now=39322 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=5588 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=1 crc=0xBC data=F7 07 00 00 47 44 30 BC
+[VCM-1DA-CRC-OK] clockFix=2837/2840(99.9%)
+[VCM-1D4-CRC-STATS] frames=2996 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=2996/2996(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=2996/2996 c0=0xC0:734 c1=0xC0:778 c2=0xC0:720 c3=0xC0:764)
+[CAN-EVENT] ready=1 state=1 tx_total=8812 tx_1d4=5740 tx_11a=3072 tx1d4_chg=0x90 tx11a_chg=0xC0 tx1d4_b6=0x30 tx1d4_b7=0x7C tx11a_b6=0x03 tx11a_b7=0x6C tx_fail=0 tx_not_ready=0 recov=0 bus_off=0 status_q_fail=0 twai(rxq=2 txq=0 rx_miss=59 rx_ovr=0 arb_lost=164 bus_err=0 tec=0 rec=0)
+[CAN-POLL-HEART] now=41326 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=5904 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=1 crc=0xBC data=F7 07 00 00 47 44 30 BC
+[VCM-1DA-CRC-OK] clockFix=3006/3009(99.9%)
+[VCM-1D4-CRC-STATS] frames=3170 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=3170/3170(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=3170/3170 c0=0xC0:776 c1=0xC0:822 c2=0xC0:763 c3=0xC0:809)
+[HEARTBEAT] ts=41, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.40, egt_hot=17.5, amb=19.1, press=1014.0, rh=68.6, rho=1.202, cf=1.0021, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=7526, can_last_id=0x120, can_11a=3160, can_50b=0, rpm_raw01_le=163, rpm_raw01_be=41728, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-POLL-HEART] now=43331 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=6241 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=2 crc=0x1C data=F7 07 00 00 87 44 30 1C
+[VCM-1DA-CRC-OK] clockFix=3176/3179(99.9%)
+[VCM-1D4-CRC-STATS] frames=3350 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=3350/3350(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=3350/3350 c0=0xC0:814 c1=0xC0:874 c2=0xC0:801 c3=0xC0:861)
+[VCM-SIMPLE] mode=ZERO fb1da=0.00Nm ageMs(tq=0)
+[HEARTBEAT] ts=44, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.32, egt_hot=17.4, amb=19.1, press=1014.0, rh=68.6, rho=1.202, cf=1.0021, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=8158, can_last_id=0x1DA, can_11a=3425, can_50b=0, rpm_raw01_le=163, rpm_raw01_be=41728, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-EVENT] ready=1 state=1 tx_total=10083 tx_1d4=6571 tx_11a=3512 tx1d4_chg=0x90 tx11a_chg=0xC0 tx1d4_b6=0x30 tx1d4_b7=0x1C tx11a_b6=0x03 tx11a_b7=0x6C tx_fail=0 tx_not_ready=0 recov=0 bus_off=0 status_q_fail=0 twai(rxq=4 txq=0 rx_miss=66 rx_ovr=0 arb_lost=189 bus_err=0 tec=0 rec=0)
+[CAN-POLL-HEART] now=45337 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=6573 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=2 crc=0x1C data=F7 07 00 00 87 44 30 1C
+[VCM-1DA-CRC-OK] clockFix=3345/3348(99.9%)
+[VCM-1D4-CRC-STATS] frames=3529 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=3529/3529(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=3529/3529 c0=0xC0:863 c1=0xC0:916 c2=0xC0:849 c3=0xC0:901)
+[CAN-POLL-HEART] now=47337 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=6909 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=2 crc=0x1C data=F7 07 00 00 87 44 30 1C
+[VCM-1DA-CRC-OK] clockFix=3514/3517(99.9%)
+[VCM-1D4-CRC-STATS] frames=3707 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=3707/3707(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=3707/3707 c0=0xC0:908 c1=0xC0:960 c2=0xC0:895 c3=0xC0:944)
+[HEARTBEAT] ts=47, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.24, egt_hot=17.4, amb=19.2, press=1014.0, rh=68.6, rho=1.202, cf=1.0020, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=8787, can_last_id=0x120, can_11a=3693, can_50b=0, rpm_raw01_le=16547, rpm_raw01_be=41792, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-POLL-HEART] now=49342 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=7222 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=3 crc=0x7C data=F7 07 00 00 C7 44 30 7C
+[VCM-1DA-CRC-OK] clockFix=3676/3679(99.9%)
+[VCM-1D4-CRC-STATS] frames=3881 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=3881/3881(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=3881/3881 c0=0xC0:935 c1=0xC0:1022 c2=0xC0:922 c3=0xC0:1002)
+[CAN-EVENT] ready=1 state=1 tx_total=11337 tx_1d4=7383 tx_11a=3954 tx1d4_chg=0x90 tx11a_chg=0xC0 tx1d4_b6=0x30 tx1d4_b7=0x1C tx11a_b6=0x01 tx11a_b7=0x9D tx_fail=0 tx_not_ready=0 recov=0 bus_off=0 status_q_fail=0 twai(rxq=0 txq=0 rx_miss=71 rx_ovr=0 arb_lost=207 bus_err=0 tec=0 rec=0)
+[HEARTBEAT] ts=50, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.21, egt_hot=17.4, amb=19.2, press=1014.4, rh=68.5, rho=1.202, cf=1.0018, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=9417, can_last_id=0x1DA, can_11a=3956, can_50b=0, rpm_raw01_le=16547, rpm_raw01_be=41792, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-POLL-HEART] now=51346 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=7547 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=0 crc=0xDC data=F7 07 00 00 07 44 30 DC
+[VCM-1DA-CRC-OK] clockFix=3832/3835(99.9%)
+[VCM-1D4-CRC-STATS] frames=4050 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=4050/4050(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=4050/4050 c0=0xC0:986 c1=0xC0:1063 c2=0xC0:969 c3=0xC0:1032)
+[CAN-POLL-HEART] now=53353 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=7870 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=3 crc=0x7C data=F7 07 00 00 C7 44 30 7C
+[VCM-1DA-CRC-OK] clockFix=3998/4001(99.9%)
+[VCM-1D4-CRC-STATS] frames=4220 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=4220/4220(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=4220/4220 c0=0xC0:1032 c1=0xC0:1103 c2=0xC0:1011 c3=0xC0:1074)
+[HEARTBEAT] ts=53, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.34, egt_hot=17.2, amb=19.2, press=1014.0, rh=68.5, rho=1.202, cf=1.0021, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=10040, can_last_id=0x120, can_11a=4218, can_50b=0, rpm_raw01_le=16547, rpm_raw01_be=41792, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-EVENT] ready=1 state=1 tx_total=12557 tx_1d4=8173 tx_11a=4384 tx1d4_chg=0x90 tx11a_chg=0xC0 tx1d4_b6=0x30 tx1d4_b7=0xDC tx11a_b6=0x03 tx11a_b7=0x6C tx_fail=0 tx_not_ready=0 recov=0 bus_off=0 status_q_fail=0 twai(rxq=2 txq=0 rx_miss=84 rx_ovr=0 arb_lost=219 bus_err=0 tec=0 rec=0)
+[CAN-POLL-HEART] now=55357 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=8176 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=1 crc=0xBC data=F7 07 00 00 47 44 30 BC
+[VCM-1DA-CRC-OK] clockFix=4158/4161(99.9%)
+[VCM-1D4-CRC-STATS] frames=4390 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=4390/4390(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=4390/4390 c0=0xC0:1070 c1=0xC0:1147 c2=0xC0:1050 c3=0xC0:1123)
+[HEARTBEAT] ts=56, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.43, egt_hot=17.1, amb=19.2, press=1013.9, rh=68.5, rho=1.201, cf=1.0022, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=10668, can_last_id=0x1DA, can_11a=4476, can_50b=0, rpm_raw01_le=16547, rpm_raw01_be=41792, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-POLL-HEART] now=57375 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=8504 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=1 crc=0xBC data=F7 07 00 00 47 44 30 BC
+[VCM-1DA-CRC-OK] clockFix=4316/4319(99.9%)
+[VCM-1D4-CRC-STATS] frames=4566 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=4566/4566(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=4566/4566 c0=0xC0:1109 c1=0xC0:1199 c2=0xC0:1089 c3=0xC0:1169)
+[CAN-POLL-HEART] now=59386 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=8823 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=0 crc=0xDC data=F7 07 00 00 07 44 30 DC
+[VCM-1DA-CRC-OK] clockFix=4478/4481(99.9%)
+[VCM-1D4-CRC-STATS] frames=4742 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=4742/4742(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=4742/4742 c0=0xC0:1151 c1=0xC0:1247 c2=0xC0:1132 c3=0xC0:1212)
+[HEARTBEAT] ts=59, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.26, egt_hot=17.1, amb=19.2, press=1014.4, rh=68.5, rho=1.202, cf=1.0016, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=11293, can_last_id=0x120, can_11a=4740, can_50b=0, rpm_raw01_le=163, rpm_raw01_be=41728, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-EVENT] ready=1 state=1 tx_total=13804 tx_1d4=8977 tx_11a=4827 tx1d4_chg=0x90 tx11a_chg=0x00 tx1d4_b6=0x30 tx1d4_b7=0xDC tx11a_b6=0x02 tx11a_b7=0xD6 tx_fail=0 tx_not_ready=0 recov=0 bus_off=0 status_q_fail=0 twai(rxq=2 txq=0 rx_miss=90 rx_ovr=0 arb_lost=238 bus_err=0 tec=0 rec=0)
+[CAN-POLL-HEART] now=61401 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=9158 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=3 crc=0x7C data=F7 07 00 00 C7 44 30 7C
+[VCM-1DA-CRC-OK] clockFix=4636/4639(99.9%)
+[VCM-1D4-CRC-STATS] frames=4916 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=4916/4916(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=4916/4916 c0=0xC0:1196 c1=0xC0:1290 c2=0xC0:1174 c3=0xC0:1256)
+[HEARTBEAT] ts=62, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.34, egt_hot=17.1, amb=19.2, press=1013.9, rh=68.5, rho=1.201, cf=1.0022, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=11921, can_last_id=0x120, can_11a=5015, can_50b=0, rpm_raw01_le=16547, rpm_raw01_be=41792, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-POLL-HEART] now=63401 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=9471 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=0 crc=0xDC data=F7 07 00 00 07 44 30 DC
+[VCM-1DA-CRC-OK] clockFix=4793/4796(99.9%)
+[VCM-1D4-CRC-STATS] frames=5087 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=5087/5087(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=5087/5087 c0=0xC0:1235 c1=0xC0:1331 c2=0xC0:1222 c3=0xC0:1299)
+[CAN-EVENT] ready=1 state=1 tx_total=15071 tx_1d4=9796 tx_11a=5276 tx1d4_chg=0x90 tx11a_chg=0xC0 tx1d4_b6=0x30 tx1d4_b7=0x7C tx11a_b6=0x03 tx11a_b7=0x6C tx_fail=0 tx_not_ready=0 recov=0 bus_off=0 status_q_fail=0 twai(rxq=2 txq=0 rx_miss=100 rx_ovr=0 arb_lost=249 bus_err=0 tec=0 rec=0)
+[CAN-POLL-HEART] now=65407 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=9807 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=0 crc=0xDC data=F7 07 00 00 07 44 30 DC
+[VCM-1DA-CRC-OK] clockFix=4958/4961(99.9%)
+[VCM-1D4-CRC-STATS] frames=5262 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=5262/5262(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=5262/5262 c0=0xC0:1286 c1=0xC0:1368 c2=0xC0:1274 c3=0xC0:1334)
+[HEARTBEAT] ts=65, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.32, egt_hot=17.0, amb=19.2, press=1014.0, rh=68.5, rho=1.202, cf=1.0021, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=12544, can_last_id=0x120, can_11a=5280, can_50b=0, rpm_raw01_le=16547, rpm_raw01_be=41792, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-POLL-HEART] now=67416 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=10126 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=3 crc=0x7C data=F7 07 00 00 C7 44 30 7C
+[VCM-1DA-CRC-OK] clockFix=5118/5121(99.9%)
+[VCM-1D4-CRC-STATS] frames=5434 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=5434/5434(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=5434/5434 c0=0xC0:1325 c1=0xC0:1406 c2=0xC0:1321 c3=0xC0:1382)
+[HEARTBEAT] ts=68, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.23, egt_hot=17.0, amb=19.2, press=1014.0, rh=68.5, rho=1.202, cf=1.0021, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=13174, can_last_id=0x120, can_11a=5541, can_50b=0, rpm_raw01_le=163, rpm_raw01_be=41728, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-POLL-HEART] now=69417 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=10448 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=1 crc=0xBC data=F7 07 00 00 47 44 30 BC
+[VCM-1DA-CRC-OK] clockFix=5288/5291(99.9%)
+[VCM-1D4-CRC-STATS] frames=5607 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=5607/5607(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=5607/5607 c0=0xC0:1375 c1=0xC0:1440 c2=0xC0:1370 c3=0xC0:1422)
+[CAN-EVENT] ready=1 state=1 tx_total=16295 tx_1d4=10591 tx_11a=5705 tx1d4_chg=0x90 tx11a_chg=0xC0 tx1d4_b6=0x30 tx1d4_b7=0x1C tx11a_b6=0x00 tx11a_b7=0x27 tx_fail=0 tx_not_ready=0 recov=0 bus_off=0 status_q_fail=0 twai(rxq=2 txq=0 rx_miss=110 rx_ovr=0 arb_lost=271 bus_err=0 tec=0 rec=0)
+[CAN-POLL-HEART] now=71420 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=10760 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=1 crc=0xBC data=F7 07 00 00 47 44 30 BC
+[VCM-1DA-CRC-OK] clockFix=5440/5443(99.9%)
+[VCM-1D4-CRC-STATS] frames=5773 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=5773/5773(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=5773/5773 c0=0xC0:1417 c1=0xC0:1484 c2=0xC0:1407 c3=0xC0:1465)
+[HEARTBEAT] ts=71, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.51, egt_hot=17.0, amb=19.2, press=1014.0, rh=68.5, rho=1.202, cf=1.0021, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=13796, can_last_id=0x120, can_11a=5799, can_50b=0, rpm_raw01_le=16547, rpm_raw01_be=41792, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-POLL-HEART] now=73426 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=11090 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=3 crc=0x7C data=F7 07 00 00 C7 44 30 7C
+[VCM-1DA-CRC-OK] clockFix=5606/5609(99.9%)
+[VCM-1D4-CRC-STATS] frames=5948 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=5948/5948(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=5948/5948 c0=0xC0:1462 c1=0xC0:1529 c2=0xC0:1447 c3=0xC0:1510)
+[HEARTBEAT] ts=74, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.46, egt_hot=17.0, amb=19.2, press=1014.4, rh=68.5, rho=1.202, cf=1.0017, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=14425, can_last_id=0x120, can_11a=6067, can_50b=0, rpm_raw01_le=16547, rpm_raw01_be=41792, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-EVENT] ready=1 state=1 tx_total=17568 tx_1d4=11418 tx_11a=6151 tx1d4_chg=0x90 tx11a_chg=0xC0 tx1d4_b6=0x30 tx1d4_b7=0xBC tx11a_b6=0x02 tx11a_b7=0xD6 tx_fail=0 tx_not_ready=0 recov=0 bus_off=0 status_q_fail=0 twai(rxq=0 txq=0 rx_miss=119 rx_ovr=0 arb_lost=295 bus_err=0 tec=0 rec=0)
+[CAN-POLL-HEART] now=75430 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=11429 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=2 crc=0x1C data=F7 07 00 00 87 44 30 1C
+[VCM-1DA-CRC-OK] clockFix=5766/5769(99.9%)
+[VCM-1D4-CRC-STATS] frames=6121 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=6121/6121(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=6121/6121 c0=0xC0:1508 c1=0xC0:1572 c2=0xC0:1491 c3=0xC0:1550)
+[CAN-POLL-HEART] now=77435 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=11762 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=3 crc=0x7C data=F7 07 00 00 C7 44 30 7C
+[VCM-1DA-CRC-OK] clockFix=5930/5933(99.9%)
+[VCM-1D4-CRC-STATS] frames=6289 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=6289/6289(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=6289/6289 c0=0xC0:1551 c1=0xC0:1609 c2=0xC0:1540 c3=0xC0:1589)
+[HEARTBEAT] ts=77, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.39, egt_hot=17.0, amb=19.2, press=1014.0, rh=68.4, rho=1.202, cf=1.0021, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=15042, can_last_id=0x120, can_11a=6336, can_50b=0, rpm_raw01_le=163, rpm_raw01_be=41728, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-POLL-HEART] now=79462 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=12091 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=0 crc=0xDC data=F7 07 00 00 07 44 30 DC
+[VCM-1DA-CRC-OK] clockFix=6099/6102(100.0%)
+[VCM-1D4-CRC-STATS] frames=6461 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=6461/6461(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=6461/6461 c0=0xC0:1590 c1=0xC0:1655 c2=0xC0:1577 c3=0xC0:1639)
+[CAN-EVENT] ready=1 state=1 tx_total=18844 tx_1d4=12247 tx_11a=6598 tx1d4_chg=0x90 tx11a_chg=0xC0 tx1d4_b6=0x30 tx1d4_b7=0x1C tx11a_b6=0x01 tx11a_b7=0x9D tx_fail=0 tx_not_ready=0 recov=0 bus_off=0 status_q_fail=0 twai(rxq=2 txq=0 rx_miss=141 rx_ovr=0 arb_lost=309 bus_err=0 tec=0 rec=0)
+[HEARTBEAT] ts=80, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.29, egt_hot=17.0, amb=19.2, press=1014.0, rh=68.5, rho=1.202, cf=1.0021, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=15667, can_last_id=0x120, can_11a=6608, can_50b=0, rpm_raw01_le=163, rpm_raw01_be=41728, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-POLL-HEART] now=81470 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=12443 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=0 crc=0xDC data=F7 07 00 00 07 44 30 DC
+[VCM-1DA-CRC-OK] clockFix=6267/6270(100.0%)
+[VCM-1D4-CRC-STATS] frames=6636 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=6636/6636(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=6636/6636 c0=0xC0:1631 c1=0xC0:1704 c2=0xC0:1612 c3=0xC0:1689)
+[CAN-POLL-HEART] now=83485 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[HEARTBEAT] ts=83, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.25, egt_hot=17.0, amb=19.2, press=1013.9, rh=68.5, rho=1.201, cf=1.0022, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=16293, can_last_id=0x120, can_11a=6872, can_50b=0, rpm_raw01_le=163, rpm_raw01_be=41728, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[VCM-1D4-SNIFF] n=12766 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=3 crc=0x7C data=F7 07 00 00 C7 44 30 7C
+[VCM-1DA-CRC-OK] clockFix=6423/6426(100.0%)
+[VCM-1D4-CRC-STATS] frames=6810 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=6810/6810(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=6810/6810 c0=0xC0:1668 c1=0xC0:1751 c2=0xC0:1655 c3=0xC0:1736)
+[VCM-SIMPLE] mode=ZERO fb1da=0.00Nm ageMs(tq=0)
+[CAN-EVENT] ready=1 state=1 tx_total=20131 tx_1d4=13085 tx_11a=7047 tx1d4_chg=0x90 tx11a_chg=0x00 tx1d4_b6=0x30 tx1d4_b7=0xDC tx11a_b6=0x02 tx11a_b7=0xD6 tx_fail=0 tx_not_ready=0 recov=0 bus_off=0 status_q_fail=0 twai(rxq=4 txq=0 rx_miss=162 rx_ovr=0 arb_lost=332 bus_err=0 tec=0 rec=0)
+[CAN-POLL-HEART] now=85494 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=13104 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=1 crc=0xBC data=F7 07 00 00 47 44 30 BC
+[VCM-1DA-CRC-OK] clockFix=6586/6589(100.0%)
+[VCM-1D4-CRC-STATS] frames=6982 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=6982/6982(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=6982/6982 c0=0xC0:1711 c1=0xC0:1797 c2=0xC0:1697 c3=0xC0:1777)
+[HEARTBEAT] ts=86, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.45, egt_hot=17.0, amb=19.2, press=1014.0, rh=68.5, rho=1.201, cf=1.0022, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=16907, can_last_id=0x120, can_11a=7143, can_50b=0, rpm_raw01_le=16547, rpm_raw01_be=41792, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-POLL-HEART] now=87504 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=13438 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=3 crc=0x7C data=F7 07 00 00 C7 44 30 7C
+[VCM-1DA-CRC-OK] clockFix=6748/6751(100.0%)
+[VCM-1D4-CRC-STATS] frames=7160 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=7160/7160(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=7160/7160 c0=0xC0:1753 c1=0xC0:1846 c2=0xC0:1735 c3=0xC0:1826)
+[CAN-POLL-HEART] now=89511 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=13760 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=1 crc=0xBC data=F7 07 00 00 47 44 30 BC
+[VCM-1DA-CRC-OK] clockFix=6909/6912(100.0%)
+[HEARTBEAT] ts=89, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.33, egt_hot=17.0, amb=19.2, press=1014.0, rh=68.5, rho=1.202, cf=1.0021, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=17526, can_last_id=0x120, can_11a=7410, can_50b=0, rpm_raw01_le=163, rpm_raw01_be=41728, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[VCM-1D4-CRC-STATS] frames=7333 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=7333/7333(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=7333/7333 c0=0xC0:1792 c1=0xC0:1892 c2=0xC0:1776 c3=0xC0:1873)
+[CAN-EVENT] ready=1 state=1 tx_total=21396 tx_1d4=13904 tx_11a=7493 tx1d4_chg=0x90 tx11a_chg=0xC0 tx1d4_b6=0x30 tx1d4_b7=0x7C tx11a_b6=0x00 tx11a_b7=0x27 tx_fail=0 tx_not_ready=0 recov=0 bus_off=0 status_q_fail=0 twai(rxq=4 txq=0 rx_miss=194 rx_ovr=0 arb_lost=369 bus_err=0 tec=0 rec=0)
+[CAN-POLL-HEART] now=91512 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=14075 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=0 crc=0xDC data=F7 07 00 00 07 44 30 DC
+[VCM-1DA-CRC-OK] clockFix=7066/7069(100.0%)
+[VCM-1D4-CRC-STATS] frames=7498 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=7498/7498(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=7498/7498 c0=0xC0:1831 c1=0xC0:1938 c2=0xC0:1816 c3=0xC0:1913)
+[HEARTBEAT] ts=92, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.35, egt_hot=17.0, amb=19.2, press=1014.0, rh=68.5, rho=1.202, cf=1.0021, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=18137, can_last_id=0x120, can_11a=7673, can_50b=0, rpm_raw01_le=163, rpm_raw01_be=41728, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-POLL-HEART] now=93512 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=14400 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=1 crc=0xBC data=F7 07 00 00 47 44 30 BC
+[VCM-1DA-CRC-OK] clockFix=7232/7235(100.0%)
+[VCM-1D4-CRC-STATS] frames=7674 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=7674/7674(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=7674/7674 c0=0xC0:1881 c1=0xC0:1975 c2=0xC0:1859 c3=0xC0:1959)
+[CAN-EVENT] ready=1 state=1 tx_total=22620 tx_1d4=14696 tx_11a=7925 tx1d4_chg=0x90 tx11a_chg=0xC0 tx1d4_b6=0x30 tx1d4_b7=0x7C tx11a_b6=0x00 tx11a_b7=0x27 tx_fail=0 tx_not_ready=0 recov=0 bus_off=0 status_q_fail=0 twai(rxq=2 txq=0 rx_miss=205 rx_ovr=0 arb_lost=395 bus_err=0 tec=0 rec=0)
+[CAN-POLL-HEART] now=95519 configured=1 ready=1
+[CAN-RX] no-frame timeout on twai_receive
+[VCM-1D4-SNIFF] n=14721 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=2 crc=0x1C data=F7 07 00 00 87 44 30 1C
+[VCM-1DA-CRC-OK] clockFix=7389/7392(100.0%)
+[VCM-1D4-CRC-STATS] frames=7846 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=7846/7846(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=7846/7846 c0=0xC0:1918 c1=0xC0:2022 c2=0xC0:1900 c3=0xC0:2006)
+[HEARTBEAT] ts=95, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.36, egt_hot=17.6, amb=19.2, press=1014.0, rh=68.5, rho=1.202, cf=1.0021, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=18759, can_last_id=0x120, can_11a=7937, can_50b=0, rpm_raw01_le=163, rpm_raw01_be=41728, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-RX] no-frame timeout on twai_receive
+[CAN-POLL-HEART] now=97529 configured=1 ready=1
+[VCM-1D4-SNIFF] n=15045 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=2 crc=0x1C data=F7 07 00 00 87 44 30 1C
+[VCM-1DA-CRC-OK] clockFix=7508/7554(99.4%)
+[VCM-1D4-CRC-STATS] frames=8018 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=8018/8018(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=8018/8018 c0=0xC0:1960 c1=0xC0:2066 c2=0xC0:1943 c3=0xC0:2049)
+[HEARTBEAT] ts=98, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.34, egt_hot=17.6, amb=19.2, press=1014.1, rh=68.5, rho=1.202, cf=1.0020, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=19389, can_last_id=0x120, can_11a=8198, can_50b=0, rpm_raw01_le=163, rpm_raw01_be=41728, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-RX] no-frame timeout on twai_receive
+[CAN-POLL-HEART] now=99536 configured=1 ready=1
+[VCM-1D4-SNIFF] n=15375 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=0 crc=0xDC data=F7 07 00 00 07 44 30 DC
+[VCM-1DA-CRC-OK] clockFix=7670/7716(99.4%)
+[VCM-1D4-CRC-STATS] frames=8194 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=8194/8194(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=8194/8194 c0=0xC0:1998 c1=0xC0:2121 c2=0xC0:1976 c3=0xC0:2099)
+[CAN-EVENT] ready=1 state=1 tx_total=23855 tx_1d4=15500 tx_11a=8356 tx1d4_chg=0x90 tx11a_chg=0xC0 tx1d4_b6=0x30 tx1d4_b7=0x7C tx11a_b6=0x03 tx11a_b7=0x6C tx_fail=0 tx_not_ready=0 recov=0 bus_off=0 status_q_fail=0 twai(rxq=2 txq=0 rx_miss=217 rx_ovr=0 arb_lost=438 bus_err=0 tec=0 rec=0)
+[CAN-RX] no-frame timeout on twai_receive
+[CAN-POLL-HEART] now=101538 configured=1 ready=1
+[VCM-1D4-SNIFF] n=15696 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=1 crc=0xBC data=F7 07 00 00 47 44 30 BC
+[VCM-1DA-CRC-OK] clockFix=7831/7877(99.4%)
+[VCM-1D4-CRC-STATS] frames=8364 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=8364/8364(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=8364/8364 c0=0xC0:2048 c1=0xC0:2155 c2=0xC0:2023 c3=0xC0:2138)
+[HEARTBEAT] ts=101, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.28, egt_hot=17.8, amb=19.2, press=1014.5, rh=68.5, rho=1.202, cf=1.0016, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=20013, can_last_id=0x1DA, can_11a=8460, can_50b=0, rpm_raw01_le=163, rpm_raw01_be=41728, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-RX] no-frame timeout on twai_receive
+[CAN-POLL-HEART] now=103542 configured=1 ready=1
+[VCM-1D4-SNIFF] n=16032 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=1 crc=0xBC data=F7 07 00 00 47 44 30 BC
+[VCM-1DA-CRC-OK] clockFix=7994/8040(99.4%)
+[VCM-1D4-CRC-STATS] frames=8537 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=8537/8537(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=8537/8537 c0=0xC0:2098 c1=0xC0:2191 c2=0xC0:2075 c3=0xC0:2173)
+[HEARTBEAT] ts=104, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.45, egt_hot=17.7, amb=19.2, press=1014.5, rh=68.5, rho=1.202, cf=1.0016, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=20642, can_last_id=0x120, can_11a=8729, can_50b=0, rpm_raw01_le=16547, rpm_raw01_be=41792, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-EVENT] ready=1 state=1 tx_total=25125 tx_1d4=16321 tx_11a=8805 tx1d4_chg=0x90 tx11a_chg=0xC0 tx1d4_b6=0x30 tx1d4_b7=0xDC tx11a_b6=0x00 tx11a_b7=0x27 tx_fail=0 tx_not_ready=0 recov=0 bus_off=0 status_q_fail=0 twai(rxq=3 txq=0 rx_miss=227 rx_ovr=0 arb_lost=491 bus_err=0 tec=0 rec=0)
+[CAN-RX] no-frame timeout on twai_receive
+[CAN-POLL-HEART] now=105548 configured=1 ready=1
+[VCM-1D4-SNIFF] n=16347 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=0 crc=0xDC data=F7 07 00 00 07 44 30 DC
+[VCM-1DA-CRC-OK] clockFix=8150/8196(99.4%)
+[VCM-1D4-CRC-STATS] frames=8709 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=8709/8709(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=8709/8709 c0=0xC0:2141 c1=0xC0:2233 c2=0xC0:2114 c3=0xC0:2221)
+[CAN-RX] no-frame timeout on twai_receive
+[CAN-POLL-HEART] now=107551 configured=1 ready=1
+[VCM-1D4-SNIFF] n=16694 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=3 crc=0x7C data=F7 07 00 00 C7 44 30 7C
+[VCM-1DA-CRC-OK] clockFix=8315/8361(99.4%)
+[VCM-1D4-CRC-STATS] frames=8887 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=8887/8887(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=8887/8887 c0=0xC0:2193 c1=0xC0:2265 c2=0xC0:2169 c3=0xC0:2260)
+[HEARTBEAT] ts=107, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.36, egt_hot=17.4, amb=19.2, press=1014.0, rh=68.5, rho=1.201, cf=1.0022, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=21264, can_last_id=0x120, can_11a=9005, can_50b=0, rpm_raw01_le=163, rpm_raw01_be=41728, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-RX] no-frame timeout on twai_receive
+[CAN-POLL-HEART] now=109556 configured=1 ready=1
+[VCM-1D4-SNIFF] n=17007 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=1 crc=0xBC data=F7 07 00 00 47 44 30 BC
+[VCM-1DA-CRC-OK] clockFix=8465/8521(99.3%)
+[VCM-1D4-CRC-STATS] frames=9063 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=9063/9063(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=9063/9063 c0=0xC0:2243 c1=0xC0:2304 c2=0xC0:2220 c3=0xC0:2296)
+[CAN-EVENT] ready=1 state=1 tx_total=26397 tx_1d4=17149 tx_11a=9249 tx1d4_chg=0x90 tx11a_chg=0x00 tx1d4_b6=0x30 tx1d4_b7=0xDC tx11a_b6=0x00 tx11a_b7=0x27 tx_fail=0 tx_not_ready=0 recov=0 bus_off=0 status_q_fail=0 twai(rxq=2 txq=0 rx_miss=233 rx_ovr=0 arb_lost=548 bus_err=0 tec=0 rec=0)
+[HEARTBEAT] ts=110, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.35, egt_hot=17.4, amb=19.2, press=1014.3, rh=68.4, rho=1.202, cf=1.0018, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=21896, can_last_id=0x1DA, can_11a=9263, can_50b=0, rpm_raw01_le=16547, rpm_raw01_be=41792, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-RX] no-frame timeout on twai_receive
+[CAN-POLL-HEART] now=111556 configured=1 ready=1
+[VCM-1D4-SNIFF] n=17349 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=3 crc=0x7C data=F7 07 00 00 C7 44 30 7C
+[VCM-1DA-CRC-OK] clockFix=8621/8685(99.3%)
+[VCM-1D4-CRC-STATS] frames=9239 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=9239/9239(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=9239/9239 c0=0xC0:2285 c1=0xC0:2351 c2=0xC0:2257 c3=0xC0:2346)
+[CAN-RX] no-frame timeout on twai_receive
+[CAN-POLL-HEART] now=113570 configured=1 ready=1
+[VCM-1D4-SNIFF] n=17684 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=2 crc=0x1C data=F7 07 00 00 87 44 30 1C
+[VCM-1DA-CRC-OK] clockFix=8784/8848(99.3%)
+[VCM-1D4-CRC-STATS] frames=9413 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=9413/9413(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=9413/9413 c0=0xC0:2331 c1=0xC0:2395 c2=0xC0:2301 c3=0xC0:2386)
+[HEARTBEAT] ts=113, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.41, egt_hot=17.4, amb=19.2, press=1014.0, rh=68.5, rho=1.202, cf=1.0021, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=22521, can_last_id=0x120, can_11a=9539, can_50b=0, rpm_raw01_le=16547, rpm_raw01_be=41792, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-EVENT] ready=1 state=1 tx_total=27701 tx_1d4=17994 tx_11a=9708 tx1d4_chg=0x90 tx11a_chg=0xC0 tx1d4_b6=0x30 tx1d4_b7=0xBC tx11a_b6=0x03 tx11a_b7=0x6C tx_fail=0 tx_not_ready=0 recov=0 bus_off=0 status_q_fail=0 twai(rxq=2 txq=0 rx_miss=241 rx_ovr=0 arb_lost=585 bus_err=0 tec=0 rec=0)
+[CAN-RX] no-frame timeout on twai_receive
+[CAN-POLL-HEART] now=115576 configured=1 ready=1
+[VCM-1D4-SNIFF] n=18025 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=0 crc=0xDC data=F7 07 00 00 07 44 30 DC
+[VCM-1DA-CRC-OK] clockFix=8953/9017(99.3%)
+[VCM-1D4-CRC-STATS] frames=9595 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=9595/9595(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=9595/9595 c0=0xC0:2375 c1=0xC0:2441 c2=0xC0:2343 c3=0xC0:2436)
+[HEARTBEAT] ts=116, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.34, egt_hot=17.4, amb=19.2, press=1014.0, rh=68.5, rho=1.201, cf=1.0022, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=23150, can_last_id=0x120, can_11a=9815, can_50b=0, rpm_raw01_le=163, rpm_raw01_be=41728, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0
+[CAN-RX] no-frame timeout on twai_receive
+[CAN-POLL-HEART] now=117584 configured=1 ready=1
+[VCM-1D4-SNIFF] n=18356 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=3 crc=0x7C data=F7 07 00 00 C7 44 30 7C
+[VCM-1DA-CRC-OK] clockFix=9112/9176(99.3%)
+[VCM-1D4-CRC-STATS] frames=9767 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=9767/9767(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=9767/9767 c0=0xC0:2418 c1=0xC0:2487 c2=0xC0:2380 c3=0xC0:2482)
+[CAN-RX] no-frame timeout on twai_receive
+[CAN-POLL-HEART] now=119588 configured=1 ready=1
+[VCM-1D4-SNIFF] n=18689 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=0 crc=0xDC data=F7 07 00 00 07 44 30 DC
+[VCM-1DA-CRC-OK] clockFix=9269/9333(99.3%)
+[VCM-1D4-CRC-STATS] frames=9940 match(c1D_id1d4lo=0)
+[VCM-1D4-CRC-OK] clockFix=9940/9940(100.0%)
+[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=9940/9940 c0=0xC0:2464 c1=0xC0:2524 c2=0xC0:2432 c3=0xC0:2520)
+[HEARTBEAT] ts=119, ssid=TP-Link_458C, wifi=3 (WL_CONNECTED), ip=192.168.1.100, ota=ready, vcu_mode=can_inverter_status, vcu_ready=1, vcu_ready_src=bench_forced, prestart_warn=0, rb_plus=1, ssr=1, torque=6.38, egt_hot=17.4, amb=19.2, press=1014.0, rh=68.5, rho=1.201, cf=1.0022, nau_ldo=1, nau_cal=1, nau_cal_attempts=1, can_cfg_rx=1, can_cfg_oneline=0, sniff_en=0, sniff_active=0, sniff_done=0, sniff_dumped=0, sniff_count=0, sniff_drop=0, can_rx_total=23772, can_last_id=0x120, can_11a=10081, can_50b=0, rpm_raw01_le=16547, rpm_raw01_be=41792, rpm_raw23_le=64, rpm_raw23_be=16384, tq_raw01_le=0, tq_raw01_be=0, tq_raw23_le=0, tq_raw23_be=0

@@ -1,0 +1,7 @@
+[VCM-1D4-SNIFF] n=192 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=2 crc=0x23 data=6E 6E 00 00 87 44 01 23
+[VCM-1D4-SNIFF] n=385 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=3 crc=0xE4 data=6E 6E 00 00 C7 44 01 E4
+[VCM-1D4-SNIFF] n=577 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=3 crc=0xE4 data=6E 6E 00 00 C7 44 01 E4
+[VCM-1D4-SNIFF] n=762 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=0 crc=0x28 data=6E 6E 00 00 07 44 01 28
+[VCM-1D4-SNIFF] n=949 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=0 crc=0x28 data=6E 6E 00 00 07 44 01 28
+[VCM-1D4-SNIFF] n=1141 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=1 crc=0xEF data=6E 6E 00 00 47 44 01 EF
+[VCM-1D4-SNIFF] n=1331 age=0 tqReq=0.00Nm(raw=0) hv=1 rplus=1 clk=1 crc=0xEF data=6E 6E 00 00 47 44 01 EF
