@@ -711,6 +711,19 @@
   color: #e3ffe9;
 }
 
+/* Fixed-width numeric field styling for 0x1DA data to prevent blinking */
+.can-monitor-value.can-sec-1da {
+  display: inline-block;
+  width: 28ch;
+  min-width: 28ch;
+  max-width: 28ch;
+  text-align: right;
+  padding-right: 2px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+}
+
 .can-monitor-section {
   color: #93f5ab;
   font-weight: 800;
