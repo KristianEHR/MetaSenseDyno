@@ -105,7 +105,9 @@ bool is1daWireCrcKnownGood(const uint8_t* payload8,
     }
 
     const uint8_t crcRx = payload8[7];
-    const uint8_t crcFixed = compute1daWireCrcFixed(payload8);
+    // TEST: Use 0x1D polynomial like TX frames instead of 0x85
+    // Standard Nissan CRC should be consistent across all frames
+    const uint8_t crcFixed = MetaSense::LeafCRC::computeExact1d4LikeCrc(0xDAU, payload8);
 
     if (outPrimaryCalc != nullptr) {
         *outPrimaryCalc = crcFixed;
@@ -334,9 +336,9 @@ void poll(uint32_t nowMs)
 
         // Decode accepted Leaf frames
         if (isAcceptedLeafId(decodeId)) {
-            // Disable CRC validation for 0x1DA to diagnose blinking issue
-            // If data becomes stable, CRC algorithm is the root cause
-            const bool allowDecode = true;  // Bypass CRC gate entirely
+            // Now using unified Nissan 0x1D CRC for 0x1DA validation
+            // Replaces incorrect 0x85 polynomial with standard 0x1D
+            const bool allowDecode = (decodeId != 0x1DAU) || (frame1daWireCrcOk == 1);
             if (allowDecode) {
                 twai_message_t msg = {};
                 msg.identifier = decodeId;

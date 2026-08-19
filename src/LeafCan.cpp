@@ -422,6 +422,15 @@ void LeafCan::decodeFrame(const twai_message_t &msg,
                 fb.rpm = selectRpmCandidate(ze1Rpm, legacyRpm);
                 fb.id1da_ze1_rpm = ze1Rpm;
                 fb.id1da_leg_rpm = legacyRpm;
+                
+                // DEBUG: Log RPM decode to serial every 100 frames
+                static uint32_t rpmLogCounter = 0;
+                if ((++rpmLogCounter % 100) == 0) {
+                    Serial.printf("[RPM-DECODE] ze1=%.1f leg=%.1f selected=%.1f valid: ze1=%u leg=%u\n",
+                                  ze1Rpm, legacyRpm, fb.rpm,
+                                  (isfinite(ze1Rpm) && (fabsf(ze1Rpm) <= 20000.0f)) ? 1 : 0,
+                                  (isfinite(legacyRpm) && (fabsf(legacyRpm) <= 20000.0f)) ? 1 : 0);
+                }
 
                 fb.id1da_ze1_tq = 0.0f;
                 fb.id1da_leg_tq = 0.0f;
@@ -446,19 +455,19 @@ void LeafCan::decodeFrame(const twai_message_t &msg,
                     ++fb.torque_primary_frames;
                 }
 
-                // Benign startup/no-HV states on this inverter family can contain
-                // residual non-zero raw bits that look like valid RPM in the raw DBC
-                // fields. Treat those as zero until the inverter reports an active
-                // ready state and a normal live RPM stream.
-                const uint8_t statusByteZeroMask = (dlc > 0U) ? d[0] : 0U;
-                const uint8_t startupMask = 0x00U;
-                const bool startupStyleStatus = (statusByteZeroMask == 0x00U) ||
-                                               (statusByteZeroMask == 0x18U) ||
-                                               (statusByteZeroMask == 0x24U);
-                if (startupStyleStatus || (fb.id1da_status_bits == startupMask)) {
-                    fb.rpm = 0.0f;
-                    fb.torque_nm = 0.0f;
-                }
+                // DISABLED: Startup filter was too aggressive and forced all 0x1DA RPM/torque to zero
+                // when status byte was 0x00/0x18/0x24. This prevented displaying real telemetry
+                // during normal operation. Removing this filter to display actual inverter data.
+                // TODO: Implement smarter startup detection based on actual inv_status_bit ready state
+                // const uint8_t statusByteZeroMask = (dlc > 0U) ? d[0] : 0U;
+                // const uint8_t startupMask = 0x00U;
+                // const bool startupStyleStatus = (statusByteZeroMask == 0x00U) ||
+                //                                (statusByteZeroMask == 0x18U) ||
+                //                                (statusByteZeroMask == 0x24U);
+                // if (startupStyleStatus || (fb.id1da_status_bits == startupMask)) {
+                //     fb.rpm = 0.0f;
+                //     fb.torque_nm = 0.0f;
+                // }
 
 #if METASENSE_LEAF_1DA_SNIFF_DECODE
                 if (dlc >= 1U) {

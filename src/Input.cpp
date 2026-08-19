@@ -3116,7 +3116,7 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         dataJson += "\"hw_rbplus\":" + String(MetaSense::HardwareOutputStateMachine::isRbPlusActive() ? 1 : 0) + ",";
         dataJson += "\"hw_rbminus\":" + String(MetaSense::HardwareOutputStateMachine::isRbMinusActive() ? 1 : 0) + ",";
         dataJson += "\"hw_ssr\":" + String(MetaSense::HardwareOutputStateMachine::isSsrActive() ? 1 : 0) + ",";
-        dataJson += "\"vcu_sim\":" + String(data.vcuSimMode ? 1 : 0)";
+        dataJson += "\"vcu_sim\":" + String(data.vcuSimMode ? 1 : 0) + ",";
         dataJson += "}";
         wsock.textAll(dataJson);
     }
