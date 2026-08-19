@@ -3396,7 +3396,65 @@
             if (recordingEnded) {
               commitSecondaryRunLogger("recording_edge_stop", currentPeakEGT);
             }
-          } 
+          }
+          // === CANMONITOR: Process full CAN diagnostic data (100ms cadence) ===
+          else if (msg.type === "canmonitor") {
+            // Merge all canmonitor fields into cached telemetry
+            if (msg.ip !== undefined) cachedTelemetry.ip = msg.ip;
+            if (msg.rssi !== undefined) cachedTelemetry.rssi = msg.rssi;
+            if (msg.rpm !== undefined) cachedTelemetry.rpm = msg.rpm;
+            if (msg.leaf_rpm !== undefined) cachedTelemetry.leaf_rpm = msg.leaf_rpm;
+            if (msg.leaf_inv_temp !== undefined) cachedTelemetry.leaf_inv_temp = msg.leaf_inv_temp;
+            if (msg.leaf_stator_temp !== undefined) cachedTelemetry.leaf_stator_temp = msg.leaf_stator_temp;
+            if (msg.leaf_coolant_temp !== undefined) cachedTelemetry.leaf_coolant_temp = msg.leaf_coolant_temp;
+            if (msg.leaf_1da_input_v !== undefined) cachedTelemetry.leaf_1da_input_v = msg.leaf_1da_input_v;
+            if (msg.leaf_1da_torque_nm !== undefined) cachedTelemetry.leaf_1da_torque_nm = msg.leaf_1da_torque_nm;
+            if (msg.leaf_1da_rpm !== undefined) cachedTelemetry.leaf_1da_rpm = msg.leaf_1da_rpm;
+            if (msg.leaf_1da_clock !== undefined) cachedTelemetry.leaf_1da_clock = msg.leaf_1da_clock;
+            if (msg.leaf_1da_err !== undefined) cachedTelemetry.leaf_1da_err = msg.leaf_1da_err;
+            if (msg.leaf_1da_crc !== undefined) cachedTelemetry.leaf_1da_crc = msg.leaf_1da_crc;
+            if (msg.leaf_1da_crc_calc !== undefined) cachedTelemetry.leaf_1da_crc_calc = msg.leaf_1da_crc_calc;
+            if (msg.leaf_1da_crc_ok !== undefined) cachedTelemetry.leaf_1da_crc_ok = Number(msg.leaf_1da_crc_ok);
+            if (msg.leaf_1da_inv_status_bit !== undefined) cachedTelemetry.leaf_1da_inv_status_bit = msg.leaf_1da_inv_status_bit;
+            if (msg.leaf_1da_inv_fault_map !== undefined) cachedTelemetry.leaf_1da_inv_fault_map = msg.leaf_1da_inv_fault_map;
+            if (msg.leaf_1da_inv_blinky !== undefined) cachedTelemetry.leaf_1da_inv_blinky = msg.leaf_1da_inv_blinky;
+            if (msg.leaf_1da_inv_unknown_faults !== undefined) cachedTelemetry.leaf_1da_inv_unknown_faults = msg.leaf_1da_inv_unknown_faults;
+            if (msg.leaf_1da_inv_fault_can_timeout !== undefined) cachedTelemetry.leaf_1da_inv_fault_can_timeout = msg.leaf_1da_inv_fault_can_timeout;
+            if (msg.leaf_1da_crc_wire_ok_frames !== undefined) cachedTelemetry.leaf_1da_crc_wire_ok_frames = msg.leaf_1da_crc_wire_ok_frames;
+            if (msg.leaf_1da_crc_wire_bad_frames !== undefined) cachedTelemetry.leaf_1da_crc_wire_bad_frames = msg.leaf_1da_crc_wire_bad_frames;
+            if (msg.leaf_id1da_frames !== undefined) cachedTelemetry.leaf_id1da_frames = msg.leaf_id1da_frames;
+            if (msg.leaf_id1da_age_ms !== undefined) cachedTelemetry.leaf_id1da_age_ms = msg.leaf_id1da_age_ms;
+            if (msg.leaf_id11a_source !== undefined) cachedTelemetry.leaf_id11a_source = msg.leaf_id11a_source;
+            if (msg.leaf_id11a_frames !== undefined) cachedTelemetry.leaf_id11a_frames = msg.leaf_id11a_frames;
+            if (msg.leaf_id11a_age_ms !== undefined) cachedTelemetry.leaf_id11a_age_ms = msg.leaf_id11a_age_ms;
+            if (msg.leaf_id11a_tx_frames !== undefined) cachedTelemetry.leaf_id11a_tx_frames = msg.leaf_id11a_tx_frames;
+            if (msg.leaf_id11a_tx_age_ms !== undefined) cachedTelemetry.leaf_id11a_tx_age_ms = msg.leaf_id11a_tx_age_ms;
+            if (msg.leaf_11a_gear !== undefined) cachedTelemetry.leaf_11a_gear = msg.leaf_11a_gear;
+            if (msg.leaf_11a_car_onoff !== undefined) cachedTelemetry.leaf_11a_car_onoff = msg.leaf_11a_car_onoff;
+            if (msg.leaf_11a_eco !== undefined) cachedTelemetry.leaf_11a_eco = msg.leaf_11a_eco;
+            if (msg.leaf_11a_button !== undefined) cachedTelemetry.leaf_11a_button = msg.leaf_11a_button;
+            if (msg.leaf_11a_heartbeat !== undefined) cachedTelemetry.leaf_11a_heartbeat = msg.leaf_11a_heartbeat;
+            if (msg.leaf_11a_mux !== undefined) cachedTelemetry.leaf_11a_mux = msg.leaf_11a_mux;
+            if (msg.leaf_1d4_tx_frames !== undefined) cachedTelemetry.leaf_1d4_tx_frames = msg.leaf_1d4_tx_frames;
+            if (msg.leaf_1d4_tx_age_ms !== undefined) cachedTelemetry.leaf_1d4_tx_age_ms = msg.leaf_1d4_tx_age_ms;
+            if (msg.leaf_1d4_tx_torque_nm !== undefined) cachedTelemetry.leaf_1d4_tx_torque_nm = msg.leaf_1d4_tx_torque_nm;
+            if (msg.leaf_1d4_tx_torque_raw !== undefined) cachedTelemetry.leaf_1d4_tx_torque_raw = msg.leaf_1d4_tx_torque_raw;
+            if (msg.leaf_1d4_tx_hv_status !== undefined) cachedTelemetry.leaf_1d4_tx_hv_status = msg.leaf_1d4_tx_hv_status;
+            if (msg.leaf_1d4_tx_relay_plus !== undefined) cachedTelemetry.leaf_1d4_tx_relay_plus = msg.leaf_1d4_tx_relay_plus;
+            if (msg.leaf_1d4_tx_charge_status !== undefined) cachedTelemetry.leaf_1d4_tx_charge_status = msg.leaf_1d4_tx_charge_status;
+            if (msg.leaf_1d4_tx_clock !== undefined) cachedTelemetry.leaf_1d4_tx_clock = msg.leaf_1d4_tx_clock;
+            if (msg.leaf_1d4_tx_crc !== undefined) cachedTelemetry.leaf_1d4_tx_crc = msg.leaf_1d4_tx_crc;
+            if (msg.leaf_1d4_tx_crc_calc !== undefined) cachedTelemetry.leaf_1d4_tx_crc_calc = msg.leaf_1d4_tx_crc_calc;
+            if (msg.leaf_1d4_tx_crc_ok !== undefined) cachedTelemetry.leaf_1d4_tx_crc_ok = msg.leaf_1d4_tx_crc_ok;
+            if (msg.leaf_120_cmd_nm !== undefined) cachedTelemetry.leaf_120_cmd_nm = msg.leaf_120_cmd_nm;
+            if (msg.vcu_torque_demand !== undefined) cachedTelemetry.vcu_torque_demand = msg.vcu_torque_demand;
+            if (msg.vcu_sim !== undefined) cachedTelemetry.vcu_sim = msg.vcu_sim;
+            if (msg.fw_state !== undefined) cachedTelemetry.fw_state = msg.fw_state;
+            if (msg.hw_start_gate !== undefined) cachedTelemetry.hw_start_gate = msg.hw_start_gate;
+            
+            // Update the CAN monitor display with merged telemetry
+            updateCanMonitor(cachedTelemetry);
+          }
 else if (msg.type === "run_complete") {
   if (Number.isFinite(Number(msg.peakKW))) currentPeakHP = Number(msg.peakKW);
   if (Number.isFinite(Number(msg.peakKW_RPM))) currentPeakHP_RPM = Number(msg.peakKW_RPM);
