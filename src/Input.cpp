@@ -3143,8 +3143,8 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         const uint32_t ageSince1d4Tx = (canStats.last1d4TxMs > 0 && now > canStats.last1d4TxMs) ? (now - canStats.last1d4TxMs) : 0;
         
         canJson += "\"leaf_1da_input_v\":" + String(leafFb.input_voltage, 1) + ",";
-        canJson += "\"leaf_1da_torque_nm\":" + String(data.leaf_torqueNm, 2) + ",";
-        canJson += "\"leaf_1da_rpm\":" + String(data.leaf_rpm, 1) + ",";
+        canJson += "\"leaf_1da_torque_nm\":" + String(leafFb.torque_nm, 2) + ",";
+        canJson += "\"leaf_1da_rpm\":" + String(leafFb.rpm, 1) + ",";
         canJson += "\"leaf_1da_clock\":" + String(leafFb.mg_clock) + ",";
         canJson += "\"leaf_1da_err\":" + String(leafFb.mg_error_codes) + ",";
         canJson += "\"leaf_1da_crc\":" + String(leafFb.crc_1da) + ",";
@@ -3184,8 +3184,12 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         canJson += "\"leaf_1d4_tx_crc\":0,";
         canJson += "\"leaf_1d4_tx_crc_calc\":0,";
         canJson += "\"leaf_1d4_tx_crc_ok\":0,";
-        canJson += "\"fw_state\":\"ready\",";
-        canJson += "\"hw_start_gate\":\"ready\"";
+        
+        // Add state machine status
+        const char* hwState = MetaSense::HardwareOutputStateMachine::stateName();
+        canJson += "\"dyno_state\":\"" + String(hwState != nullptr ? hwState : "UNKNOWN") + "\",";
+        canJson += "\"fw_state\":\"" + String(hwState != nullptr ? hwState : "UNKNOWN") + "\",";
+        canJson += "\"hw_start_gate\":\"" + String(hwState != nullptr ? hwState : "UNKNOWN") + "\"";
         canJson += "}";
         wsock.textAll(canJson);
     }
