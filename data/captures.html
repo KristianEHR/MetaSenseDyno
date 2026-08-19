@@ -211,9 +211,14 @@
     function buildItem(item) {
       const div = document.createElement('div');
       div.className = 'item';
+      const filename = String(item.filename || 'capture.csv');
+      const isStartup11a = filename.toLowerCase() === 'startup_11a.csv';
+      const muxViewLink = isStartup11a
+        ? `<a class="btn" href="/api/captures/file?name=${encodeURIComponent(filename)}&view=mux" target="_blank">OPEN MUX VIEW</a>`
+        : '';
       div.innerHTML = `
         <div class="item-top">
-          <div class="fname">${item.filename || 'capture.csv'}</div>
+          <div class="fname">${filename}</div>
           <div class="quality">${qualityClass(item.qualityLabel)} • ${fmt(item.qualityScore, 1)} / 100</div>
         </div>
         <div class="stats">
@@ -227,8 +232,9 @@
           <div><strong>Test load</strong> ${fmt(item.testLoadKg, 3)} kg</div>
         </div>
         <div class="row-actions">
-          <a class="btn" href="/api/captures/file?name=${encodeURIComponent(item.filename)}" download>DOWNLOAD CSV</a>
-          <a class="btn" href="/api/captures/report?name=${encodeURIComponent(item.filename)}" target="_blank">OPEN JSON</a>
+          <a class="btn" href="/api/captures/file?name=${encodeURIComponent(filename)}" download>DOWNLOAD CSV</a>
+          ${muxViewLink}
+          <a class="btn" href="/api/captures/report?name=${encodeURIComponent(filename)}" target="_blank">OPEN JSON</a>
           <button data-filename="${item.filename}">VIEW REPORT</button>
         </div>
       `;

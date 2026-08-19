@@ -33,6 +33,55 @@
 			]
 		},
 		{
+			"label": "Build (esp32s3-USB-S)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-USB-S"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$platformio"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Upload (esp32s3-USB-S)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-USB-S",
+				"-t",
+				"upload"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$platformio"
+			],
+			"group": "build"
+		},
+		{
+			"label": "MODE: Upload NORMAL TX (esp32s3-USB)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-USB",
+				"-t",
+				"upload"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$platformio"
+			],
+			"group": "build"
+		},
+		{
 			"label": "OPERATIVE - Build (esp32s3-USB-cco)",
 			"type": "shell",
 			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
@@ -497,38 +546,307 @@
 			"group": "build"
 		},
 		{
-			"label": "Upload (esp32s3-USB-sniff)",
+			"label": "Create Restore Point",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"$ts = Get-Date -Format 'yyyyMMdd_HHmmss'; $dir = \"backups/restore_$ts\"; New-Item -ItemType Directory -Path $dir -Force | Out-Null; git rev-parse HEAD | Out-File -FilePath \"$dir/rollback_base.txt\" -Encoding ascii; git status --porcelain=v1 | Out-File -FilePath \"$dir/rollback_status.txt\" -Encoding ascii; git ls-files --others --exclude-standard | Out-File -FilePath \"$dir/rollback_untracked.txt\" -Encoding ascii; git diff | Out-File -FilePath \"$dir/rollback_before.patch\" -Encoding ascii; git diff --staged | Out-File -FilePath \"$dir/rollback_staged.patch\" -Encoding ascii; git bundle create \"$dir/repo_backup_$ts.bundle\" --all; Write-Output \"RESTORE_POINT=$dir\""
+			],
+			"isBackground": false
+		},
+		{
+			"label": "Create Restore Point (Scripted)",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-File",
+				"backups/create_restore_point.ps1"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "Capture COM6 Logs 8s",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"& 'C:\\Users\\krist\\.platformio\\penv\\Scripts\\python.exe' -c \"import time, serial; s=serial.Serial('COM6',115200,timeout=0.2); t=time.time()+8; out=[];\\nwhile time.time()<t:\\n d=s.read(1024);\\n if d: out.append(d.decode('utf-8','ignore'));\\nprint(''.join(out))\""
+			],
+			"isBackground": false
+		},
+		{
+			"label": "Capture COM6 Logs 8s (Script)",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-File",
+				"backups/capture_com6_8s.ps1"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "Check Sniff2 Log Tags (Script)",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-File",
+				"backups/check_sniff2_tags.ps1"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "Search Envdump Defines",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Select-String -Path 'C:\\Users\\krist\\AppData\\Roaming\\Code\\User\\workspaceStorage\\49031a2baa77a09df2cc745f3a4ca2cf\\GitHub.copilot-chat\\chat-session-resources\\136dd418-46d9-4b8d-84b9-bfc5b986a23b\\call_1R7exOTZngTa2NrRPMD0AML5__vscode-1786372450053\\content.txt' -Pattern 'METASENSE_CAN_|METASENSE_LEAF_CAN_|CPPDEFINES' | Select-Object -First 200 | ForEach-Object { $_.Line }"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "Search Envdump Defines (Script)",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-File",
+				"backups/search_envdump_defines.ps1"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "Run Envdump Extract Script",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-File",
+				"backups/envdump_sniff2_extract.ps1"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "Build (esp32s3-USB-canview)",
 			"type": "shell",
 			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
 			"args": [
 				"run",
 				"-e",
-				"esp32s3-USB-sniff",
+				"esp32s3-USB-canview"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$platformio"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Upload (esp32s3-USB-canview)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-USB-canview",
 				"-t",
 				"upload"
 			],
 			"isBackground": false,
 			"problemMatcher": [
-				"$msCompile"
+				"$platformio"
 			],
 			"group": "build"
 		},
 		{
-			"label": "Upload Filesystem (esp32s3-USB-sniff)",
+			"label": "Build (esp32s3-USB-S)",
 			"type": "shell",
 			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
 			"args": [
 				"run",
 				"-e",
-				"esp32s3-USB-sniff",
+				"esp32s3-USB-S"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Upload (esp32s3-USB-S)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-USB-S",
+				"-t",
+				"upload"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Monitor (esp32s3-USB-S)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"device",
+				"monitor",
+				"-e",
+				"esp32s3-USB-S"
+			],
+			"isBackground": true
+		},
+		{
+			"label": "Serial Monitor (esp32s3-USB-S one-line)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"device",
+				"monitor",
+				"-e",
+				"esp32s3-USB-S"
+			],
+			"isBackground": true
+		},
+		{
+			"label": "Serial Monitor Fresh (esp32s3-USB-S)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"device",
+				"monitor",
+				"-e",
+				"esp32s3-USB-S"
+			],
+			"isBackground": true
+		},
+		{
+			"label": "Serial Monitor A-B listen_only (esp32s3-USB-S)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"device",
+				"monitor",
+				"-e",
+				"esp32s3-USB-S"
+			],
+			"isBackground": true
+		},
+		{
+			"label": "Serial Monitor B listen_only_true (esp32s3-USB-S)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"device",
+				"monitor",
+				"-e",
+				"esp32s3-USB-S"
+			],
+			"isBackground": true
+		},
+		{
+			"label": "Serial Monitor Fresh 2 (esp32s3-USB-S)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"device",
+				"monitor",
+				"-e",
+				"esp32s3-USB-S"
+			],
+			"isBackground": true
+		},
+		{
+			"label": "Monitor Unknown Hunt (esp32s3-USB-S)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"device",
+				"monitor",
+				"-e",
+				"esp32s3-USB-S"
+			],
+			"isBackground": true
+		},
+		{
+			"label": "Monitor HAL Tap (esp32s3-USB-S)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"device",
+				"monitor",
+				"-e",
+				"esp32s3-USB-S"
+			],
+			"isBackground": true
+		},
+		{
+			"label": "Monitor Telem Mirror (esp32s3-USB-S)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"device",
+				"monitor",
+				"-e",
+				"esp32s3-USB-S"
+			],
+			"isBackground": true
+		},
+		{
+			"label": "Monitor Target IDs 50B 11A",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"device",
+				"monitor",
+				"-e",
+				"esp32s3-USB-S"
+			],
+			"isBackground": true
+		},
+		{
+			"label": "Upload (esp32s3-USB-S)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-USB-S",
+				"-t",
+				"upload"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Upload Filesystem (esp32s3-USB-S)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"esp32s3-USB-S",
 				"-t",
 				"uploadfs"
 			],
-			"isBackground": false,
-			"problemMatcher": [
-				"$msCompile"
-			],
-			"group": "build"
-		}
+			"isBackground": false
+		},
 	]
 }

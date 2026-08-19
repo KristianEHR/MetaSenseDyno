@@ -45,6 +45,7 @@ namespace MetaSense::Input {
                                   bool hvOkBit,
                                   bool brakeBit,
                                   bool gearDriveBit);
+    bool sendLeafTorqueCommand1d4FinalZero();
     void updateVcuDebug(bool simMode,
                         bool inv12v,
                         float hvVoltage,

@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 
+#include "globals.h"
 #include "I2cBusLock.h"
 
 namespace {

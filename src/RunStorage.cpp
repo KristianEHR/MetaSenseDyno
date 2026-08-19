@@ -9,6 +9,7 @@
 #include <esp_timer.h>
 
 #include "Input.h"
+#include "globals.h"
 
 namespace {
 

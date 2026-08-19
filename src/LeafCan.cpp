@@ -1,5 +1,6 @@
 #include "LeafCan.h"
 
+#include <Arduino.h>
 #include <math.h>
 
 #ifndef METASENSE_LEAF_VARIANT_120_55A
@@ -16,6 +17,19 @@ static inline float decodeMotorSpeed(const uint8_t *d)
     // Observed on target hardware: motor speed is in [2..3] little-endian.
     // Keep [0..1] little-endian as fallback for compatibility.
     return static_cast<float>((raw23 != 0U || raw01 == 0U) ? raw23 : raw01);
+}
+
+static inline float selectRpmCandidate(float ze1Rpm, float legacyRpm)
+{
+    const bool ze1Valid = isfinite(ze1Rpm) && (fabsf(ze1Rpm) <= 20000.0f);
+    const bool legacyValid = isfinite(legacyRpm) && (fabsf(legacyRpm) <= 20000.0f);
+    if (ze1Valid) {
+        return ze1Rpm;
+    }
+    if (legacyValid) {
+        return legacyRpm;
+    }
+    return 0.0f;
 }
 
 static inline float decodeInputVoltage(const uint8_t *d)
@@ -84,13 +98,52 @@ static inline uint8_t decodeZe1Clock(const uint8_t* d)
 static inline uint8_t decodeZe1ErrorCodes(const uint8_t* d)
 {
     // SG_ MG_ErrorCodes : 50|6@1+
-    return static_cast<uint8_t>((d[6] >> 2) & 0x3FU);
+    const uint8_t b6 = d[6];
+    const uint8_t stateNoClock = static_cast<uint8_t>(b6 & 0xFCU);
+
+    // Observed benign Thunderstruck-driven states: 0x24 (+clock in bits 0..1)
+    // and occasionally 0x18 (+clock). These should not be shown as active errors.
+    if (stateNoClock == 0x24U || stateNoClock == 0x18U) {
+        return 0U;
+    }
+
+    return static_cast<uint8_t>((b6 >> 2) & 0x3FU);
 }
 
 static inline uint8_t decodeZe1Crc(const uint8_t* d)
 {
     // SG_ CRC_1DA : 56|8@1+
     return d[7];
+}
+
+static inline uint8_t decodeInvStatusBit(const uint8_t* d)
+{
+    // SG_ Inv_StatusBit : 40|1@1+
+    return static_cast<uint8_t>((d[5] >> 0U) & 0x01U);
+}
+
+static inline uint8_t decodeInvFaultMap(const uint8_t* d)
+{
+    // SG_ Inv_FaultMap : 50|6@1+
+    return static_cast<uint8_t>((d[6] >> 2U) & 0x3FU);
+}
+
+static inline uint8_t decodeInvBlinky(const uint8_t* d)
+{
+    // SG_ Inv_Blinky : 14|2@1+
+    return static_cast<uint8_t>((d[1] >> 6U) & 0x03U);
+}
+
+static inline uint16_t decodeInvUnknownFaults(const uint8_t* d)
+{
+    // SG_ Inv_UnknownFaults : 13|11@0+
+    return static_cast<uint16_t>(extractMotorolaUnsigned(d, 13, 11));
+}
+
+static inline uint8_t decodeInvFaultCanTimeoutMaybe(const uint8_t* d)
+{
+    // SG_ Inv_Fault_CANTimeoutMaybe : 23|1@1+
+    return static_cast<uint8_t>((d[2] >> 7U) & 0x01U);
 }
 
 static inline float decodeMotorTorque(const uint8_t *d)
@@ -220,6 +273,66 @@ static inline void decodeStatus(const uint8_t *d,
     limp = directLimp || shiftedLimp;
 }
 
+static inline void decode1daStatusBits(const uint8_t* d,
+                                        uint8_t dlc,
+                                        uint8_t& statusByte,
+                                        uint8_t& statusBits,
+                                        bool& ready,
+                                        bool& fault,
+                                        bool& warning,
+                                        bool& limp)
+{
+    statusByte = 0U;
+    statusBits = 0U;
+    ready = false;
+    fault = false;
+    warning = false;
+    limp = false;
+
+#if METASENSE_LEAF_1DA_SNIFF_DECODE
+    if (dlc == 0U) {
+        return;
+    }
+
+    const uint8_t byteCount = (dlc < 8U) ? dlc : 8U;
+    for (uint8_t byteIdx = 0U; byteIdx < byteCount; ++byteIdx) {
+        const uint8_t rawByte = d[byteIdx];
+        const uint8_t lowNibble = static_cast<uint8_t>(rawByte & 0x0FU);
+        const uint8_t highNibble = static_cast<uint8_t>((rawByte >> 4U) & 0x0FU);
+
+        const uint8_t candidateBytes[2] = {lowNibble, highNibble};
+        for (uint8_t candidateIdx = 0U; candidateIdx < 2U; ++candidateIdx) {
+            const uint8_t candidateNibble = candidateBytes[candidateIdx];
+            const bool candidateIsBenign = (candidateNibble == 0x00U) || (candidateNibble == 0x08U) || (candidateNibble == 0x04U) || (candidateNibble == 0x0CU);
+            if (candidateNibble == 0U && byteIdx >= 2U) {
+                continue;
+            }
+            if (candidateIsBenign && candidateNibble == 0U) {
+                continue;
+            }
+
+            statusByte = rawByte;
+            statusBits = candidateNibble;
+            ready = (statusBits & 0x01U) != 0U;
+            fault = (statusBits & 0x02U) != 0U;
+            warning = (statusBits & 0x04U) != 0U;
+            limp = (statusBits & 0x08U) != 0U;
+            if (statusBits != 0U) {
+                return;
+            }
+        }
+    }
+
+    // Fallback to the previous byte-6 assumption when nothing else looks useful.
+    statusByte = (byteCount > 6U) ? d[6] : d[0];
+    statusBits = static_cast<uint8_t>(statusByte & 0x0FU);
+    ready = (statusBits & 0x01U) != 0U;
+    fault = (statusBits & 0x02U) != 0U;
+    warning = (statusBits & 0x04U) != 0U;
+    limp = (statusBits & 0x08U) != 0U;
+#endif
+}
+
 static inline void decode1daLikeFrame(const uint8_t* d,
                                       uint8_t dlc,
                                       uint16_t& raw01Le,
@@ -262,7 +375,7 @@ static inline void decode1daLikeFrame(const uint8_t* d,
 
     const float ze1Rpm = decodeZe1OutputRevolution(d);
     const float legacyRpm = decodeMotorSpeed(d);
-    rpm = (fabsf(ze1Rpm) <= 20000.0f) ? ze1Rpm : legacyRpm;
+    rpm = selectRpmCandidate(ze1Rpm, legacyRpm);
 
     if (dlc < 8U) {
         return;
@@ -306,7 +419,7 @@ void LeafCan::decodeFrame(const twai_message_t &msg,
 
                 const float ze1Rpm = decodeZe1OutputRevolution(d);
                 const float legacyRpm = decodeMotorSpeed(d);
-                fb.rpm = (fabsf(ze1Rpm) <= 20000.0f) ? ze1Rpm : legacyRpm;
+                fb.rpm = selectRpmCandidate(ze1Rpm, legacyRpm);
                 fb.id1da_ze1_rpm = ze1Rpm;
                 fb.id1da_leg_rpm = legacyRpm;
 
@@ -316,6 +429,11 @@ void LeafCan::decodeFrame(const twai_message_t &msg,
                     fb.mg_clock = decodeZe1Clock(d);
                     fb.mg_error_codes = decodeZe1ErrorCodes(d);
                     fb.crc_1da = decodeZe1Crc(d);
+                    fb.inv_status_bit = decodeInvStatusBit(d);
+                    fb.inv_fault_map = decodeInvFaultMap(d);
+                    fb.inv_blinky = decodeInvBlinky(d);
+                    fb.inv_unknown_faults = decodeInvUnknownFaults(d);
+                    fb.inv_fault_can_timeout_maybe = decodeInvFaultCanTimeoutMaybe(d);
 
                     const float ze1Torque = decodeZe1TorqueNm(d);
                     const float legacyTorque = decodeMotorTorque(d);
@@ -327,6 +445,46 @@ void LeafCan::decodeFrame(const twai_message_t &msg,
                     ++fb.torque_frames;
                     ++fb.torque_primary_frames;
                 }
+
+                // Benign startup/no-HV states on this inverter family can contain
+                // residual non-zero raw bits that look like valid RPM in the raw DBC
+                // fields. Treat those as zero until the inverter reports an active
+                // ready state and a normal live RPM stream.
+                const uint8_t statusByteZeroMask = (dlc > 0U) ? d[0] : 0U;
+                const uint8_t startupMask = 0x00U;
+                const bool startupStyleStatus = (statusByteZeroMask == 0x00U) ||
+                                               (statusByteZeroMask == 0x18U) ||
+                                               (statusByteZeroMask == 0x24U);
+                if (startupStyleStatus || (fb.id1da_status_bits == startupMask)) {
+                    fb.rpm = 0.0f;
+                    fb.torque_nm = 0.0f;
+                }
+
+#if METASENSE_LEAF_1DA_SNIFF_DECODE
+                if (dlc >= 1U) {
+                    uint8_t statusByte = 0U;
+                    uint8_t statusBits = 0U;
+                    bool statusReady = false;
+                    bool statusFault = false;
+                    bool statusWarning = false;
+                    bool statusLimp = false;
+                    decode1daStatusBits(d, dlc, statusByte, statusBits, statusReady, statusFault, statusWarning, statusLimp);
+                    fb.id1da_status_byte = statusByte;
+                    fb.id1da_status_bits = statusBits;
+                    fb.id1da_status_ready = statusReady;
+                    fb.id1da_status_fault = statusFault;
+                    fb.id1da_status_warning = statusWarning;
+                    fb.id1da_status_limp = statusLimp;
+                    Serial.printf("[1DA-SNIFF] len=%u selected_byte=0x%02X status_bits=0x%02X ready=%u fault=%u warning=%u limp=%u\n",
+                                  static_cast<unsigned>(dlc),
+                                  static_cast<unsigned>(statusByte),
+                                  static_cast<unsigned>(statusBits),
+                                  statusReady ? 1U : 0U,
+                                  statusFault ? 1U : 0U,
+                                  statusWarning ? 1U : 0U,
+                                  statusLimp ? 1U : 0U);
+                }
+#endif
 
                 float invFallback = 0.0f;
                 float statorFallback = 0.0f;
@@ -343,6 +501,25 @@ void LeafCan::decodeFrame(const twai_message_t &msg,
                 fb.rpm_update_ms = now_ms;
                 fb.last_update_ms = now_ms;
                 ++fb.rpm_frames;
+            }
+            break;
+
+        case 0x1DB: // MotorTorque (accepted)
+            if (dlc >= 4U) {
+                fb.torque_raw01_le = static_cast<int16_t>(
+                    static_cast<uint16_t>(d[0]) | (static_cast<uint16_t>(d[1]) << 8));
+                fb.torque_raw01_be = static_cast<int16_t>(
+                    (static_cast<uint16_t>(d[0]) << 8) | static_cast<uint16_t>(d[1]));
+                fb.torque_raw23_le = static_cast<int16_t>(
+                    static_cast<uint16_t>(d[2]) | (static_cast<uint16_t>(d[3]) << 8));
+                fb.torque_raw23_be = static_cast<int16_t>(
+                    (static_cast<uint16_t>(d[2]) << 8) | static_cast<uint16_t>(d[3]));
+                fb.torque_nm = decodeMotorTorque(d);
+                fb.torque_update_ms = now_ms;
+                fb.torque_primary_update_ms = now_ms;
+                fb.last_update_ms = now_ms;
+                ++fb.torque_frames;
+                ++fb.torque_primary_frames;
             }
             break;
 
@@ -451,6 +628,17 @@ void LeafCan::reset(LeafInvFeedback &fb)
     fb.mg_clock = 0;
     fb.mg_error_codes = 0;
     fb.crc_1da = 0;
+    fb.inv_status_bit = 0;
+    fb.inv_fault_map = 0;
+    fb.inv_blinky = 0;
+    fb.inv_unknown_faults = 0;
+    fb.inv_fault_can_timeout_maybe = 0;
+    fb.id1da_status_byte = 0;
+    fb.id1da_status_bits = 0;
+    fb.id1da_status_ready = false;
+    fb.id1da_status_fault = false;
+    fb.id1da_status_warning = false;
+    fb.id1da_status_limp = false;
     for (uint8_t i = 0U; i < 8U; ++i) fb.id1da_raw[i] = 0U;
     fb.id1da_ze1_rpm = 0.0f;
     fb.id1da_leg_rpm = 0.0f;

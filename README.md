@@ -5,7 +5,7 @@ MetaSense dyno firmware and web UI for ESP32-S3, built with PlatformIO.
 ## What This Repo Contains
 
 - Firmware: task-based control, sensor acquisition, safety interlocks, outputs.
-- Web UI (LittleFS): live dashboard, settings, trend/report views, capture tools.
+- Web UI (LittleFS): live dashboard, settings, trend/report views.
 - Persistent settings and run storage.
 
 ## Environments
@@ -53,6 +53,96 @@ Task split:
 - Modbus task: register publishing.
 
 Physical outputs are updated by control task cadence, not by GUI refresh rate.
+
+## Current CRC Algorithm Status
+
+Scope:
+
+- RX validation focus: CAN ID `0x1DA`
+- TX generation focus: CAN IDs `0x1D4` and `0x11A`
+
+Verified active method for `0x1DA`:
+
+1. Build CRC input as `[0xDA + b0..b6]`
+2. Compute CRC-8 MSB-first with:
+	- poly: `0x85`
+	- init: `0x00`
+	- xorOut: `0xBF`
+3. No extra clock residue layer is applied.
+4. Final CRC:
+	- `crc = crc8_msb(poly=0x85, init=0x00, xorOut=0xBF, bytes=[0xDA + b0..b6])`
+
+Runtime policy tied to CRC quality:
+
+- Any single BAD `0x1DA` frame is discarded for decode use (including RPM update path).
+- CAN fallback trust is removed after `10` consecutive BAD frames.
+
+Verified active method for `0x1D4`:
+
+1. Build CRC input as `[idLo + b0..b6]`
+2. Compute base CRC-8 MSB-first with:
+	- poly: `0x1D`
+	- init: `0xFF`
+	- xorOut: `0xFF`
+	- `base = crc8_msb(poly=0x1D, init=0xFF, xorOut=0xFF, bytes=[idLo + b0..b6])`
+3. Derive final wire CRC by HCM clock residue (clock from byte4 bits 6..7):
+	- `clock=0 -> residue 0x6C`
+	- `clock=1 -> residue 0xCB`
+	- `clock=2 -> residue 0xA7`
+	- `clock=3 -> residue 0x00`
+4. Final CRC:
+	- `crc = base XOR residue[clock]`
+
+Verified live accepted `0x1D4` baseline family:
+
+- `b0=0xF7`
+- `b1=0x07`
+- `b5=0x44`
+- `b6=0x30` (ChargeStatus)
+- Example accepted frame: `F7 07 00 00 87 44 30 7B`
+
+`0x11A` note:
+
+- Runtime encoder follows the provided mux/startup layout.
+- Byte 7 is startup/mux payload data for selector `m0..m3` (not a CRC byte).
+
+Leaf VCM frame layouts used by the runtime encoder:
+
+- `0x11A`:
+
+```text
+BO_ 282 x11A: 8 VCM
+ SG_ JoystickGearPosition : 4|4@1+ (1,0) [0|0] "-" Vector__XXX
+ SG_ CarOnOffStatus : 13|3@1+ (1,0) [0|0] "-" Vector__XXX
+ SG_ Mulitplexor M : 48|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ StartupDataUnknown0 m0 : 56|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ StartupDataUnknown1 m1 : 56|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ StartupDataUnknown2 m2 : 56|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ StartupDataUnknown3 m3 : 56|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_: 16|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ HeartbeatVCM : 24|8@1+ (1,0) [85|170] "" Vector__XXX
+ SG_ Unknown_11A_4_0 m0 : 32|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ Unknown_11A_4_1 m1 : 32|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ Unknown_11A_4_2 m2 : 32|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ Unknown_11A_4_3 m3 : 32|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ ECOselected : 12|1@1+ (1,0) [0|0] "" Vector__XXX
+```
+
+- `0x1D4`:
+
+```text
+BO_ 468 x1D4: 8 VCM
+ SG_ MotorAmpTorqueRequest : 23|12@0- (0.25,0) [0|1024] "Nm" Vector__XXX
+ SG_ HCM_CLOCK : 38|2@1+ (1,0) [0|3] "-" Vector__XXX
+ SG_ StatusOfHighVoltagePowerSupply : 34|1@1+ (1,0) [0|0] "-" Vector__XXX
+ SG_ Relay_Plus_Output_Status : 46|1@1+ (1,0) [0|0] "-" Vector__XXX
+ SG_ CRC_1D4 : 56|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ ChargeStatus : 48|8@1+ (1,0) [0|255] "MODEMASK" Vector__XXX
+```
+
+Detailed report:
+
+- `docs/CRC_ALGORITHM_REPORT_2026-08-15.md`
 
 ## Load-Cell Filtering
 
@@ -178,10 +268,14 @@ stateDiagram-v2
 
 - `src/main.cpp`: task scheduling, startup, web server routes.
 - `src/Input.cpp`: sensor pipeline, filters, control-side telemetry flow.
+- `src/CANBus.cpp`: CAN RX/TX, wire-level 0x1DA CRC verification.
 - `src/Settings.cpp`: persisted settings and validation.
 - `src/CommandRouter.cpp`: WebSocket command handling and settings API.
+- `include/LeafCrc.h`: global single-source CRC implementation used by runtime CRC checks/generation.
 - `data/index.html`: main dashboard UI.
 - `data/settings.html`: settings UI.
+- `docs/NISSAN_LEAF_1DA_CRC.md`: Nissan-compatible 0x1DA CRC algorithm and residue tables.
+- `docs/CRC_ALGORITHM_REPORT_2026-08-15.md`: implementation report, capture findings, and validation status.
 
 ## Typical Dev Loop
 

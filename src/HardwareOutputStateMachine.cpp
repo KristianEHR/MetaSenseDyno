@@ -640,7 +640,7 @@ void update(float engineThrottlePercent,
     const bool dynoCondition = dynoRpmCondition;
     const bool motorSetpointCondition = setPoint > kIdleSetpointZeroThresholdRpm;
 
-    if (inverterStatusReady) {
+    if (inverterStatusReady || canTelemetryReady) {
         inverterStatusInitialized = true;
     }
 
@@ -659,7 +659,9 @@ void update(float engineThrottlePercent,
         startSetpointWaitStartMs = 0;
     }
 
-    const bool hardwareReady = inverterStatusReady;
+    // CAN activity is treated as inverter readiness during INIT so the startup
+    // gate can advance once the bus is alive and producing traffic.
+    const bool hardwareReady = inverterStatusReady || canTelemetryReady;
     // Telemetry is useful for the UI, but it should not keep the controller
     // stuck in INIT/white LED during boot when the core hardware and sensors
     // are already healthy. Poor or intermittent telemetry should not block the

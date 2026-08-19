@@ -1,5 +1,9 @@
 #pragma once
 
+#ifndef Serial0
+#define Serial0 Serial
+#endif
+
 namespace MetaSense::Globals {
 
 extern const bool kVcuSwitch;

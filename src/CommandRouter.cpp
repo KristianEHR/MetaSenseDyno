@@ -24,10 +24,6 @@ void sendStatus(const String& msg);
 void sendInfo(const String& msg);
 }
 
-namespace MetaSense::RunStorage {
-bool startRawCapture(uint32_t durationMs, float baselineKg, float testLoadKg, String& outFilePath);
-}
-
 namespace MetaSense::Input {
 void tareMainGui();
 void tare();
@@ -735,15 +731,6 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
     else if (cmdUpper == "GET_RUNS") {
         String list = MetaSense::RunStorage::listRuns();
         MetaSense::WebSocketServer::socket().textAll("{\"type\":\"runs\",\"data\":" + list + "}");
-    }
-    else if (cmdUpper == "START_RAW_CAPTURE") {
-        String filePath;
-        if (!MetaSense::RunStorage::startRawCapture(20000, 0.0f, 3.404f, filePath)) {
-            MetaSense::WebSocketServer::sendInfo("Raw capture already active or could not start");
-            return;
-        }
-
-        MetaSense::WebSocketServer::sendStatus("Raw capture started for 20 s: " + filePath);
     }
     else if (cmdUpper.startsWith("GET_RUN_DATA:")) {
         String filename = cmd.substring(13);
