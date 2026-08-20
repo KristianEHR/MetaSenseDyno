@@ -3117,11 +3117,9 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         dataJson += "\"leaf_1da_inv_fault_map\":" + String(static_cast<unsigned long>(leafFb.inv_fault_map)) + ",";
         dataJson += "\"leaf_1da_inv_status_bit\":" + String(static_cast<unsigned long>(leafFb.inv_status_bit)) + ",";
         
-        // Hardware status - HV relay states
+        // Hardware status
         dataJson += "\"leaf_ready\":" + String(leafFb.ready ? 1 : 0) + ",";
         dataJson += "\"hw_precharge\":" + String(MetaSense::HardwareOutputStateMachine::isPrechargeActive() ? 1 : 0) + ",";
-        dataJson += "\"hw_rb_plus\":" + String(MetaSense::HardwareOutputStateMachine::isRbPlusActive() ? 1 : 0) + ",";
-        dataJson += "\"hw_rb_minus\":" + String(MetaSense::HardwareOutputStateMachine::isRbMinusActive() ? 1 : 0) + ",";
         dataJson += "\"hw_ssr\":" + String(MetaSense::HardwareOutputStateMachine::isSsrActive() ? 1 : 0);
         dataJson += "}";
         wsock.textAll(dataJson);

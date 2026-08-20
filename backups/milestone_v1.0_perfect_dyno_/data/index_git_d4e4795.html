@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -16,7 +16,6 @@
       --side-gauge-size: clamp(260px, 19vw, 365px);
       --center-gauge-size: clamp(460px, calc(var(--side-gauge-size) * 1.7), 620px);
       --top-info-offset: clamp(180px, 16vw, 280px);
-      --main-button-width: 110px;
     }
 
     body { 
@@ -30,26 +29,25 @@
       position: relative;
     }
 
-    /* Main actions - Fixed at right side */
+    /* Header Row - Fixed at Top */
     .header-row {
       position: fixed;
-      top: 88px;
-      right: 20px;
-      left: auto;
-      bottom: auto;
+      top: 15px;
+      left: 0;
+      right: 0;
       z-index: 100;
       display: flex;
-      justify-content: flex-end;
-      align-items: flex-start;
-      padding: 0;
+      justify-content: center;
+      align-items: center;
+      gap: 40px;
+      padding: 10px 20px;
     }
 
     .button-stack {
       display: flex;
-      flex-direction: column;
-      flex-wrap: nowrap;
-      gap: 10px;
-      align-items: stretch;
+      flex-wrap: wrap;
+      gap: 12px 18px;
+      justify-content: center;
     }
 
     .pi-live-panel {
@@ -90,25 +88,17 @@
 
     .button-stack button, 
     .button-stack a button { 
-      padding: 8px 16px; 
-      font-size: 13px; 
+      padding: 12px 24px; 
+      font-size: 16px; 
       background: #404040; 
       color: #ffffff; 
-      border: 2px solid #00ff00; 
-      border-radius: 8px; 
+      border: 3px solid #00ff00; 
+      border-radius: 12px; 
       cursor: pointer; 
-      box-shadow: 0 4px 10px rgba(0,0,0,0.4); 
-      width: var(--main-button-width);
-      min-width: var(--main-button-width);
-      max-width: var(--main-button-width);
+      box-shadow: 0 6px 15px rgba(0,0,0,0.5); 
+      min-width: 140px; 
       font-weight: bold;
       transition: all 0.2s ease;
-    }
-
-    .button-stack a {
-      display: block;
-      width: var(--main-button-width);
-      text-decoration: none;
     }
     
     .button-stack button:hover { 
@@ -128,46 +118,6 @@
       100% { box-shadow: 0 0 10px #ff0000; } 
     }
 
-    /* Slim toggle buttons for panel visibility */
-    .slim-button-stack {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      align-items: center;
-      margin-left: 12px;
-    }
-
-    .slim-btn {
-      width: 36px;
-      height: 36px;
-      padding: 0;
-      font-size: 18px;
-      background: #505050;
-      color: #ffffff;
-      border: 2px solid #666;
-      border-radius: 6px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s ease;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.4);
-    }
-
-    .slim-btn:hover {
-      background: #606060;
-      border-color: #888;
-      transform: scale(1.1);
-    }
-
-    .slim-btn.active {
-      background: #00ff00;
-      border-color: #00ff00;
-      color: #000;
-      box-shadow: 0 4px 15px rgba(0, 255, 0, 0.5);
-    }
-
-
     /* Status Display */
     #status { 
       position: fixed;
@@ -186,17 +136,16 @@
 
     #versionInfo {
       position: fixed;
-      top: 16px;
+      top: 20px;
       right: 20px;
       left: auto;
       bottom: auto;
       transform: none;
-      font-size: 14px;
-      line-height: 1.2;
+      font-size: 20px;
       color: #666;
       z-index: 99;
       background: rgba(0,0,0,0.5);
-      padding: 3px 8px;
+      padding: 4px 10px;
       border-radius: 6px;
       font-family: 'Courier New', monospace;
       backdrop-filter: blur(2px);
@@ -253,13 +202,39 @@
       font-weight: bold;
     }
     
+    .can-monitor-stepper {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 4px;
+    }
+    .can-monitor-step-btn {
+      min-width: 22px;
+      height: 20px;
+      border: 1px solid #6bbf7c;
+      background: #263326;
+      color: #ddffdd;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      line-height: 1;
+      padding: 0;
+    }
+    .can-monitor-step-btn:hover {
+      background: #2f4530;
+    }
+    .can-monitor-step-target {
+      min-width: 48px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
     .bmp-box .reading {
       font-size: 16px;
       font-weight: bold;
       color: #ffffff;
       margin: 5px 0;
     }
-    
+
     .bmp-box .reading span {
       color: #ffaa44;
       font-size: 18px;
@@ -555,50 +530,6 @@
       background: #008000;
     }
     
-    /* Manual Torque Control Button Styles */
-    .mode-btn {
-      transition: all 0.15s ease !important;
-      font-size: 12px !important;
-    }
-    
-    .mode-btn:hover:not(:disabled) {
-      transform: scale(1.05);
-      box-shadow: 0 0 10px rgba(255,255,255,0.3);
-    }
-    
-    .mode-btn:active:not(:disabled) {
-      transform: scale(0.98);
-    }
-    
-    #torqueIncBtn, #torqueDecBtn {
-      transition: all 0.15s ease;
-      font-weight: bold;
-      font-size: 14px;
-    }
-    
-    #torqueIncBtn:hover:not(:disabled) {
-      transform: scale(1.08);
-      box-shadow: 0 0 15px rgba(102,255,102,0.5);
-    }
-    
-    #torqueIncBtn:active:not(:disabled) {
-      transform: scale(0.95);
-    }
-    
-    #torqueDecBtn:hover:not(:disabled) {
-      transform: scale(1.08);
-      box-shadow: 0 0 15px rgba(255,102,102,0.5);
-    }
-    
-    #torqueDecBtn:active:not(:disabled) {
-      transform: scale(0.95);
-    }
-    
-    #torqueIncBtn:disabled, #torqueDecBtn:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
-    
     /* Modal Graph Styles */
     .graph-container { 
       width: 100%; 
@@ -717,23 +648,23 @@
 }
 
 .can-monitor {
-  --can-value-col-width: 24ch;
   position: fixed;
   top: 50%;
   left: 20px;
-  right: auto;
-  bottom: auto;
   transform: translateY(-50%);
   z-index: 99;
-  width: min(460px, calc(100vw - 16px));
-  max-height: calc(100vh - 120px);
+  width: min(365px, calc(100vw - 20px));
+  max-width: calc(100vw - 16px);
+  min-width: 0;
+  box-sizing: border-box;
   background: rgba(0, 0, 0, 0.72);
   border: 1px solid #6dff8a;
   border-radius: 10px;
-  padding: 10px 12px;
+  padding: 7px 9px;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(3px);
-  font-size: 13px;
+  font-size: 11px;
+  max-height: calc(100vh - 120px);
   overflow-y: auto;
   overscroll-behavior: contain;
   contain: layout paint;
@@ -743,139 +674,98 @@
   color: #b9ffca;
   font-weight: 700;
   letter-spacing: 0.8px;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   text-transform: uppercase;
 }
 
 .can-monitor-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.can-monitor-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--can-value-col-width);
-  gap: 3px 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 8px;
+  min-width: 0;
+}
+
+.can-monitor-row-raw {
+  grid-template-columns: 1fr;
+  row-gap: 1px;
+}
+
+.can-monitor-row-raw .can-monitor-label,
+.can-monitor-row-raw .can-monitor-value {
+  grid-column: 1;
+  text-align: left;
+}
+
+.can-monitor-section-row {
+  margin-top: 2px;
+  padding-top: 2px;
+  border-top: 1px solid rgba(147, 245, 171, 0.16);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
+  column-gap: 8px;
+  cursor: pointer;
+}
+
+.can-monitor-section-toggle-indicator {
+  color: #93f5ab;
+  font-weight: 700;
+  user-select: none;
 }
 
 .can-monitor-label {
   color: #bbbbbb;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
   min-height: 1.2em;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .can-monitor-value {
   color: #ffffff;
   font-weight: 700;
   text-align: right;
-  justify-self: end;
-  width: var(--can-value-col-width);
-  min-width: var(--can-value-col-width);
-  max-width: var(--can-value-col-width);
-  box-sizing: border-box;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  width: auto;
+  min-width: 0;
+  max-width: 180px;
+  white-space: normal;
+  overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
   font-family: Consolas, "Courier New", monospace;
   min-height: 1.2em;
+  line-height: 1.2;
 }
 
 .can-monitor-value-raw {
-  display: block;
-  justify-self: end;
-  width: var(--can-value-col-width);
-  min-width: var(--can-value-col-width);
-  max-width: var(--can-value-col-width);
-  box-sizing: border-box;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  overflow-wrap: normal;
-  text-align: right !important;
-  font-size: 12px;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
   color: #e3ffe9;
-}
-
-/* Fixed-width numeric field styling for 0x1DA data to prevent blinking */
-.can-monitor-value.can-sec-1da {
-  display: inline-block;
-  width: 28ch;
-  min-width: 28ch;
-  max-width: 28ch;
-  text-align: right;
-  padding-right: 2px;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
-  line-height: 1.2;
 }
 
 .can-monitor-section {
   color: #93f5ab;
   font-weight: 800;
   letter-spacing: 0.08em;
-  margin-top: 4px;
-}
-
-.can-monitor-subtitle {
-  color: #8fd8ff;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  margin-top: 10px;
+  margin-top: 0;
   text-transform: uppercase;
 }
 
-.can-monitor-controls {
-  display: flex;
-  justify-self: end;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 6px;
-  width: var(--can-value-col-width);
-  min-width: var(--can-value-col-width);
-  max-width: var(--can-value-col-width);
-  box-sizing: border-box;
-}
-
-.can-control-btn {
-  border: 1px solid #486b7d;
-  background: #132028;
-  color: #d9f6ff;
-  border-radius: 6px;
-  padding: 2px 8px;
-  min-width: 42px;
-  cursor: pointer;
-  font-weight: 700;
-}
-
-.can-control-btn.active {
-  background: #1d4f31;
-  border-color: #7dff95;
-  color: #dfffe7;
-}
-
-.can-control-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.can-step-input {
-  width: 70px;
-  border: 1px solid #486b7d;
-  background: #0f171c;
-  color: #e9f9ff;
-  border-radius: 6px;
-  padding: 2px 6px;
-  text-align: right;
-  font-weight: 700;
-}
-
 .can-monitor-section-value {
-  color: #9cf0b0;
-  text-align: right;
-}
-
-.can-monitor-section-toggle,
-.can-monitor-section-value {
-  cursor: pointer;
+  display: none;
 }
 
 .can-monitor-status-row {
@@ -888,14 +778,14 @@
 .can-monitor-status-group {
   margin-top: 7px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-wrap: nowrap;
+  gap: 4px;
   align-items: center;
+  overflow: hidden;
 }
 
 .can-monitor-status-label {
   color: #8fa6b8;
-  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   min-width: 34px;
@@ -904,11 +794,24 @@
 .can-flag {
   border: 1px solid #555;
   border-radius: 999px;
-  padding: 2px 8px;
-  font-size: 11px;
+  padding: 1px 5px;
+  line-height: 1;
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: #999;
   background: rgba(120, 120, 120, 0.2);
   font-weight: 700;
+  text-transform: uppercase;
+}
+
+.can-monitor-row .can-flag {
+  border-radius: 4px;
+  padding: 0 4px;
+  min-width: 36px;
+  justify-self: end;
 }
 
 .can-flag.on {
@@ -918,9 +821,9 @@
 }
 
 .can-flag.warn {
-  color: #2a1a00;
-  background: #ffd089;
-  border-color: #ffd089;
+  color: #2b1a00;
+  background: #ffc966;
+  border-color: #ffc966;
 }
 
 .can-flag.fault {
@@ -930,25 +833,9 @@
 }
 
 @media (max-width: 900px) {
-  .header-row {
-    top: 14px;
-    right: 8px;
-  }
-
-  .button-stack button,
-  .button-stack a button,
-  .button-stack a {
-    width: min(var(--main-button-width), calc(100vw - 16px));
-    min-width: min(var(--main-button-width), calc(100vw - 16px));
-    max-width: min(var(--main-button-width), calc(100vw - 16px));
-  }
-
   .can-monitor {
-    top: 50%;
+    bottom: 35px;
     left: 8px;
-    right: auto;
-    bottom: auto;
-    transform: translateY(-50%);
     width: calc(100vw - 16px);
   }
 }
@@ -979,16 +866,10 @@
       <button id="tareButton">TARE (ZERO)</button>
       <button id="autoRunButton">Auto Run (F8)</button>
       <button id="manualRunButton">Manual Run (F12)</button>
-      <a href="/settings"><button>⚙ SETTINGS</button></a>
-      <a href="/trend.html" target="_blank"><button>📊 Trends</button></a>
-    </div>
-    <!-- Slim toggle buttons for panel visibility -->
-    <div class="slim-button-stack">
-      <button id="toggleAmbientBtn" class="slim-btn" title="Toggle Ambient panel">🌡</button>
-      <button id="toggleEnergyBtn" class="slim-btn" title="Toggle Acc. Energy panel">⚡</button>
-      <button id="toggleManualTorqueBtn" class="slim-btn" title="Toggle Manual Torque panel">⚙</button>
-      <button id="toggleCanMonitorButton" class="slim-btn" title="Toggle CAN Monitor">📡</button>
-      <button id="toggleInverterBtn" class="slim-btn" title="Toggle Inverter Status panel">🔌</button>
+      <button id="toggleCanMonitorButton">CAN Monitor: ON</button>
+      <a href="/settings"><button>ÔÜÖ SETTINGS</button></a>
+      <a href="/captures"><button>­ƒº¬ Capture Test</button></a>
+      <a href="/trend.html" target="_blank"><button>­ƒôè Trends</button></a>
     </div>
   </div>
 
@@ -1003,177 +884,252 @@
   
   <!-- RPM Source Indicator -->
   <div class="rpm-source">
-    📊 RPM Source: <span id="rpmSourceValue">CAN</span>
+    ­ƒôè RPM Source: <span id="rpmSourceValue">CAN</span>
     <span id="canFallbackBadge" class="fallback-badge">CAN FALLBACK</span>
   </div>
 
   <div id="canMonitor" class="can-monitor" aria-live="polite">
     <div class="can-monitor-title">CAN MONITOR</div>
-    <!-- Monitor scope: strict RX IDs (0x1DA, 0x55A) plus 0x11A command context. -->
+    <!-- RX scope is intentionally strict for this setup: only ID1DA and ID55A. -->
     <div class="can-monitor-grid">
-      <span class="can-monitor-label can-monitor-subtitle">RX Bus</span>
-      <span class="can-monitor-value can-monitor-subtitle">Telemetry</span>
+      <div class="can-monitor-row can-monitor-section-row">
+        <span class="can-monitor-label can-monitor-section">0x1DA</span>
+      </div>
 
-      <span class="can-monitor-label can-monitor-section can-monitor-section-toggle" data-section="1da" data-title="0x1DA" role="button" tabindex="0" aria-expanded="true">0x1DA:</span>
-      <span class="can-monitor-value can-monitor-section-value" data-section="1da" role="button" tabindex="0" aria-expanded="true">[-]</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Dyno RPM</span>
+        <span id="canMon1daRpm" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1da">MG_OutputRevolution (rpm)</span>
-      <span id="canMon1daRpm" class="can-monitor-value can-sec-1da">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Input V</span>
+        <span id="canMon1daInputV" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1da">Input Voltage (V)</span>
-      <span id="canMon1daInputV" class="can-monitor-value can-sec-1da">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Torque (Nm)</span>
+        <span id="canMon1daTorque" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1da">Effective Torque (Nm)</span>
-      <span id="canMon1daTorque" class="can-monitor-value can-sec-1da">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">MG_CLOCK</span>
+        <span id="canMon1daClock" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1da">MG_CLOCK</span>
-      <span id="canMon1daClock" class="can-monitor-value can-sec-1da">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Error Codes</span>
+        <span id="canMon1daErr" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1da">Inv_FaultMap (legacy/bin)</span>
-      <span id="canMon1daErr" class="can-monitor-value can-sec-1da">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">MG_CLOCK bits</span>
+        <span id="canMon1daClockBits" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1da">Inv_FaultMap (decoded 6b)</span>
-      <span id="canMon1daFaultMap" class="can-monitor-value can-sec-1da">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">CRC_1DA rx/calc</span>
+        <span id="canMon1daCrc" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1da">Inv_Blinky</span>
-      <span id="canMon1daBlinky" class="can-monitor-value can-sec-1da">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">CRC_1DA proof ok/total</span>
+        <span id="canMon1daCrcProof" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1da">Inv_Fault_CANTimeoutMaybe</span>
-      <span id="canMon1daCanTimeout" class="can-monitor-value can-sec-1da">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">CRC_1DA last fail age(ms)</span>
+        <span id="canMon1daCrcFailAge" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1da">Wire CRC RX / Calc / OK</span>
-      <span id="canMon1daCrc" class="can-monitor-value can-sec-1da">--- / --- / ---</span>
+      <div class="can-monitor-row can-monitor-row-raw">
+        <span class="can-monitor-label">RX bytes</span>
+        <span id="canMon1daRaw" class="can-monitor-value can-monitor-value-raw">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1da">Wire CRC OK / BAD</span>
-      <span id="canMon1daCrcStats" class="can-monitor-value can-sec-1da">--- / ---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">frames/age(ms)</span>
+        <span id="canMonId1da" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1da">0x1DA Raw B0..B7</span>
-      <span id="canMon1daRaw" class="can-monitor-value can-sec-1da" style="font-family: monospace; font-size: 0.85em;">-- -- -- -- -- -- -- --</span>
+      <div class="can-monitor-row can-monitor-section-row">
+        <span class="can-monitor-label can-monitor-section">0x1D4 SNIFF (DBC)</span>
+      </div>
 
-      <span class="can-monitor-label can-monitor-section can-monitor-section-toggle" data-section="55a" data-title="0x55A" role="button" tabindex="0" aria-expanded="true">0x55A:</span>
-      <span class="can-monitor-value can-monitor-section-value" data-section="55a" role="button" tabindex="0" aria-expanded="true">[-]</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Torque demand [Nm]</span>
+        <span id="canMon1d4Torque" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-55a">Inverter Temp (C)</span>
-      <span id="canMonInvTemp" class="can-monitor-value can-sec-55a">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Torque demand RAW</span>
+        <span id="canMon1d4Raw" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-55a">Stator Temp (C)</span>
-      <span id="canMonStatorTemp" class="can-monitor-value can-sec-55a">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">HV Status</span>
+        <span id="canMon1d4HvStatus" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-55a">Coolant Temp (C)</span>
-      <span id="canMonCoolantTemp" class="can-monitor-value can-sec-55a">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">RB+</span>
+        <span id="canMon1d4RelayPlus" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-monitor-section can-monitor-section-toggle" data-section="11a" data-title="0x11A" role="button" tabindex="0" aria-expanded="true">0x11A:</span>
-      <span class="can-monitor-value can-monitor-section-value" data-section="11a" role="button" tabindex="0" aria-expanded="true">[-]</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Charge status</span>
+        <span id="canMon1d4BatteryStatus" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-11a">Source frames/age(ms)</span>
-      <span id="canMon11aSource" class="can-monitor-value can-sec-11a">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">CMD_clock</span>
+        <span id="canMon1d4Clock" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-11a">TX frames/age(ms)</span>
-      <span id="canMon11aTx" class="can-monitor-value can-sec-11a">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">0x1D4 CRC control token rx/calc/status</span>
+        <span id="canMon1d4Crc" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-11a">Gear / CarOn / ECO</span>
-      <span id="canMon11aDrive" class="can-monitor-value can-sec-11a">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">0x1D4 CRC control token ok/total</span>
+        <span id="canMon1d4CrcProof" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-11a">HB / MUX / BTN</span>
-      <span id="canMon11aSignals" class="can-monitor-value can-sec-11a">---</span>
+      <div class="can-monitor-row can-monitor-row-raw">
+        <span class="can-monitor-label">Sniffed bytes [B0..B7]</span>
+        <span id="canMon1d4RawSniff" class="can-monitor-value can-monitor-value-raw">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-11a">TX==RX / diff</span>
-      <span id="canMon11aCompare" class="can-monitor-value can-sec-11a">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">sniff frames/age(ms)</span>
+        <span id="canMon1d4FramesSniff" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-11a">RX Raw B0..B7</span>
-      <span id="canMon11aRaw" class="can-monitor-value can-monitor-value-raw can-sec-11a">---</span>
+      <div class="can-monitor-row can-monitor-section-row">
+        <span class="can-monitor-label can-monitor-section">0x1D4 TX (GENERATED)</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-11a">TX Raw B0..B7</span>
-      <span id="canMon11aTxRaw" class="can-monitor-value can-monitor-value-raw can-sec-11a">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Torque demand [Nm]</span>
+        <span id="canMon1d4TxTorque" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-monitor-subtitle can-sec-1d4tx">TX 0x1D4 Control</span>
-      <span class="can-monitor-value can-monitor-subtitle can-sec-1d4tx">Command</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Torque target [Nm]</span>
+        <span class="can-monitor-value can-monitor-stepper">
+          <button id="canMon1d4TxTargetDec" class="can-monitor-step-btn" type="button" aria-label="decrease torque target">-</button>
+          <span id="canMon1d4TxTarget" class="can-monitor-step-target">0.00</span>
+          <button id="canMon1d4TxTargetInc" class="can-monitor-step-btn" type="button" aria-label="increase torque target">+</button>
+        </span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1d4tx">1D4 Mode</span>
-      <span class="can-monitor-controls can-sec-1d4tx">
-        <button id="leaf1d4ModeManualBtn" class="can-control-btn" type="button">Manual</button>
-        <button id="leaf1d4ModeAutoBtn" class="can-control-btn" type="button">Auto</button>
-      </span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Torque demand RAW</span>
+        <span id="canMon1d4TxRaw" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1d4tx">Target Torque (Nm)</span>
-      <span id="leaf1d4TargetNm" class="can-monitor-value can-sec-1d4tx">0.00</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">HV Status</span>
+        <span id="canMon1d4TxHvStatus" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1d4tx">Torque Adjust</span>
-      <span class="can-monitor-controls can-sec-1d4tx">
-        <button id="leaf1d4TorqueDownBtn" class="can-control-btn" type="button">-</button>
-        <button id="leaf1d4TorqueUpBtn" class="can-control-btn" type="button">+</button>
-      </span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">RB+</span>
+        <span id="canMon1d4TxRelayPlus" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1d4tx">Step (Nm)</span>
-      <span class="can-monitor-controls can-sec-1d4tx">
-        <input id="leaf1d4TorqueStep" class="can-step-input" type="number" min="0.10" max="0.10" step="0.10" value="0.10" readonly>
-      </span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Charge status</span>
+        <span id="canMon1d4TxBatteryStatus" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-monitor-section can-monitor-section-toggle" data-section="1d4tx" data-title="0x1D4 TX" role="button" tabindex="0" aria-expanded="true">0x1D4 TX:</span>
-      <span class="can-monitor-value can-monitor-section-value" data-section="1d4tx" role="button" tabindex="0" aria-expanded="true">[-]</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">CMD_clock</span>
+        <span id="canMon1d4TxClock" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1d4tx">TX frames/age(ms)</span>
-      <span id="canMon1d4Tx" class="can-monitor-value can-sec-1d4tx">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">0x1D4 CRC control token rx/calc/status</span>
+        <span id="canMon1d4TxCrc" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1d4tx">Torque TX (Nm)</span>
-      <span id="canMon1d4TxTorque" class="can-monitor-value can-sec-1d4tx">---</span>
+      <div class="can-monitor-row can-monitor-row-raw">
+        <span class="can-monitor-label">Generated bytes [B0..B7]</span>
+        <span id="canMon1d4RawTx" class="can-monitor-value can-monitor-value-raw">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1d4tx">Torque RAW TX</span>
-      <span id="canMon1d4TxTorqueRaw" class="can-monitor-value can-sec-1d4tx">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">tx frames/age(ms)</span>
+        <span id="canMon1d4FramesTx" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1d4tx">HV Status TX</span>
-      <span id="canMon1d4TxHv" class="can-monitor-value can-sec-1d4tx">---</span>
+      <div class="can-monitor-row can-monitor-section-row">
+        <span class="can-monitor-label can-monitor-section">0x55A</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1d4tx">Relay+ TX</span>
-      <span id="canMon1d4TxRelay" class="can-monitor-value can-sec-1d4tx">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Inverter Temp (C)</span>
+        <span id="canMonInvTemp" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1d4tx">Charge TX</span>
-      <span id="canMon1d4TxCharge" class="can-monitor-value can-sec-1d4tx">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Stator Temp (C)</span>
+        <span id="canMonStatorTemp" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1d4tx">Clock TX</span>
-      <span id="canMon1d4TxClock" class="can-monitor-value can-sec-1d4tx">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Coolant Temp (C)</span>
+        <span id="canMonCoolantTemp" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1d4tx">CRC TX / Calc / OK</span>
-      <span id="canMon1d4TxCrc" class="can-monitor-value can-sec-1d4tx">---</span>
+      <div class="can-monitor-row can-monitor-section-row">
+        <span class="can-monitor-label can-monitor-section">DYNO</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1d4tx">TX==Sniff / diff</span>
-      <span id="canMon1d4Compare" class="can-monitor-value can-sec-1d4tx">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Engine RPM</span>
+        <span id="canMonEngineRpm" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1d4tx">TX Target / Mode</span>
-      <span id="canMon1d4TxMeta" class="can-monitor-value can-sec-1d4tx">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">INV Ready</span>
+        <span id="canFlagReady" class="can-flag">OFF</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1d4tx">Ring cnt/valid/fb</span>
-      <span id="canMon1d4Ring" class="can-monitor-value can-sec-1d4tx">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">HV RB+</span>
+        <span id="canFlagHwRbplus" class="can-flag">OFF</span>
+      </div>
 
-      <span class="can-monitor-label can-sec-1d4tx">TX Raw B0..B7</span>
-      <span id="canMon1d4TxRaw" class="can-monitor-value can-monitor-value-raw can-sec-1d4tx">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">HV Precharge</span>
+        <span id="canFlagHwPrecharge" class="can-flag">OFF</span>
+      </div>
 
-      <span class="can-monitor-label can-monitor-section">DYNO:</span>
-      <span class="can-monitor-value can-monitor-section-value">.</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">HV RB-</span>
+        <span id="canFlagHwRbminus" class="can-flag">OFF</span>
+      </div>
 
-      <span class="can-monitor-label">Torque Demand (Nm)</span>
-      <span id="canMonVcuTorque" class="can-monitor-value">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">HV SSR</span>
+        <span id="canFlagHwSsr" class="can-flag">OFF</span>
+      </div>
 
-      <span class="can-monitor-label">Engine RPM</span>
-      <span id="canMonEngineRpm" class="can-monitor-value">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Output State</span>
+        <span id="canMonFwState" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label">Output State</span>
-      <span id="canMonFwState" class="can-monitor-value">---</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Gate Reason</span>
+        <span id="canMonStartGate" class="can-monitor-value">---</span>
+      </div>
 
-      <span class="can-monitor-label">Gate Reason</span>
-      <span id="canMonStartGate" class="can-monitor-value">---</span>
-
-      <span class="can-monitor-label">Sim Mode</span>
-      <span id="canMonVcuMode" class="can-monitor-value">---</span>
-    </div>
-    <div class="can-monitor-status-group">
-      <span id="canFlagReady" class="can-flag">READY</span>
-    </div>
-    <div class="can-monitor-status-group">
-      <span id="canFlagHwPrecharge" class="can-flag">HV_PRECHARGE</span>
-      <span id="canFlagHwRbplus" class="can-flag">HV_RB+</span>
-      <span id="canFlagHwRbminus" class="can-flag">HV_RB-</span>
-      <span id="canFlagHwSsr" class="can-flag">HV_SSR</span>
+      <div class="can-monitor-row">
+        <span class="can-monitor-label">Sim Mode</span>
+        <span id="canMonVcuMode" class="can-monitor-value">---</span>
+      </div>
     </div>
   </div>
 
@@ -1216,16 +1172,16 @@
       
       <!-- Drum RPM Display -->
       <div class="loadcell-display" style="margin-top: 15px; text-align: center; width: var(--side-gauge-size);">
-        ⚙️ Throttle: <span id="drumRpmDisplay">0</span> %
+        ÔÜÖ´©Å Throttle: <span id="drumRpmDisplay">0</span> %
       </div>
 
       <!-- Ambient Box -->
-      <div id="ambientPanel" class="bmp-box" style="position: static; transform: none; margin-top: 12px; width: var(--side-gauge-size);">
-        <div class="title"> 🌡️ AMBIENT 🌡️</div>
-        <div class="reading">Temperature: <span id="ambientTempValue">---</span> °C</div>
+      <div class="bmp-box" style="position: static; transform: none; margin-top: 12px; width: var(--side-gauge-size);">
+        <div class="title"> ­ƒîí´©Å AMBIENT ­ƒîí´©Å</div>
+        <div class="reading">Temperature: <span id="ambientTempValue">---</span> ┬░C</div>
         <div class="reading">Pressure: <span id="pressureValue">---</span> hPa</div>
         <div class="reading">Relative humidity: <span id="ratioConfidence">---</span> %</div>
-        <div class="reading">Air density: <span id="airDensityValue">---</span> kg/m³</div>
+        <div class="reading">Air density: <span id="airDensityValue">---</span> kg/m┬│</div>
         <div class="reading">Climate CF: <span id="climateCFValue">---</span></div>
       </div>
     </div>
@@ -1260,11 +1216,11 @@
         <rect x="210" y="143" width="120" height="90" rx="10" ry="10" fill="#1a1a1a" stroke="#00ff00" stroke-width="1"/>
         <text x="230" y="163" fill="#fff" font-size="18" font-weight="bold">EGT</text>
         <text id="egtValue" x="280" y="198" fill="#ff8844" font-size="38" font-weight="bold" text-anchor="middle">---</text>
-        <text x="310" y="223" fill="#fff" font-size="18" text-anchor="middle">°C</text>
+        <text x="310" y="223" fill="#fff" font-size="18" text-anchor="middle">┬░C</text>
       </svg>
 
       <div class="loadcell-display" style="margin-top: 12px; text-align: center; width: 100%;">
-        🎯 Setpoint: <span id="rpmSetpointDisplay">0</span> RPM
+        ­ƒÄ» Setpoint: <span id="rpmSetpointDisplay">0</span> RPM
       </div>
     </div>
 
@@ -1308,69 +1264,15 @@
       
       <!-- Loadcell Display - Below the torque gauge -->
       <div class="loadcell-display" style="margin-top: 8px; text-align: center; width: var(--side-gauge-size);">
-        ⚖️ Load: <span id="loadKgDisplay">0</span> kg
+        ÔÜû´©Å Load: <span id="loadKgDisplay">0</span> kg
       </div>
 
       <!-- Acc. Energy Box -->
-      <div id="accEnergyPanel" class="gear-box" style="position: static; transform: none; margin-top: 12px; width: var(--side-gauge-size);">
-        <div class="title">⚡ Acc. Energy</div>
+      <div class="gear-box" style="position: static; transform: none; margin-top: 12px; width: var(--side-gauge-size);">
+        <div class="title">ÔÜí Acc. Energy</div>
         <div class="reading">E_torque: <span id="gearRatioValue">---</span> Nm</div>
         <div class="reading">Energy:  <span id="EnergyValue">---</span> GJ</div>
-        <button id="resetEnergyButton">⟳ Reset Energy</button>
-      </div>
-
-      <!-- Manual Torque Control Panel -->
-      <div id="manualTorquePanel" class="gear-box" style="position: static; transform: none; margin-top: 12px; width: var(--side-gauge-size); background: rgba(0,0,0,0.7); border: 1px solid #88ff88;">
-        <div class="title" style="color: #88ff88;">⚙ MANUAL TORQUE</div>
-        
-        <!-- Mode Toggle -->
-        <div style="display: flex; gap: 8px; margin: 8px 0; justify-content: center;">
-          <button id="torqueModeManualBtn" class="mode-btn" style="flex: 1; padding: 8px 12px; background: #404040; color: #888; border: 2px solid #666; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; transition: all 0.15s;">Manual</button>
-          <button id="torqueModeAutoBtn" class="mode-btn" style="flex: 1; padding: 8px 12px; background: #404040; color: #888; border: 2px solid #666; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; transition: all 0.15s;">Auto</button>
-        </div>
-        
-        <!-- Current Mode Indicator -->
-        <div style="text-align: center; font-size: 12px; color: #00ff00; margin: 4px 0; font-weight: bold;">
-          Mode: <span id="torqueModeIndicator">AUTO</span>
-        </div>
-        
-        <!-- Torque Display -->
-        <div style="text-align: center; margin: 8px 0;">
-          <div style="font-size: 11px; color: #999;">Current Manual Torque</div>
-          <div style="font-size: 28px; color: #00ffff; font-weight: bold; margin: 4px 0;">
-            <span id="manualTorqueDisplay">0.00</span> Nm
-          </div>
-        </div>
-        
-        <!-- +/- Buttons -->
-        <div style="display: flex; gap: 8px; margin: 8px 0; justify-content: center;">
-          <button id="torqueDecBtn" style="flex: 1; padding: 10px 8px; background: #660000; color: #fff; border: 2px solid #ff6666; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 16px; transition: all 0.15s; text-shadow: 0 0 4px rgba(0,0,0,0.8);">−0.1</button>
-          <button id="torqueIncBtn" style="flex: 1; padding: 10px 8px; background: #006600; color: #fff; border: 2px solid #66ff66; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 16px; transition: all 0.15s; text-shadow: 0 0 4px rgba(0,0,0,0.8);">+0.1</button>
-        </div>
-        
-        <!-- Range Info -->
-        <div style="text-align: center; font-size: 11px; color: #888; margin-top: 6px;">
-          Range: −300 to +300 Nm
-        </div>
-      </div>
-
-      <!-- Inverter Status Panel -->
-      <div id="inverterStatusPanel" class="gear-box" style="position: static; transform: none; margin-top: 12px; width: var(--side-gauge-size); background: rgba(0,0,0,0.7); border: 1px solid #ff8844;">
-        <div class="title" style="color: #ff8844;">🔌 INVERTER STATUS</div>
-        <div class="reading" style="color: #ffddaa;">Inverter Fault (6b): <span id="inverterFaultValue" style="font-weight: bold; color: #ff6644;">---</span></div>
-        <div class="reading" style="color: #ffddaa;">Status: <span id="inverterStatusValue" style="font-weight: bold; color: #88ff88;">---</span></div>
-        <hr style="border: none; border-top: 1px solid #666; margin: 8px 0;"/>
-        <div class="reading" style="color: #ffddaa;">Inverter HV: <span id="inverterHVValue" style="font-weight: bold; color: #88ccff;">---</span> V</div>
-        <div class="reading" style="color: #ffddaa;">Inv. Temp: <span id="inverterTempValue" style="font-weight: bold; color: #ffaa88;">---</span> °C</div>
-        <div class="reading" style="color: #ffddaa;">Stator Temp: <span id="statorTempValue" style="font-weight: bold; color: #ffaa88;">---</span> °C</div>
-        <div class="reading" style="color: #ffddaa;">Coolant Temp: <span id="coolantTempValue" style="font-weight: bold; color: #ffaa88;">---</span> °C</div>
-        <hr style="border: none; border-top: 1px solid #666; margin: 8px 0;"/>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px;">
-          <button id="hwPrechargeBtnStatus" style="padding: 6px; border: 2px solid #666; border-radius: 4px; background: #333; color: #aaa; font-size: 11px; font-weight: bold; cursor: default;">HV_PRECHARGE</button>
-          <button id="hwRbPlusBtnStatus" style="padding: 6px; border: 2px solid #666; border-radius: 4px; background: #333; color: #aaa; font-size: 11px; font-weight: bold; cursor: default;">HV_RB+</button>
-          <button id="hwRbMinusBtnStatus" style="padding: 6px; border: 2px solid #666; border-radius: 4px; background: #333; color: #aaa; font-size: 11px; font-weight: bold; cursor: default;">HV_RB-</button>
-          <button id="hwSsrBtnStatus" style="padding: 6px; border: 2px solid #666; border-radius: 4px; background: #333; color: #aaa; font-size: 11px; font-weight: bold; cursor: default;">HV_SSR</button>
-        </div>
+        <button id="resetEnergyButton">Ôƒ│ Reset Energy</button>
       </div>
     </div>
   </div>
@@ -1378,7 +1280,7 @@
   <!-- Modal: Dyno Run Display -->
   <div id="dynoModal" class="modal">
     <div class="modal-content">
-      <span class="close">×</span>
+      <span class="close">├ù</span>
       <h2 id="modalTitle">LIVE DYNO RUN</h2>
       <div class="graph-container">
         <canvas id="modalDynoChart" style="width:100% !important; height:100% !important;"></canvas>
@@ -1386,9 +1288,9 @@
       <div class="peaks-container">
         <div class="peak-left" id="finalPeakHP"></div>
         <div style="display: flex; gap: 20px;">
-          <button id="finishManualRun" style="display:none;">🏁 FINISH RUN (F12)</button>
-          <button id="stopAutoRunModal" style="display:none;">⏹ STOP AUTO RUN</button>
-          <button id="savePdfModalButton" style="display:none;">💾 SAVE PDF</button>
+          <button id="finishManualRun" style="display:none;">­ƒÅü FINISH RUN (F12)</button>
+          <button id="stopAutoRunModal" style="display:none;">ÔÅ╣ STOP AUTO RUN</button>
+          <button id="savePdfModalButton" style="display:none;">­ƒÆ¥ SAVE PDF</button>
         </div>
         <div class="peak-right" id="finalPeakTorque"></div>
       </div>
@@ -1406,8 +1308,8 @@
   <!-- Modal: Auto Run Setup -->
   <div id="autoModal" class="modal">
     <div class="modal-content">
-      <span class="close">×</span>
-      <h2 style="color: #00ff00;">⚡ AUTO RUN SETUP</h2>
+      <span class="close">├ù</span>
+      <h2 style="color: #00ff00;">ÔÜí AUTO RUN SETUP</h2>
       
       <label>Start Recording at RPM:</label>
       <input type="number" id="startRPM" value="4000" min="100" max="20000" step="100">
@@ -1443,15 +1345,15 @@
         <label><input type="checkbox" id="autoGenerateReportAuto"> Auto-generate PDF report when run completes</label>
       </div>
       
-      <button id="confirmAuto">▶ START AUTO RUN</button>
+      <button id="confirmAuto">ÔûÂ START AUTO RUN</button>
     </div>
   </div>
 
   <!-- Modal: Manual Run Setup -->
   <div id="manualModal" class="modal">
     <div class="modal-content">
-      <span class="close">×</span>
-      <h2 style="color: #ff8844;">✋ MANUAL RUN SETUP</h2>
+      <span class="close">├ù</span>
+      <h2 style="color: #ff8844;">Ô£ï MANUAL RUN SETUP</h2>
       
       <label>Customer Name:</label>
       <input type="text" id="manualCustomerName" value="MetaSense" placeholder="MetaSense">
@@ -1474,7 +1376,7 @@
         <label><input type="checkbox" id="autoGenerateReportManual"> Auto-generate PDF report when run completes</label>
       </div>
       
-      <button id="confirmManual">🎬 START MANUAL RECORDING</button>
+      <button id="confirmManual">­ƒÄ¼ START MANUAL RECORDING</button>
     </div>
   </div>
   
@@ -1510,17 +1412,15 @@
     let reportReadyActive = false;
     let autoGenerateReportEnabled = false;
     let autoGenerateReportTriggered = false;
+    let leaf1d4TxTargetNm = 0.0;
+    const kLeaf1d4TxStepNm = 0.1;
+    const kLeaf1d4TxMinNm = -512.0;
+    const kLeaf1d4TxMaxNm = 511.75;
     const autoReportPrefKey = "metasense.autoGenerateReport";
     const canMonitorPrefKey = "metasense.canMonitorVisible";
-    const canMonitorSectionPrefKey = "metasense.canMonitorSections";
-    const canMonitorSectionDefaults = { "1da": true, "55a": true, "11a": false, "1d4tx": true };
-    const leaf1d4TorqueMinNm = -300;
-    const leaf1d4TorqueMaxNm = 300;
-    const leaf1d4TorqueDefaultStepNm = 0.1;
+    const canMonitorSectionsPrefKey = "metasense.canMonitorSections";
     const autoButtonIdleLabel = "Auto Run (F8)";
-    const autoButtonActiveLabel = "🔴 Auto Run ACTIVE (F8 to cancel)";
-    let canMonitorSections = { ...canMonitorSectionDefaults };
-    let leaf1d4ControlState = { mode: "manual", targetNm: 0 };
+    const autoButtonActiveLabel = "­ƒö┤ Auto Run ACTIVE (F8 to cancel)";
 	
   // Run summary values used for history export.
 	let currentPeakHP = 0;
@@ -1618,8 +1518,6 @@
       leaf_rpm: 0,
       leaf_torque: 0,
       leaf_torque_demand: 0,
-      leaf_torque_demand_manual: 0,
-      leaf_torque_mode: "auto",
       leaf_1da_input_v: 0,
       leaf_1da_torque_nm: 0,
       leaf_1da_rpm: 0,
@@ -1628,56 +1526,51 @@
       leaf_1da_crc: 0,
       leaf_1da_crc_calc: 0,
       leaf_1da_crc_ok: -1,
-      leaf_1da_crc_wire_ok: -1,
-      leaf_1da_crc_wire_trusted: -1,
-      leaf_1da_crc_wire_calc: 0,
-      leaf_1da_crc_wire_ok_frames: 0,
-      leaf_1da_crc_wire_bad_frames: 0,
-      leaf_1da_inv_fault_map: 0,
-      leaf_1da_inv_blinky: 0,
-      leaf_1da_inv_fault_can_timeout: 0,
-      leaf_ready: 0,
-      hw_precharge: 0,
-      vcu_precharge: 0,
-      hw_rbplus: 0,
-      hw_rbminus: 0,
-      hw_ssr: 0,
-      vcu_sim: 0,
-      leaf_1da_raw_b0b7: "-- -- -- -- -- -- -- --",
-      leaf_id11a_source: "rx",
-      leaf_id11a_frames: 0,
-      leaf_id11a_age_ms: 0,
-      leaf_id11a_tx_frames: 0,
-      leaf_id11a_tx_age_ms: 0,
-      leaf_11a_tx_eq_rx: -1,
-      leaf_11a_tx_diff_mask_vs_rx: 0,
-      leaf_11a_gear: 0,
-      leaf_11a_car_onoff: 0,
-      leaf_11a_eco: 0,
-      leaf_11a_button: 0,
-      leaf_11a_heartbeat: 0,
-      leaf_11a_mux: 0,
-      leaf_11a_b0: 0,
-      leaf_11a_b1: 0,
-      leaf_11a_b2: 0,
-      leaf_11a_b3: 0,
-      leaf_11a_b4: 0,
-      leaf_11a_b5: 0,
-      leaf_11a_b6: 0,
-      leaf_11a_b7: 0,
-      leaf_11a_tx_b0: 0,
-      leaf_11a_tx_b1: 0,
-      leaf_11a_tx_b2: 0,
-      leaf_11a_tx_b3: 0,
-      leaf_11a_tx_b4: 0,
-      leaf_11a_tx_b5: 0,
-      leaf_11a_tx_b6: 0,
-      leaf_11a_tx_b7: 0,
-      leaf_1d4_ring_count: 0,
-      leaf_1d4_ring_newest_valid: 0,
-      leaf_1d4_ring_newest_len: 0,
-      leaf_1d4_tx_frames: 0,
-      leaf_1d4_tx_age_ms: 0,
+      leaf_1da_crc_residue: 0,
+      leaf_1da_crc_samples: 0,
+      leaf_1da_crc_matches: 0,
+      leaf_1da_crc_fails: 0,
+      leaf_1da_crc_fail_age_ms: -1,
+      leaf_1da_b0: 0,
+      leaf_1da_b1: 0,
+      leaf_1da_b2: 0,
+      leaf_1da_b3: 0,
+      leaf_1da_b4: 0,
+      leaf_1da_b5: 0,
+      leaf_1da_b6: 0,
+      leaf_1da_b7: 0,
+      leaf_id1da_frames: 0,
+      leaf_id1da_age_ms: 0,
+      leaf_1d4_torque_nm: 0,
+      leaf_1d4_torque_raw: 0,
+      leaf_1d4_hv_status: 0,
+      leaf_1d4_relay_plus: 0,
+      leaf_1d4_charge_status: 0,
+      leaf_1d4_battery_status: 0,
+      leaf_1d4_clock: 0,
+      leaf_1d4_crc: 0,
+      leaf_1d4_crc_calc: 0,
+      leaf_1d4_crc_ok: 0,
+      leaf_1d4_crc_residue: 0,
+      leaf_1d4_crc_samples: 0,
+      leaf_1d4_crc_matches: 0,
+      leaf_1d4_sniff_frames: 0,
+      leaf_1d4_sniff_age_ms: 0,
+      leaf_1d4_sniff_torque_nm: 0,
+      leaf_1d4_sniff_torque_raw: 0,
+      leaf_1d4_sniff_hv_status: 0,
+      leaf_1d4_sniff_relay_plus: 0,
+      leaf_1d4_sniff_charge_status: 0,
+      leaf_1d4_sniff_clock: 0,
+      leaf_1d4_sniff_crc: 0,
+      leaf_1d4_sniff_b0: 0,
+      leaf_1d4_sniff_b1: 0,
+      leaf_1d4_sniff_b2: 0,
+      leaf_1d4_sniff_b3: 0,
+      leaf_1d4_sniff_b4: 0,
+      leaf_1d4_sniff_b5: 0,
+      leaf_1d4_sniff_b6: 0,
+      leaf_1d4_sniff_b7: 0,
       leaf_1d4_tx_torque_nm: 0,
       leaf_1d4_tx_torque_raw: 0,
       leaf_1d4_tx_target_nm: 0,
@@ -1688,13 +1581,8 @@
       leaf_1d4_tx_crc: 0,
       leaf_1d4_tx_crc_calc: 0,
       leaf_1d4_tx_crc_ok: -1,
-      leaf_1d4_tx_source_mode: 0,
-      leaf_1d4_tx_ring_base_used: 0,
-      leaf_1d4_tx_ring_base_len: 0,
-      leaf_1d4_tx_ring_source_age: 0,
-      leaf_1d4_tx_ring_fallback_total: 0,
-      leaf_1d4_tx_eq_sniff: -1,
-      leaf_1d4_tx_diff_mask_vs_sniff: 0,
+      leaf_1d4_tx_frames: 0,
+      leaf_1d4_tx_age_ms: 0,
       leaf_1d4_tx_b0: 0,
       leaf_1d4_tx_b1: 0,
       leaf_1d4_tx_b2: 0,
@@ -1703,17 +1591,18 @@
       leaf_1d4_tx_b5: 0,
       leaf_1d4_tx_b6: 0,
       leaf_1d4_tx_b7: 0,
-      leaf_120_tx_age_ms: 0,
-      leaf_120_tx_b0: 0,
-      leaf_120_tx_b1: 0,
-      leaf_120_tx_b2: 0,
-      leaf_120_tx_b3: 0,
-      leaf_120_tx_b4: 0,
-      leaf_120_tx_b5: 0,
-      leaf_120_tx_b6: 0,
-      leaf_120_tx_b7: 0,
-      leaf_1da_inv_temp: 0,
-      leaf_1da_stator_temp: 0,
+      leaf_1d4_frames: 0,
+      leaf_1d4_age_ms: 0,
+      leaf_1d4_b0: 0,
+      leaf_1d4_b1: 0,
+      leaf_1d4_b2: 0,
+      leaf_1d4_b3: 0,
+      leaf_1d4_b4: 0,
+      leaf_1d4_b5: 0,
+      leaf_1d4_b6: 0,
+      leaf_1d4_b7: 0,
+      leaf_inv_temp: 0,
+      leaf_stator_temp: 0,
       leaf_coolant_temp: 0,
       leaf_ready: false,
       leaf_warning: false,
@@ -1733,13 +1622,65 @@
       hw_rbplus: false,
       hw_precharge: false,
       hw_rbminus: false,
-      hw_ssr: false
+      hw_ssr: false,
+      wifi_rssi: null
     };
+
+    function updateStatusSnippet(telemetry) {
+      const statusEl = document.getElementById("status");
+      if (!statusEl) return;
+
+      const wifiRssi = Number.isFinite(Number(telemetry?.wifi_rssi)) ? Number(telemetry.wifi_rssi) : null;
+      if (wifiRssi === null) {
+        statusEl.textContent = "Ô£à Live Data Active";
+      } else {
+        statusEl.textContent = `Ô£à Live Data Active ┬À Wi-Fi Signal: ${wifiRssi} dBm`;
+      }
+    }
+
+    function clampLeaf1d4TxTargetNm(value) {
+      const finite = Number.isFinite(value) ? value : 0;
+      return Math.min(kLeaf1d4TxMaxNm, Math.max(kLeaf1d4TxMinNm, finite));
+    }
+
+    function roundLeaf1d4TxTargetNm(value) {
+      return Math.round(value * 10) / 10;
+    }
+
+    function updateLeaf1d4TxTargetUi(value) {
+      leaf1d4TxTargetNm = clampLeaf1d4TxTargetNm(value);
+      const targetEl = document.getElementById("canMon1d4TxTarget");
+      if (targetEl) {
+        targetEl.textContent = leaf1d4TxTargetNm.toFixed(2);
+      }
+    }
+
+    function sendLeaf1d4TxTargetNm(value) {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        showToast("WebSocket not connected");
+        return;
+      }
+      const bounded = clampLeaf1d4TxTargetNm(value);
+      ws.send("SET_SINGLE:leaf1d4TorqueNm=" + bounded.toFixed(2));
+    }
+
+    function adjustLeaf1d4TxTargetNm(delta) {
+      const updated = roundLeaf1d4TxTargetNm(clampLeaf1d4TxTargetNm(leaf1d4TxTargetNm + delta));
+      updateLeaf1d4TxTargetUi(updated);
+      sendLeaf1d4TxTargetNm(updated);
+    }
 
     function updateCanMonitor(telemetry) {
       if (!telemetry) return;
 
-      const engineRpm = Number(telemetry.rpm);
+      const activeRpmSource = (typeof telemetry.rpm_source_active === "string" && telemetry.rpm_source_active.length > 0)
+        ? telemetry.rpm_source_active
+        : ((currentRpmSource === "leafrpm" && !(telemetry.can_fallback === true)) ? "leafrpm" : "tachogen");
+      const sourceIsCan = String(activeRpmSource).toLowerCase() === "leafrpm" ||
+        String(activeRpmSource).toLowerCase() === "can" ||
+        String(activeRpmSource).toLowerCase() === "canrpm";
+      const primaryRpm = Number(telemetry.rpm);
+      const dynoRpm = Number(telemetry.drum_rpm);
       const inv = Number(telemetry.leaf_inv_temp);
       const stat = Number(telemetry.leaf_stator_temp);
       const cool = Number(telemetry.leaf_coolant_temp);
@@ -1748,81 +1689,67 @@
       const id1daRpm = Number(telemetry.leaf_1da_rpm);
       const id1daClock = Number(telemetry.leaf_1da_clock);
       const id1daErr = Number(telemetry.leaf_1da_err);
-      const id1daCrcRx = Number(telemetry.leaf_1da_crc);
-      const id1daCrcCalcInterframe = Number(telemetry.leaf_1da_crc_calc);
-      const id1daCrcCalcWire = Number(telemetry.leaf_1da_crc_wire_calc);
-      const id1daCrcCalc = Number.isFinite(id1daCrcCalcInterframe)
-        ? id1daCrcCalcInterframe
-        : id1daCrcCalcWire;
-      const id1daCrcTrusted = Number(telemetry.leaf_1da_crc_wire_trusted);
-      const id1daCrcFrameOk = Number(telemetry.leaf_1da_crc_ok);
-      const id1daCrcWireOk = Number(telemetry.leaf_1da_crc_wire_ok);
-      const id1daCrcOk = Number.isFinite(id1daCrcFrameOk) && id1daCrcFrameOk >= 0
-        ? id1daCrcFrameOk
-        : (Number.isFinite(id1daCrcWireOk) ? id1daCrcWireOk : id1daCrcTrusted);
-      const id1daCrcOkFrames = Number(telemetry.leaf_1da_crc_ok_frames);
-      const id1daCrcBadFrames = Number(telemetry.leaf_1da_crc_bad_frames);
-      const id1daInvFaultMap = Number(telemetry.leaf_1da_inv_fault_map);
-      const id1daInvBlinky = Number(telemetry.leaf_1da_inv_blinky);
-      const id1daInvFaultCanTimeout = Number(telemetry.leaf_1da_inv_fault_can_timeout);
-      const vcuTorque120 = Number(telemetry.leaf_120_cmd_nm);
-      const vcuTorque = Number.isFinite(vcuTorque120) ? vcuTorque120 : Number(telemetry.vcu_torque_demand);
-      const id1daRawB0B7 = telemetry.leaf_1da_raw_b0b7 || "-- -- -- -- -- -- -- --";
-      const id11aSource = telemetry.leaf_id11a_source || "---";
-      const id11aFrames = Number(telemetry.leaf_id11a_frames);
-      const id11aAgeMs = Number(telemetry.leaf_id11a_age_ms);
-      const id11aTxFrames = Number(telemetry.leaf_id11a_tx_frames);
-      const id11aTxAgeMs = Number(telemetry.leaf_id11a_tx_age_ms);
-      const id11aGear = Number(telemetry.leaf_11a_gear);
-      const id11aCarOnOff = Number(telemetry.leaf_11a_car_onoff);
-      const id11aEco = Number(telemetry.leaf_11a_eco);
-      const id11aButton = Number(telemetry.leaf_11a_button);
-      const id11aHeartbeat = Number(telemetry.leaf_11a_heartbeat);
-      const id11aMux = Number(telemetry.leaf_11a_mux);
-      const id11aTxEqRx = Number(telemetry.leaf_11a_tx_eq_rx);
-      const id11aDiffMask = Number(telemetry.leaf_11a_tx_diff_mask_vs_rx);
-      const id11aRaw = [
-        Number(telemetry.leaf_11a_b0),
-        Number(telemetry.leaf_11a_b1),
-        Number(telemetry.leaf_11a_b2),
-        Number(telemetry.leaf_11a_b3),
-        Number(telemetry.leaf_11a_b4),
-        Number(telemetry.leaf_11a_b5),
-        Number(telemetry.leaf_11a_b6),
-        Number(telemetry.leaf_11a_b7)
+      const id1daCrc = Number(telemetry.leaf_1da_crc);
+      const id1daCrcCalc = Number(telemetry.leaf_1da_crc_calc);
+      const id1daCrcOk = Number(telemetry.leaf_1da_crc_ok);
+      const id1daCrcSamples = Number(telemetry.leaf_1da_crc_samples);
+      const id1daCrcMatches = Number(telemetry.leaf_1da_crc_matches);
+      const id1daCrcFails = Number(telemetry.leaf_1da_crc_fails);
+      const id1daCrcFailAgeMs = Number(telemetry.leaf_1da_crc_fail_age_ms);
+      const id1daRaw = [
+        Number(telemetry.leaf_1da_b0),
+        Number(telemetry.leaf_1da_b1),
+        Number(telemetry.leaf_1da_b2),
+        Number(telemetry.leaf_1da_b3),
+        Number(telemetry.leaf_1da_b4),
+        Number(telemetry.leaf_1da_b5),
+        Number(telemetry.leaf_1da_b6),
+        Number(telemetry.leaf_1da_b7)
       ];
-      const id11aTxRaw = [
-        Number(telemetry.leaf_11a_tx_b0),
-        Number(telemetry.leaf_11a_tx_b1),
-        Number(telemetry.leaf_11a_tx_b2),
-        Number(telemetry.leaf_11a_tx_b3),
-        Number(telemetry.leaf_11a_tx_b4),
-        Number(telemetry.leaf_11a_tx_b5),
-        Number(telemetry.leaf_11a_tx_b6),
-        Number(telemetry.leaf_11a_tx_b7)
+      const id1d4TorqueNm = Number(telemetry.leaf_1d4_torque_nm);
+      const id1d4TorqueRaw = Number(telemetry.leaf_1d4_torque_raw);
+      const id1d4HvStatus = Number(telemetry.leaf_1d4_hv_status);
+      const id1d4RelayPlus = Number(telemetry.leaf_1d4_relay_plus);
+      const id1d4ChargeStatus = Number.isFinite(Number(telemetry.leaf_1d4_charge_status))
+        ? Number(telemetry.leaf_1d4_charge_status)
+        : Number(telemetry.leaf_1d4_battery_status);
+      const id1d4Clock = Number(telemetry.leaf_1d4_clock);
+      const id1d4Crc = Number(telemetry.leaf_1d4_crc);
+      const id1d4CrcCalc = Number(telemetry.leaf_1d4_crc_calc);
+      const id1d4CrcOk = Number(telemetry.leaf_1d4_crc_ok);
+      const id1d4CrcSamples = Number(telemetry.leaf_1d4_crc_samples);
+      const id1d4CrcMatches = Number(telemetry.leaf_1d4_crc_matches);
+      const id1d4SniffFrames = Number(telemetry.leaf_1d4_sniff_frames);
+      const id1d4SniffAgeMs = Number(telemetry.leaf_1d4_sniff_age_ms);
+      const id1d4SniffTorqueNm = Number(telemetry.leaf_1d4_sniff_torque_nm);
+      const id1d4SniffTorqueRaw = Number(telemetry.leaf_1d4_sniff_torque_raw);
+      const id1d4SniffHvStatus = Number(telemetry.leaf_1d4_sniff_hv_status);
+      const id1d4SniffRelayPlus = Number(telemetry.leaf_1d4_sniff_relay_plus);
+      const id1d4SniffChargeStatus = Number(telemetry.leaf_1d4_sniff_charge_status);
+      const id1d4SniffClock = Number(telemetry.leaf_1d4_sniff_clock);
+      const id1d4SniffCrc = Number(telemetry.leaf_1d4_sniff_crc);
+      const id1d4SniffRaw = [
+        Number(telemetry.leaf_1d4_sniff_b0),
+        Number(telemetry.leaf_1d4_sniff_b1),
+        Number(telemetry.leaf_1d4_sniff_b2),
+        Number(telemetry.leaf_1d4_sniff_b3),
+        Number(telemetry.leaf_1d4_sniff_b4),
+        Number(telemetry.leaf_1d4_sniff_b5),
+        Number(telemetry.leaf_1d4_sniff_b6),
+        Number(telemetry.leaf_1d4_sniff_b7)
       ];
-      const id1d4TxFrames = Number(telemetry.leaf_1d4_tx_frames);
-      const id1d4TxAgeMs = Number(telemetry.leaf_1d4_tx_age_ms);
-      const id1d4TorqueTxNm = Number(telemetry.leaf_1d4_tx_torque_nm);
-      const id1d4TorqueTxRaw = Number(telemetry.leaf_1d4_tx_torque_raw);
+      const id1d4TxTorqueNm = Number(telemetry.leaf_1d4_tx_torque_nm);
+      const id1d4TxTorqueRaw = Number(telemetry.leaf_1d4_tx_torque_raw);
       const id1d4TxTargetNm = Number(telemetry.leaf_1d4_tx_target_nm);
-      const id1d4HvTx = Number(telemetry.leaf_1d4_tx_hv_status);
-      const id1d4RelayTx = Number(telemetry.leaf_1d4_tx_relay_plus);
-      const id1d4ChargeTx = Number(telemetry.leaf_1d4_tx_charge_status);
-      const id1d4ClockTx = Number(telemetry.leaf_1d4_tx_clock);
-      const id1d4RingCount = Number(telemetry.leaf_1d4_ring_count);
-      const id1d4RingNewestValid = Number(telemetry.leaf_1d4_ring_newest_valid);
-      const id1d4RingNewestLen = Number(telemetry.leaf_1d4_ring_newest_len);
-      const id1d4TxSourceMode = Number(telemetry.leaf_1d4_tx_source_mode);
-      const id1d4TxRingBaseUsed = Number(telemetry.leaf_1d4_tx_ring_base_used);
-      const id1d4TxRingBaseLen = Number(telemetry.leaf_1d4_tx_ring_base_len);
-      const id1d4TxRingSourceAge = Number(telemetry.leaf_1d4_tx_ring_source_age);
-      const id1d4TxRingFallbackTotal = Number(telemetry.leaf_1d4_tx_ring_fallback_total);
-      const id1d4TxCrcRx = Number(telemetry.leaf_1d4_tx_crc);
+      const id1d4TxHvStatus = Number(telemetry.leaf_1d4_tx_hv_status);
+      const id1d4TxRelayPlus = Number(telemetry.leaf_1d4_tx_relay_plus);
+      const id1d4TxChargeStatus = Number(telemetry.leaf_1d4_tx_charge_status);
+      const id1d4TxClock = Number(telemetry.leaf_1d4_tx_clock);
+      const id1d4TxCrc = Number(telemetry.leaf_1d4_tx_crc);
       const id1d4TxCrcCalc = Number(telemetry.leaf_1d4_tx_crc_calc);
       const id1d4TxCrcOk = Number(telemetry.leaf_1d4_tx_crc_ok);
-      const id1d4TxEqSniff = Number(telemetry.leaf_1d4_tx_eq_sniff);
-      const id1d4TxDiffMask = Number(telemetry.leaf_1d4_tx_diff_mask_vs_sniff);
+      const id1d4TxFrames = Number(telemetry.leaf_1d4_tx_frames);
+      const id1d4TxAgeMs = Number(telemetry.leaf_1d4_tx_age_ms);
       const id1d4TxRaw = [
         Number(telemetry.leaf_1d4_tx_b0),
         Number(telemetry.leaf_1d4_tx_b1),
@@ -1833,6 +1760,9 @@
         Number(telemetry.leaf_1d4_tx_b6),
         Number(telemetry.leaf_1d4_tx_b7)
       ];
+      const vcuTorque = Number(telemetry.vcu_torque_demand);
+      const id1daFrames = Number(telemetry.leaf_id1da_frames);
+      const id1daAgeMs = Number(telemetry.leaf_id1da_age_ms);
       const isSimMode = Number(telemetry.vcu_sim) === 1 || telemetry.vcu_sim === true;
 
       const setText = (id, text) => {
@@ -1846,75 +1776,93 @@
         const n = Math.max(0, Math.min(255, Math.round(v)));
         return n.toString(16).toUpperCase().padStart(2, "0");
       };
-      const fmtRaw8 = (values) => values.map(fmtHexByte).join(" ");
+      const fmtRaw8 = (values) => {
+        const bytes = values.map(fmtHexByte);
+        return bytes.join(" ");
+      };
       const fmtBin6 = (v) => {
         if (!Number.isFinite(v)) return "---";
         const n = Math.max(0, Math.min(63, Math.round(v)));
         return n.toString(2).padStart(6, "0");
       };
-      const fmtYesNo = (v) => {
-        if (v === true || v === 1) return "ON";
-        if (v === false || v === 0) return "OFF";
-        return "---";
-      };
-      const fmtTriState = (v) => {
-        if (v === 1) return "ON";
-        if (v === 0) return "OFF";
-        return "N/A";
-      };
-
-      setText("canMon1daRpm", fmtInt(id1daRpm));
-  setText("canMonEngineRpm", fmtInt(engineRpm));
+      const monitorDynoRpm = Number.isFinite(primaryRpm) ? primaryRpm : dynoRpm;
+      const monitorEngineRpm = Number.isFinite(primaryRpm) ? primaryRpm : dynoRpm;
+      setText("canMon1daRpm", fmtInt(monitorDynoRpm));
+      setText("canMonEngineRpm", fmtInt(monitorEngineRpm));
       setText("canMon1daInputV", fmt(id1daInputV, 1));
       setText("canMon1daTorque", fmt(id1daTorque, 2));
       setText("canMon1daClock", fmtInt(id1daClock));
+      setText("canMon1daClockBits", Number.isFinite(id1daClock) ? id1daClock.toString(2).padStart(2, "0") : "--");
       setText("canMon1daErr", `${fmtInt(id1daErr)} (${fmtBin6(id1daErr)})`);
-      setText("canMon1daFaultMap", `${fmtInt(id1daInvFaultMap)} (0x${fmtHexByte(id1daInvFaultMap)} / ${fmtBin6(id1daInvFaultMap)})`);
-      setText("canMon1daBlinky", `${fmtInt(id1daInvBlinky)} (0b${Number.isFinite(id1daInvBlinky) ? Math.max(0, Math.min(3, Math.round(id1daInvBlinky))).toString(2).padStart(2, "0") : "--"})`);
-      setText("canMon1daCanTimeout", fmtYesNo(id1daInvFaultCanTimeout));
-      setText("canMon1daCrc", `${fmtHexByte(id1daCrcRx)} / ${fmtHexByte(id1daCrcCalc)} / ${fmtYesNo(id1daCrcOk)}`);
-      setText("canMon1daCrcStats", `${fmtInt(id1daCrcOkFrames)} / ${fmtInt(id1daCrcBadFrames)}`);
+      const has1daCrcProof = Number.isFinite(id1daCrcSamples) && Math.round(id1daCrcSamples) > 0;
+      if (has1daCrcProof && id1daCrcOk >= 0) {
+        setText("canMon1daCrc", `${fmtHexByte(id1daCrc)} / ${fmtHexByte(id1daCrcCalc)} ${id1daCrcOk ? "OK" : "BAD"}`);
+        setText("canMon1daCrcProof", `${Math.round(id1daCrcMatches)} / ${Math.round(id1daCrcSamples)}`);
+      } else {
+        setText("canMon1daCrc", "N/A (no 0x1DA)");
+        setText("canMon1daCrcProof", "N/A");
+      }
+      if (id1daCrcFailAgeMs === -1) {
+        setText("canMon1daCrcFailAge", "N/A / fails 0");
+      } else if (id1daCrcFailAgeMs === -2) {
+        setText("canMon1daCrcFailAge", `never / fails ${fmtInt(id1daCrcFails)}`);
+      } else {
+        setText("canMon1daCrcFailAge", `${fmtInt(id1daCrcFailAgeMs)} / fails ${fmtInt(id1daCrcFails)}`);
+      }
+      setText("canMon1daRaw", fmtRaw8(id1daRaw));
+      setText("canMon1d4Torque", fmt(id1d4TorqueNm, 2));
+      setText("canMon1d4Raw", fmtInt(id1d4TorqueRaw));
+      setText("canMon1d4HvStatus", id1d4HvStatus ? "1" : "0");
+      setText("canMon1d4RelayPlus", id1d4RelayPlus ? "1" : "0");
+      setText("canMon1d4BatteryStatus", fmtHexByte(id1d4ChargeStatus));
+      setText("canMon1d4Clock", fmtInt(id1d4Clock));
+      const has1d4CrcProof = Number.isFinite(id1d4CrcSamples) && Math.round(id1d4CrcSamples) > 0;
+      if (has1d4CrcProof && id1d4CrcOk >= 0) {
+        setText("canMon1d4Crc", `${fmtHexByte(id1d4Crc)} / ${fmtHexByte(id1d4CrcCalc)} ${id1d4CrcOk ? "OK" : "BAD"}`);
+        setText("canMon1d4CrcProof", `${Math.round(id1d4CrcMatches)} / ${Math.round(id1d4CrcSamples)}`);
+      } else {
+        setText("canMon1d4Crc", "N/A (no 0x1D4)");
+        setText("canMon1d4CrcProof", "N/A");
+      }
+      setText("canMon1d4SniffTorque", fmt(id1d4SniffTorqueNm, 2));
+      setText("canMon1d4SniffRaw", fmtInt(id1d4SniffTorqueRaw));
+      setText("canMon1d4SniffHvStatus", id1d4SniffHvStatus ? "1" : "0");
+      setText("canMon1d4SniffRelayPlus", id1d4SniffRelayPlus ? "1" : "0");
+      setText("canMon1d4SniffBatteryStatus", fmtHexByte(id1d4SniffChargeStatus));
+      setText("canMon1d4SniffClock", fmtInt(id1d4SniffClock));
+      setText("canMon1d4SniffCrc", fmtHexByte(id1d4SniffCrc));
+      setText("canMon1d4RawSniff", fmtRaw8(id1d4SniffRaw));
+      setText("canMon1d4FramesSniff", `${Math.round(id1d4SniffFrames)} / ${Math.round(id1d4SniffAgeMs)}`);
+      setText("canMon1d4TxTorque", fmt(id1d4TxTorqueNm, 2));
+      if (Number.isFinite(id1d4TxTargetNm)) {
+        updateLeaf1d4TxTargetUi(id1d4TxTargetNm);
+      }
+      setText("canMon1d4TxRaw", fmtInt(id1d4TxTorqueRaw));
+      setText("canMon1d4TxHvStatus", id1d4TxHvStatus ? "1" : "0");
+      setText("canMon1d4TxRelayPlus", id1d4TxRelayPlus ? "1" : "0");
+      setText("canMon1d4TxBatteryStatus", fmtHexByte(id1d4TxChargeStatus));
+      setText("canMon1d4TxClock", fmtInt(id1d4TxClock));
+      if (id1d4TxCrcOk >= 0) {
+        setText("canMon1d4TxCrc", `${fmtHexByte(id1d4TxCrc)} / ${fmtHexByte(id1d4TxCrcCalc)} ${id1d4TxCrcOk ? "OK" : "BAD"}`);
+      } else {
+        setText("canMon1d4TxCrc", "N/A (no 0x1D4 TX)");
+      }
+      setText("canMon1d4RawTx", fmtRaw8(id1d4TxRaw));
+      setText("canMon1d4FramesTx", `${Math.round(id1d4TxFrames)} / ${Math.round(id1d4TxAgeMs)}`);
       setText("canMonInvTemp", fmt(inv, 1));
       setText("canMonStatorTemp", fmt(stat, 1));
       setText("canMonCoolantTemp", fmt(cool, 1));
       setText("canMonVcuMode", isSimMode ? "SIM" : "RUN");
       setText("canMonVcuTorque", fmt(vcuTorque, 2));
-      setText("canMon1daRaw", id1daRawB0B7);
-      setText("canMon11aSource", `${id11aSource} ${fmtInt(id11aFrames)} / ${fmtInt(id11aAgeMs)}`);
-      setText("canMon11aTx", `${fmtInt(id11aTxFrames)} / ${fmtInt(id11aTxAgeMs)}`);
-      setText("canMon11aDrive", `${fmtInt(id11aGear)} / ${fmtInt(id11aCarOnOff)} / ${fmtInt(id11aEco)}`);
-      setText("canMon11aSignals", `${fmtHexByte(id11aHeartbeat)} / ${fmtHexByte(id11aMux)} / ${fmtHexByte(id11aButton)}`);
-      setText("canMon11aCompare", `${fmtTriState(id11aTxEqRx)} / 0x${fmtHexByte(id11aDiffMask)}`);
-      setText("canMon11aRaw", fmtRaw8(id11aRaw));
-      setText("canMon11aTxRaw", fmtRaw8(id11aTxRaw));
-      setText("canMon1d4Tx", `${fmtInt(id1d4TxFrames)} / ${fmtInt(id1d4TxAgeMs)}`);
-      setText("canMon1d4TxTorque", fmt(id1d4TorqueTxNm, 2));
-      setText("canMon1d4TxTorqueRaw", fmtInt(id1d4TorqueTxRaw));
-      setText("canMon1d4TxHv", fmtYesNo(id1d4HvTx));
-      setText("canMon1d4TxRelay", fmtYesNo(id1d4RelayTx));
-      setText("canMon1d4TxCharge", `0x${fmtHexByte(id1d4ChargeTx)}`);
-      setText("canMon1d4TxClock", fmtInt(id1d4ClockTx));
-      setText("canMon1d4TxCrc", `${fmtHexByte(id1d4TxCrcRx)} / ${fmtHexByte(id1d4TxCrcCalc)} / ${fmtTriState(id1d4TxCrcOk)}`);
-      setText("canMon1d4Compare", `${fmtTriState(id1d4TxEqSniff)} / 0x${fmtHexByte(id1d4TxDiffMask)}`);
-      setText("canMon1d4TxMeta", `${fmt(id1d4TxTargetNm, 2)} / M${fmtInt(id1d4TxSourceMode)} A${fmtInt(id1d4TxRingSourceAge)}`);
-      setText("canMon1d4Ring", `${fmtInt(id1d4RingCount)} / ${fmtInt(id1d4RingNewestValid)} / ${fmtInt(id1d4TxRingFallbackTotal)}`);
-      setText("canMon1d4TxRaw", fmtRaw8(id1d4TxRaw));
+      setText("canMonId1da", `${Math.round(id1daFrames)} / ${Math.round(id1daAgeMs)}`);
       setText("canMonFwState", telemetry.fw_state || "---");
       setText("canMonStartGate", telemetry.hw_start_gate || "---");
-
-      if (Number.isFinite(id1d4TxTargetNm)) {
-        leaf1d4ControlState.targetNm = Math.max(leaf1d4TorqueMinNm, Math.min(leaf1d4TorqueMaxNm, id1d4TxTargetNm));
-      }
-      // Only update mode if it's defined and has a valid value
-      if (typeof id1d4Mode !== "undefined" && (id1d4Mode === "auto" || id1d4Mode === "manual")) {
-        leaf1d4ControlState.mode = id1d4Mode;
-      }
-      refreshLeaf1d4ControlUi();
 
       const setFlag = (id, isOn, mode = "normal") => {
         const el = document.getElementById(id);
         if (!el) return;
         el.classList.remove("on", "warn", "fault");
+        el.textContent = isOn ? "ON" : "OFF";
         if (isOn) {
           if (mode === "warn") el.classList.add("warn");
           else if (mode === "fault") el.classList.add("fault");
@@ -1933,102 +1881,6 @@
       );
       setFlag("canFlagHwRbminus", Number(telemetry.hw_rbminus) === 1 || telemetry.hw_rbminus === true, "normal");
       setFlag("canFlagHwSsr", Number(telemetry.hw_ssr) === 1 || telemetry.hw_ssr === true, "normal");
-    }
-
-    function wsIsOpen() {
-      return ws && ws.readyState === WebSocket.OPEN;
-    }
-
-    function clampLeaf1d4TorqueNm(v) {
-      if (!Number.isFinite(v)) return 0;
-      return Math.max(leaf1d4TorqueMinNm, Math.min(leaf1d4TorqueMaxNm, v));
-    }
-
-    function readLeaf1d4StepNm() {
-      const stepInput = document.getElementById("leaf1d4TorqueStep");
-      if (stepInput) {
-        stepInput.value = leaf1d4TorqueDefaultStepNm.toFixed(2);
-      }
-      return leaf1d4TorqueDefaultStepNm;
-    }
-
-    function sendSetSingleCommand(key, value) {
-      if (!wsIsOpen()) {
-        showToast("Not connected. Command not sent.");
-        return false;
-      }
-      ws.send(`SET_SINGLE:${key}=${value}`);
-      return true;
-    }
-
-    function refreshLeaf1d4ControlUi() {
-      const modeManualBtn = document.getElementById("leaf1d4ModeManualBtn");
-      const modeAutoBtn = document.getElementById("leaf1d4ModeAutoBtn");
-      const downBtn = document.getElementById("leaf1d4TorqueDownBtn");
-      const upBtn = document.getElementById("leaf1d4TorqueUpBtn");
-      const targetEl = document.getElementById("leaf1d4TargetNm");
-
-      // Sync local state with telemetry
-      const modeFromTelem = cachedTelemetry.leaf_torque_mode || "auto";
-      const isAuto = modeFromTelem === "auto";
-      
-      if (modeManualBtn) modeManualBtn.classList.toggle("active", !isAuto);
-      if (modeAutoBtn) modeAutoBtn.classList.toggle("active", isAuto);
-      if (downBtn) downBtn.disabled = isAuto;
-      if (upBtn) upBtn.disabled = isAuto;
-      
-      // Display manual torque demand from telemetry
-      if (targetEl) {
-        const manualTorque = cachedTelemetry.leaf_torque_demand_manual || 0;
-        targetEl.textContent = Number.isFinite(manualTorque)
-          ? manualTorque.toFixed(2)
-          : "0.00";
-      }
-    }
-
-    function setLeaf1d4Mode(mode) {
-      const normalized = (mode === "auto") ? "auto" : "manual";
-      if (!sendSetSingleCommand("leaf1d4Mode", normalized)) {
-        return;
-      }
-      leaf1d4ControlState.mode = normalized;
-      refreshLeaf1d4ControlUi();
-      showToast(`1D4 mode: ${normalized.toUpperCase()}`);
-    }
-
-    function adjustLeaf1d4TargetTorque(sign) {
-      const step = readLeaf1d4StepNm();
-      const current = Number.isFinite(leaf1d4ControlState.targetNm)
-        ? leaf1d4ControlState.targetNm
-        : 0;
-      const next = clampLeaf1d4TorqueNm(current + (sign >= 0 ? step : -step));
-      if (!sendSetSingleCommand("leaf1d4TorqueNm", next.toFixed(2))) {
-        return;
-      }
-      leaf1d4ControlState.targetNm = next;
-      refreshLeaf1d4ControlUi();
-      showToast(`1D4 target: ${next.toFixed(2)} Nm`);
-    }
-
-    function bindLeaf1d4Controls() {
-      const modeManualBtn = document.getElementById("leaf1d4ModeManualBtn");
-      const modeAutoBtn = document.getElementById("leaf1d4ModeAutoBtn");
-      const downBtn = document.getElementById("leaf1d4TorqueDownBtn");
-      const upBtn = document.getElementById("leaf1d4TorqueUpBtn");
-      const stepInput = document.getElementById("leaf1d4TorqueStep");
-
-      if (modeManualBtn) modeManualBtn.onclick = () => setLeaf1d4Mode("manual");
-      if (modeAutoBtn) modeAutoBtn.onclick = () => setLeaf1d4Mode("auto");
-      if (downBtn) downBtn.onclick = () => adjustLeaf1d4TargetTorque(-1);
-      if (upBtn) upBtn.onclick = () => adjustLeaf1d4TargetTorque(1);
-      if (stepInput) {
-        stepInput.onchange = () => {
-          const step = readLeaf1d4StepNm();
-          stepInput.value = step.toFixed(2);
-        };
-      }
-
-      refreshLeaf1d4ControlUi();
     }
 
     function showToast(message, durationMs = 2200) {
@@ -2531,7 +2383,7 @@
       if (Number.isFinite(Number(telemetry && telemetry.peakTorque_RPM))) currentPeakTorque_RPM = Number(telemetry.peakTorque_RPM);
 
       if (kDebugStreamLogs) {
-        console.log("🧾 Secondary logger start", trigger, "session", runLogSessionId);
+        console.log("­ƒº¥ Secondary logger start", trigger, "session", runLogSessionId);
       }
     }
 
@@ -2559,7 +2411,7 @@
       runLogActive = false;
 
       if (kDebugStreamLogs) {
-        console.log("🧾 Secondary logger commit", reason, "points", currentRunData.length);
+        console.log("­ƒº¥ Secondary logger commit", reason, "points", currentRunData.length);
       }
     }
     
@@ -2688,11 +2540,7 @@
         panel.style.display = visible ? "block" : "none";
       }
       if (btn) {
-        if (visible) {
-          btn.classList.add("active");
-        } else {
-          btn.classList.remove("active");
-        }
+        btn.textContent = visible ? "CAN Monitor: ON" : "CAN Monitor: OFF";
       }
       if (persist) {
         try {
@@ -2703,91 +2551,101 @@
       }
     }
 
+    function loadCanMonitorSectionPrefs() {
+      try {
+        const raw = localStorage.getItem(canMonitorSectionsPrefKey);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          return parsed;
+        }
+      } catch (e) {
+        // Ignore storage and parse failures.
+      }
+      return {};
+    }
+
+    function saveCanMonitorSectionPrefs(prefs) {
+      try {
+        localStorage.setItem(canMonitorSectionsPrefKey, JSON.stringify(prefs || {}));
+      } catch (e) {
+        // Ignore storage failures.
+      }
+    }
+
+    function setCanMonitorSectionCollapsed(sectionKey, collapsed, persist = true) {
+      const sectionHeader = document.querySelector(`.can-monitor-section-row[data-can-section='${sectionKey}']`);
+      const sectionRows = document.querySelectorAll(`.can-monitor-row[data-can-section-body='${sectionKey}']`);
+      sectionRows.forEach((row) => {
+        row.style.display = collapsed ? "none" : "grid";
+      });
+
+      if (sectionHeader) {
+        const indicator = sectionHeader.querySelector(".can-monitor-section-toggle-indicator");
+        if (indicator) {
+          indicator.textContent = collapsed ? "[+]" : "[-]";
+        }
+      }
+
+      if (persist) {
+        const prefs = loadCanMonitorSectionPrefs();
+        prefs[sectionKey] = collapsed ? 1 : 0;
+        saveCanMonitorSectionPrefs(prefs);
+      }
+    }
+
+    function initCanMonitorSections() {
+      const grid = document.querySelector("#canMonitor .can-monitor-grid");
+      if (!grid) return;
+
+      const rows = Array.from(grid.querySelectorAll(":scope > .can-monitor-row"));
+      if (!rows.length) return;
+
+      const sectionPrefs = loadCanMonitorSectionPrefs();
+      let currentSectionKey = "";
+      let sectionIndex = 0;
+
+      rows.forEach((row) => {
+        if (row.classList.contains("can-monitor-section-row")) {
+          const labelEl = row.querySelector(".can-monitor-section");
+          const sectionLabel = (labelEl ? labelEl.textContent : "section").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
+          currentSectionKey = `${sectionLabel}-${sectionIndex}`;
+          sectionIndex += 1;
+          row.dataset.canSection = currentSectionKey;
+
+          if (!row.querySelector(".can-monitor-section-toggle-indicator")) {
+            const indicator = document.createElement("span");
+            indicator.className = "can-monitor-section-toggle-indicator";
+            indicator.textContent = "[-]";
+            row.appendChild(indicator);
+          }
+
+          row.onclick = function() {
+            const header = this;
+            const key = header.dataset.canSection;
+            if (!key) return;
+            const indicator = header.querySelector(".can-monitor-section-toggle-indicator");
+            const currentlyCollapsed = indicator ? indicator.textContent === "[+]" : false;
+            setCanMonitorSectionCollapsed(key, !currentlyCollapsed, true);
+          };
+
+          const collapsedByPref = sectionPrefs[currentSectionKey] === 1;
+          setCanMonitorSectionCollapsed(currentSectionKey, collapsedByPref, false);
+        } else if (currentSectionKey.length > 0) {
+          row.dataset.canSectionBody = currentSectionKey;
+        }
+      });
+    }
+
     function loadCanMonitorPreference() {
-      let visible = false;  // Default to hidden (CAN Monitor JSON typically disabled)
+      let visible = true;
       try {
         const pref = localStorage.getItem(canMonitorPrefKey);
-        if (pref === "1") visible = true;  // Only show if explicitly enabled
+        if (pref === "0") visible = false;
       } catch (e) {
-        visible = false;
+        visible = true;
       }
       setCanMonitorVisibility(visible, false);
-    }
-
-    function applyCanMonitorSectionState(sectionId) {
-      const expanded = canMonitorSections[sectionId] !== false;
-      document.querySelectorAll(`.can-sec-${sectionId}`).forEach((el) => {
-        el.style.display = expanded ? "" : "none";
-      });
-      document.querySelectorAll(`.can-monitor-section-toggle[data-section="${sectionId}"]`).forEach((el) => {
-        el.setAttribute("aria-expanded", expanded ? "true" : "false");
-      });
-      document.querySelectorAll(`.can-monitor-section-value[data-section="${sectionId}"]`).forEach((el) => {
-        el.textContent = expanded ? "[-]" : "[+]";
-        el.setAttribute("aria-expanded", expanded ? "true" : "false");
-      });
-    }
-
-    function setCanMonitorSectionExpanded(sectionId, expanded, persist = true) {
-      if (!(sectionId in canMonitorSectionDefaults)) {
-        return;
-      }
-      canMonitorSections[sectionId] = !!expanded;
-      applyCanMonitorSectionState(sectionId);
-      if (persist) {
-        try {
-          localStorage.setItem(canMonitorSectionPrefKey, JSON.stringify(canMonitorSections));
-        } catch (e) {
-          // Ignore storage failures.
-        }
-      }
-    }
-
-    function toggleCanMonitorSection(sectionId) {
-      setCanMonitorSectionExpanded(sectionId, !(canMonitorSections[sectionId] !== false), true);
-    }
-
-    function bindCanMonitorSectionToggles() {
-      const onToggle = (ev) => {
-        const target = ev.currentTarget;
-        if (!target) return;
-        const sectionId = target.getAttribute("data-section");
-        if (!sectionId) return;
-        toggleCanMonitorSection(sectionId);
-      };
-
-      document.querySelectorAll(".can-monitor-section-toggle, .can-monitor-section-value").forEach((el) => {
-        el.addEventListener("click", onToggle);
-        el.addEventListener("keydown", (ev) => {
-          if (ev.key === "Enter" || ev.key === " ") {
-            ev.preventDefault();
-            onToggle(ev);
-          }
-        });
-      });
-    }
-
-    function loadCanMonitorSectionPreferences() {
-      canMonitorSections = { ...canMonitorSectionDefaults };
-      try {
-        const raw = localStorage.getItem(canMonitorSectionPrefKey);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed && typeof parsed === "object") {
-            Object.keys(canMonitorSectionDefaults).forEach((key) => {
-              if (typeof parsed[key] === "boolean") {
-                canMonitorSections[key] = parsed[key];
-              }
-            });
-          }
-        }
-      } catch (e) {
-        canMonitorSections = { ...canMonitorSectionDefaults };
-      }
-
-      Object.keys(canMonitorSectionDefaults).forEach((sectionId) => {
-        applyCanMonitorSectionState(sectionId);
-      });
     }
 
     function showReportSelection() {
@@ -2796,8 +2654,8 @@
       autoModeActive = false;
       isManualRecording = false;
       document.getElementById("dynoModal").style.display = "block";
-      document.getElementById("modalTitle").textContent = "✅ RUN COMPLETE!";
-      document.getElementById("runDate").textContent = "📅 Date: " + new Date().toLocaleString();
+      document.getElementById("modalTitle").textContent = "Ô£à RUN COMPLETE!";
+      document.getElementById("runDate").textContent = "­ƒôà Date: " + new Date().toLocaleString();
       document.getElementById("savePdfModalButton").style.display = "none";
       document.getElementById("finishManualRun").style.display = "none";
       document.getElementById("stopAutoRunModal").style.display = "none";
@@ -2813,7 +2671,7 @@
         document.getElementById("finishManualRun").style.display = "none";
       } else {
         document.getElementById("finishManualRun").style.display = "inline-block";
-        document.getElementById("finishManualRun").textContent = "🏁 FINISH RUN (F12)";
+        document.getElementById("finishManualRun").textContent = "­ƒÅü FINISH RUN (F12)";
         document.getElementById("finishManualRun").style.background = "#00aa00";
         document.getElementById("finishManualRun").style.borderColor = "#00ff00";
         document.getElementById("stopAutoRunModal").style.display = "none";
@@ -2880,7 +2738,7 @@
         pdf.line(20, 25, pageWidth - 20, 25);
         y += 5;
 
-        // Right-side stats block — all 4 key metrics, uniform 10 pt, anchored top-right
+        // Right-side stats block ÔÇö all 4 key metrics, uniform 10 pt, anchored top-right
         const supplementaryStats = computeSupplementaryStats();
         const statsX = pageWidth - 20;
         let rightY = y;
@@ -2932,13 +2790,13 @@
         pdf.setFont("ariel", "bold");
         pdf.setTextColor(255, 0, 0);
         pdf.text(
-          "Peak EGT: " + peakEGT.toFixed(0) + " °C @ " + peakEGTRPM + " RPM   Final EGT: " + finalEGT.toFixed(0) + " °C" + "  Energy: " + energy.toFixed(2) + " GJoule",
+          "Peak EGT: " + peakEGT.toFixed(0) + " ┬░C @ " + peakEGTRPM + " RPM   Final EGT: " + finalEGT.toFixed(0) + " ┬░C" + "  Energy: " + energy.toFixed(2) + " GJoule",
           20, y,
         );
         y += 7;
         
         pdf.text(
-          "Air Density: " + currentAirDensity.toFixed(3) + " kg/m³   Ambient: " + currentAmbientTemp.toFixed(1) + " °C   Pressure: " + currentPressure.toFixed(1) + " hPa   Climate normalization factor: " + currentClimateCF.toFixed(4),
+          "Air Density: " + currentAirDensity.toFixed(3) + " kg/m┬│   Ambient: " + currentAmbientTemp.toFixed(1) + " ┬░C   Pressure: " + currentPressure.toFixed(1) + " hPa   Climate normalization factor: " + currentClimateCF.toFixed(4),
           20, y,
         );
         y += 12;
@@ -3105,7 +2963,7 @@
       ws = new WebSocket("ws://" + location.hostname + "/ws");
       
       ws.onopen = function() {
-        document.getElementById("status").innerText = "✅ Live Data Active";
+        updateStatusSnippet(cachedTelemetry);
         ws.send("PAGE_MAIN");
         ws.send("SET_UI_MODE:dashboard");
         ws.send("GET_SETTINGS");
@@ -3115,7 +2973,7 @@
         try {
           const msg = JSON.parse(evt.data);
           if (kDebugStreamLogs) {
-            console.log("📨 WebSocket msg:", msg.type, "Fields:", Object.keys(msg).sort().join(", "));
+            console.log("­ƒô¿ WebSocket msg:", msg.type, "Fields:", Object.keys(msg).sort().join(", "));
           }
           
           if (msg.type === "settings") {
@@ -3138,7 +2996,7 @@
             
             const versionEl = document.getElementById("versionInfo");
             if (versionEl && msg.version && msg.buildDate) {
-              versionEl.innerHTML = `⚙️ MetaSense V${msg.version}<br>${msg.buildDate}`;
+              versionEl.innerHTML = `ÔÜÖ´©Å MetaSense V${msg.version}<br>${msg.buildDate}`;
             }
           }
           
@@ -3155,6 +3013,7 @@
             updateStreamMetrics(msg);
 
             // Merge sparse delta update into cache to retain previous values
+            if (msg.wifi_rssi !== undefined) cachedTelemetry.wifi_rssi = Number(msg.wifi_rssi);
             if (msg.rpm !== undefined) cachedTelemetry.rpm = msg.rpm;
             if (msg.rpm_error !== undefined) cachedTelemetry.rpm_error = Number(msg.rpm_error) === 1;
             if (msg.drum_rpm !== undefined) cachedTelemetry.drum_rpm = msg.drum_rpm;
@@ -3197,8 +3056,6 @@
             if (msg.leaf_rpm !== undefined) cachedTelemetry.leaf_rpm = msg.leaf_rpm;
             if (msg.leaf_torque !== undefined) cachedTelemetry.leaf_torque = msg.leaf_torque;
             if (msg.leaf_torque_demand !== undefined) cachedTelemetry.leaf_torque_demand = msg.leaf_torque_demand;
-            if (msg.leaf_torque_demand_manual !== undefined) cachedTelemetry.leaf_torque_demand_manual = msg.leaf_torque_demand_manual;
-            if (msg.leaf_torque_mode !== undefined) cachedTelemetry.leaf_torque_mode = msg.leaf_torque_mode;
             if (msg.leaf_1da_input_v !== undefined) cachedTelemetry.leaf_1da_input_v = msg.leaf_1da_input_v;
             if (msg.leaf_1da_torque_nm !== undefined) cachedTelemetry.leaf_1da_torque_nm = msg.leaf_1da_torque_nm;
             if (msg.leaf_1da_rpm !== undefined) cachedTelemetry.leaf_1da_rpm = msg.leaf_1da_rpm;
@@ -3206,49 +3063,52 @@
             if (msg.leaf_1da_err !== undefined) cachedTelemetry.leaf_1da_err = msg.leaf_1da_err;
             if (msg.leaf_1da_crc !== undefined) cachedTelemetry.leaf_1da_crc = msg.leaf_1da_crc;
             if (msg.leaf_1da_crc_calc !== undefined) cachedTelemetry.leaf_1da_crc_calc = msg.leaf_1da_crc_calc;
-            if (msg.leaf_1da_crc_ok !== undefined) cachedTelemetry.leaf_1da_crc_ok = Number(msg.leaf_1da_crc_ok);
-            if (msg.leaf_1da_crc_wire_ok !== undefined) cachedTelemetry.leaf_1da_crc_wire_ok = Number(msg.leaf_1da_crc_wire_ok);
-            if (msg.leaf_1da_crc_wire_trusted !== undefined) cachedTelemetry.leaf_1da_crc_wire_trusted = Number(msg.leaf_1da_crc_wire_trusted);
-            if (msg.leaf_1da_crc_wire_calc !== undefined) cachedTelemetry.leaf_1da_crc_wire_calc = msg.leaf_1da_crc_wire_calc;
-            if (msg.leaf_1da_crc_wire_ok_frames !== undefined) cachedTelemetry.leaf_1da_crc_wire_ok_frames = msg.leaf_1da_crc_wire_ok_frames;
-            if (msg.leaf_1da_crc_wire_bad_frames !== undefined) cachedTelemetry.leaf_1da_crc_wire_bad_frames = msg.leaf_1da_crc_wire_bad_frames;
-            if (msg.leaf_1da_inv_fault_map !== undefined) cachedTelemetry.leaf_1da_inv_fault_map = msg.leaf_1da_inv_fault_map;
-            if (msg.leaf_1da_inv_blinky !== undefined) cachedTelemetry.leaf_1da_inv_blinky = msg.leaf_1da_inv_blinky;
-            if (msg.leaf_1da_inv_fault_can_timeout !== undefined) cachedTelemetry.leaf_1da_inv_fault_can_timeout = msg.leaf_1da_inv_fault_can_timeout;
-            if (msg.leaf_id11a_source !== undefined) cachedTelemetry.leaf_id11a_source = msg.leaf_id11a_source;
-            if (msg.leaf_id11a_frames !== undefined) cachedTelemetry.leaf_id11a_frames = msg.leaf_id11a_frames;
-            if (msg.leaf_id11a_age_ms !== undefined) cachedTelemetry.leaf_id11a_age_ms = msg.leaf_id11a_age_ms;
-            if (msg.leaf_id11a_tx_frames !== undefined) cachedTelemetry.leaf_id11a_tx_frames = msg.leaf_id11a_tx_frames;
-            if (msg.leaf_id11a_tx_age_ms !== undefined) cachedTelemetry.leaf_id11a_tx_age_ms = msg.leaf_id11a_tx_age_ms;
-            if (msg.leaf_11a_tx_eq_rx !== undefined) cachedTelemetry.leaf_11a_tx_eq_rx = msg.leaf_11a_tx_eq_rx;
-            if (msg.leaf_11a_tx_diff_mask_vs_rx !== undefined) cachedTelemetry.leaf_11a_tx_diff_mask_vs_rx = msg.leaf_11a_tx_diff_mask_vs_rx;
-            if (msg.leaf_11a_gear !== undefined) cachedTelemetry.leaf_11a_gear = msg.leaf_11a_gear;
-            if (msg.leaf_11a_car_onoff !== undefined) cachedTelemetry.leaf_11a_car_onoff = msg.leaf_11a_car_onoff;
-            if (msg.leaf_11a_eco !== undefined) cachedTelemetry.leaf_11a_eco = msg.leaf_11a_eco;
-            if (msg.leaf_11a_button !== undefined) cachedTelemetry.leaf_11a_button = msg.leaf_11a_button;
-            if (msg.leaf_11a_heartbeat !== undefined) cachedTelemetry.leaf_11a_heartbeat = msg.leaf_11a_heartbeat;
-            if (msg.leaf_11a_mux !== undefined) cachedTelemetry.leaf_11a_mux = msg.leaf_11a_mux;
-            if (msg.leaf_11a_b0 !== undefined) cachedTelemetry.leaf_11a_b0 = msg.leaf_11a_b0;
-            if (msg.leaf_11a_b1 !== undefined) cachedTelemetry.leaf_11a_b1 = msg.leaf_11a_b1;
-            if (msg.leaf_11a_b2 !== undefined) cachedTelemetry.leaf_11a_b2 = msg.leaf_11a_b2;
-            if (msg.leaf_11a_b3 !== undefined) cachedTelemetry.leaf_11a_b3 = msg.leaf_11a_b3;
-            if (msg.leaf_11a_b4 !== undefined) cachedTelemetry.leaf_11a_b4 = msg.leaf_11a_b4;
-            if (msg.leaf_11a_b5 !== undefined) cachedTelemetry.leaf_11a_b5 = msg.leaf_11a_b5;
-            if (msg.leaf_11a_b6 !== undefined) cachedTelemetry.leaf_11a_b6 = msg.leaf_11a_b6;
-            if (msg.leaf_11a_b7 !== undefined) cachedTelemetry.leaf_11a_b7 = msg.leaf_11a_b7;
-            if (msg.leaf_11a_tx_b0 !== undefined) cachedTelemetry.leaf_11a_tx_b0 = msg.leaf_11a_tx_b0;
-            if (msg.leaf_11a_tx_b1 !== undefined) cachedTelemetry.leaf_11a_tx_b1 = msg.leaf_11a_tx_b1;
-            if (msg.leaf_11a_tx_b2 !== undefined) cachedTelemetry.leaf_11a_tx_b2 = msg.leaf_11a_tx_b2;
-            if (msg.leaf_11a_tx_b3 !== undefined) cachedTelemetry.leaf_11a_tx_b3 = msg.leaf_11a_tx_b3;
-            if (msg.leaf_11a_tx_b4 !== undefined) cachedTelemetry.leaf_11a_tx_b4 = msg.leaf_11a_tx_b4;
-            if (msg.leaf_11a_tx_b5 !== undefined) cachedTelemetry.leaf_11a_tx_b5 = msg.leaf_11a_tx_b5;
-            if (msg.leaf_11a_tx_b6 !== undefined) cachedTelemetry.leaf_11a_tx_b6 = msg.leaf_11a_tx_b6;
-            if (msg.leaf_11a_tx_b7 !== undefined) cachedTelemetry.leaf_11a_tx_b7 = msg.leaf_11a_tx_b7;
-            if (msg.leaf_1d4_ring_count !== undefined) cachedTelemetry.leaf_1d4_ring_count = msg.leaf_1d4_ring_count;
-            if (msg.leaf_1d4_ring_newest_valid !== undefined) cachedTelemetry.leaf_1d4_ring_newest_valid = msg.leaf_1d4_ring_newest_valid;
-            if (msg.leaf_1d4_ring_newest_len !== undefined) cachedTelemetry.leaf_1d4_ring_newest_len = msg.leaf_1d4_ring_newest_len;
-            if (msg.leaf_1d4_tx_frames !== undefined) cachedTelemetry.leaf_1d4_tx_frames = msg.leaf_1d4_tx_frames;
-            if (msg.leaf_1d4_tx_age_ms !== undefined) cachedTelemetry.leaf_1d4_tx_age_ms = msg.leaf_1d4_tx_age_ms;
+            if (msg.leaf_1da_crc_ok !== undefined) cachedTelemetry.leaf_1da_crc_ok = msg.leaf_1da_crc_ok;
+            if (msg.leaf_1da_crc_residue !== undefined) cachedTelemetry.leaf_1da_crc_residue = msg.leaf_1da_crc_residue;
+            if (msg.leaf_1da_crc_samples !== undefined) cachedTelemetry.leaf_1da_crc_samples = msg.leaf_1da_crc_samples;
+            if (msg.leaf_1da_crc_matches !== undefined) cachedTelemetry.leaf_1da_crc_matches = msg.leaf_1da_crc_matches;
+            if (msg.leaf_1da_crc_fails !== undefined) cachedTelemetry.leaf_1da_crc_fails = msg.leaf_1da_crc_fails;
+            if (msg.leaf_1da_crc_fail_age_ms !== undefined) cachedTelemetry.leaf_1da_crc_fail_age_ms = msg.leaf_1da_crc_fail_age_ms;
+            if (msg.leaf_1da_b0 !== undefined) cachedTelemetry.leaf_1da_b0 = msg.leaf_1da_b0;
+            if (msg.leaf_1da_b1 !== undefined) cachedTelemetry.leaf_1da_b1 = msg.leaf_1da_b1;
+            if (msg.leaf_1da_b2 !== undefined) cachedTelemetry.leaf_1da_b2 = msg.leaf_1da_b2;
+            if (msg.leaf_1da_b3 !== undefined) cachedTelemetry.leaf_1da_b3 = msg.leaf_1da_b3;
+            if (msg.leaf_1da_b4 !== undefined) cachedTelemetry.leaf_1da_b4 = msg.leaf_1da_b4;
+            if (msg.leaf_1da_b5 !== undefined) cachedTelemetry.leaf_1da_b5 = msg.leaf_1da_b5;
+            if (msg.leaf_1da_b6 !== undefined) cachedTelemetry.leaf_1da_b6 = msg.leaf_1da_b6;
+            if (msg.leaf_1da_b7 !== undefined) cachedTelemetry.leaf_1da_b7 = msg.leaf_1da_b7;
+            if (msg.leaf_id1da_frames !== undefined) cachedTelemetry.leaf_id1da_frames = msg.leaf_id1da_frames;
+            if (msg.leaf_id1da_age_ms !== undefined) cachedTelemetry.leaf_id1da_age_ms = msg.leaf_id1da_age_ms;
+            if (msg.leaf_1d4_torque_nm !== undefined) cachedTelemetry.leaf_1d4_torque_nm = msg.leaf_1d4_torque_nm;
+            if (msg.leaf_1d4_torque_raw !== undefined) cachedTelemetry.leaf_1d4_torque_raw = msg.leaf_1d4_torque_raw;
+            if (msg.leaf_1d4_hv_status !== undefined) cachedTelemetry.leaf_1d4_hv_status = msg.leaf_1d4_hv_status;
+            if (msg.leaf_1d4_relay_plus !== undefined) cachedTelemetry.leaf_1d4_relay_plus = msg.leaf_1d4_relay_plus;
+            if (msg.leaf_1d4_charge_status !== undefined) cachedTelemetry.leaf_1d4_charge_status = msg.leaf_1d4_charge_status;
+            if (msg.leaf_1d4_battery_status !== undefined) cachedTelemetry.leaf_1d4_battery_status = msg.leaf_1d4_battery_status;
+            if (msg.leaf_1d4_clock !== undefined) cachedTelemetry.leaf_1d4_clock = msg.leaf_1d4_clock;
+            if (msg.leaf_1d4_crc !== undefined) cachedTelemetry.leaf_1d4_crc = msg.leaf_1d4_crc;
+            if (msg.leaf_1d4_crc_calc !== undefined) cachedTelemetry.leaf_1d4_crc_calc = msg.leaf_1d4_crc_calc;
+            if (msg.leaf_1d4_crc_ok !== undefined) cachedTelemetry.leaf_1d4_crc_ok = msg.leaf_1d4_crc_ok;
+            if (msg.leaf_1d4_crc_residue !== undefined) cachedTelemetry.leaf_1d4_crc_residue = msg.leaf_1d4_crc_residue;
+            if (msg.leaf_1d4_crc_samples !== undefined) cachedTelemetry.leaf_1d4_crc_samples = msg.leaf_1d4_crc_samples;
+            if (msg.leaf_1d4_crc_matches !== undefined) cachedTelemetry.leaf_1d4_crc_matches = msg.leaf_1d4_crc_matches;
+            if (msg.leaf_1d4_sniff_frames !== undefined) cachedTelemetry.leaf_1d4_sniff_frames = msg.leaf_1d4_sniff_frames;
+            if (msg.leaf_1d4_sniff_age_ms !== undefined) cachedTelemetry.leaf_1d4_sniff_age_ms = msg.leaf_1d4_sniff_age_ms;
+            if (msg.leaf_1d4_sniff_torque_nm !== undefined) cachedTelemetry.leaf_1d4_sniff_torque_nm = msg.leaf_1d4_sniff_torque_nm;
+            if (msg.leaf_1d4_sniff_torque_raw !== undefined) cachedTelemetry.leaf_1d4_sniff_torque_raw = msg.leaf_1d4_sniff_torque_raw;
+            if (msg.leaf_1d4_sniff_hv_status !== undefined) cachedTelemetry.leaf_1d4_sniff_hv_status = msg.leaf_1d4_sniff_hv_status;
+            if (msg.leaf_1d4_sniff_relay_plus !== undefined) cachedTelemetry.leaf_1d4_sniff_relay_plus = msg.leaf_1d4_sniff_relay_plus;
+            if (msg.leaf_1d4_sniff_charge_status !== undefined) cachedTelemetry.leaf_1d4_sniff_charge_status = msg.leaf_1d4_sniff_charge_status;
+            if (msg.leaf_1d4_sniff_clock !== undefined) cachedTelemetry.leaf_1d4_sniff_clock = msg.leaf_1d4_sniff_clock;
+            if (msg.leaf_1d4_sniff_crc !== undefined) cachedTelemetry.leaf_1d4_sniff_crc = msg.leaf_1d4_sniff_crc;
+            if (msg.leaf_1d4_sniff_b0 !== undefined) cachedTelemetry.leaf_1d4_sniff_b0 = msg.leaf_1d4_sniff_b0;
+            if (msg.leaf_1d4_sniff_b1 !== undefined) cachedTelemetry.leaf_1d4_sniff_b1 = msg.leaf_1d4_sniff_b1;
+            if (msg.leaf_1d4_sniff_b2 !== undefined) cachedTelemetry.leaf_1d4_sniff_b2 = msg.leaf_1d4_sniff_b2;
+            if (msg.leaf_1d4_sniff_b3 !== undefined) cachedTelemetry.leaf_1d4_sniff_b3 = msg.leaf_1d4_sniff_b3;
+            if (msg.leaf_1d4_sniff_b4 !== undefined) cachedTelemetry.leaf_1d4_sniff_b4 = msg.leaf_1d4_sniff_b4;
+            if (msg.leaf_1d4_sniff_b5 !== undefined) cachedTelemetry.leaf_1d4_sniff_b5 = msg.leaf_1d4_sniff_b5;
+            if (msg.leaf_1d4_sniff_b6 !== undefined) cachedTelemetry.leaf_1d4_sniff_b6 = msg.leaf_1d4_sniff_b6;
+            if (msg.leaf_1d4_sniff_b7 !== undefined) cachedTelemetry.leaf_1d4_sniff_b7 = msg.leaf_1d4_sniff_b7;
             if (msg.leaf_1d4_tx_torque_nm !== undefined) cachedTelemetry.leaf_1d4_tx_torque_nm = msg.leaf_1d4_tx_torque_nm;
             if (msg.leaf_1d4_tx_torque_raw !== undefined) cachedTelemetry.leaf_1d4_tx_torque_raw = msg.leaf_1d4_tx_torque_raw;
             if (msg.leaf_1d4_tx_target_nm !== undefined) cachedTelemetry.leaf_1d4_tx_target_nm = msg.leaf_1d4_tx_target_nm;
@@ -3259,13 +3119,8 @@
             if (msg.leaf_1d4_tx_crc !== undefined) cachedTelemetry.leaf_1d4_tx_crc = msg.leaf_1d4_tx_crc;
             if (msg.leaf_1d4_tx_crc_calc !== undefined) cachedTelemetry.leaf_1d4_tx_crc_calc = msg.leaf_1d4_tx_crc_calc;
             if (msg.leaf_1d4_tx_crc_ok !== undefined) cachedTelemetry.leaf_1d4_tx_crc_ok = msg.leaf_1d4_tx_crc_ok;
-            if (msg.leaf_1d4_tx_source_mode !== undefined) cachedTelemetry.leaf_1d4_tx_source_mode = msg.leaf_1d4_tx_source_mode;
-            if (msg.leaf_1d4_tx_ring_base_used !== undefined) cachedTelemetry.leaf_1d4_tx_ring_base_used = msg.leaf_1d4_tx_ring_base_used;
-            if (msg.leaf_1d4_tx_ring_base_len !== undefined) cachedTelemetry.leaf_1d4_tx_ring_base_len = msg.leaf_1d4_tx_ring_base_len;
-            if (msg.leaf_1d4_tx_ring_source_age !== undefined) cachedTelemetry.leaf_1d4_tx_ring_source_age = msg.leaf_1d4_tx_ring_source_age;
-            if (msg.leaf_1d4_tx_ring_fallback_total !== undefined) cachedTelemetry.leaf_1d4_tx_ring_fallback_total = msg.leaf_1d4_tx_ring_fallback_total;
-            if (msg.leaf_1d4_tx_eq_sniff !== undefined) cachedTelemetry.leaf_1d4_tx_eq_sniff = msg.leaf_1d4_tx_eq_sniff;
-            if (msg.leaf_1d4_tx_diff_mask_vs_sniff !== undefined) cachedTelemetry.leaf_1d4_tx_diff_mask_vs_sniff = msg.leaf_1d4_tx_diff_mask_vs_sniff;
+            if (msg.leaf_1d4_tx_frames !== undefined) cachedTelemetry.leaf_1d4_tx_frames = msg.leaf_1d4_tx_frames;
+            if (msg.leaf_1d4_tx_age_ms !== undefined) cachedTelemetry.leaf_1d4_tx_age_ms = msg.leaf_1d4_tx_age_ms;
             if (msg.leaf_1d4_tx_b0 !== undefined) cachedTelemetry.leaf_1d4_tx_b0 = msg.leaf_1d4_tx_b0;
             if (msg.leaf_1d4_tx_b1 !== undefined) cachedTelemetry.leaf_1d4_tx_b1 = msg.leaf_1d4_tx_b1;
             if (msg.leaf_1d4_tx_b2 !== undefined) cachedTelemetry.leaf_1d4_tx_b2 = msg.leaf_1d4_tx_b2;
@@ -3274,17 +3129,18 @@
             if (msg.leaf_1d4_tx_b5 !== undefined) cachedTelemetry.leaf_1d4_tx_b5 = msg.leaf_1d4_tx_b5;
             if (msg.leaf_1d4_tx_b6 !== undefined) cachedTelemetry.leaf_1d4_tx_b6 = msg.leaf_1d4_tx_b6;
             if (msg.leaf_1d4_tx_b7 !== undefined) cachedTelemetry.leaf_1d4_tx_b7 = msg.leaf_1d4_tx_b7;
-            if (msg.leaf_120_tx_age_ms !== undefined) cachedTelemetry.leaf_120_tx_age_ms = msg.leaf_120_tx_age_ms;
-            if (msg.leaf_120_tx_b0 !== undefined) cachedTelemetry.leaf_120_tx_b0 = msg.leaf_120_tx_b0;
-            if (msg.leaf_120_tx_b1 !== undefined) cachedTelemetry.leaf_120_tx_b1 = msg.leaf_120_tx_b1;
-            if (msg.leaf_120_tx_b2 !== undefined) cachedTelemetry.leaf_120_tx_b2 = msg.leaf_120_tx_b2;
-            if (msg.leaf_120_tx_b3 !== undefined) cachedTelemetry.leaf_120_tx_b3 = msg.leaf_120_tx_b3;
-            if (msg.leaf_120_tx_b4 !== undefined) cachedTelemetry.leaf_120_tx_b4 = msg.leaf_120_tx_b4;
-            if (msg.leaf_120_tx_b5 !== undefined) cachedTelemetry.leaf_120_tx_b5 = msg.leaf_120_tx_b5;
-            if (msg.leaf_120_tx_b6 !== undefined) cachedTelemetry.leaf_120_tx_b6 = msg.leaf_120_tx_b6;
-            if (msg.leaf_120_tx_b7 !== undefined) cachedTelemetry.leaf_120_tx_b7 = msg.leaf_120_tx_b7;
-            if (msg.leaf_1da_inv_temp !== undefined) cachedTelemetry.leaf_1da_inv_temp = msg.leaf_1da_inv_temp;
-            if (msg.leaf_1da_stator_temp !== undefined) cachedTelemetry.leaf_1da_stator_temp = msg.leaf_1da_stator_temp;
+            if (msg.leaf_1d4_frames !== undefined) cachedTelemetry.leaf_1d4_frames = msg.leaf_1d4_frames;
+            if (msg.leaf_1d4_age_ms !== undefined) cachedTelemetry.leaf_1d4_age_ms = msg.leaf_1d4_age_ms;
+            if (msg.leaf_1d4_b0 !== undefined) cachedTelemetry.leaf_1d4_b0 = msg.leaf_1d4_b0;
+            if (msg.leaf_1d4_b1 !== undefined) cachedTelemetry.leaf_1d4_b1 = msg.leaf_1d4_b1;
+            if (msg.leaf_1d4_b2 !== undefined) cachedTelemetry.leaf_1d4_b2 = msg.leaf_1d4_b2;
+            if (msg.leaf_1d4_b3 !== undefined) cachedTelemetry.leaf_1d4_b3 = msg.leaf_1d4_b3;
+            if (msg.leaf_1d4_b4 !== undefined) cachedTelemetry.leaf_1d4_b4 = msg.leaf_1d4_b4;
+            if (msg.leaf_1d4_b5 !== undefined) cachedTelemetry.leaf_1d4_b5 = msg.leaf_1d4_b5;
+            if (msg.leaf_1d4_b6 !== undefined) cachedTelemetry.leaf_1d4_b6 = msg.leaf_1d4_b6;
+            if (msg.leaf_1d4_b7 !== undefined) cachedTelemetry.leaf_1d4_b7 = msg.leaf_1d4_b7;
+            if (msg.leaf_inv_temp !== undefined) cachedTelemetry.leaf_inv_temp = msg.leaf_inv_temp;
+            if (msg.leaf_stator_temp !== undefined) cachedTelemetry.leaf_stator_temp = msg.leaf_stator_temp;
             if (msg.leaf_coolant_temp !== undefined) cachedTelemetry.leaf_coolant_temp = msg.leaf_coolant_temp;
             if (msg.leaf_ready !== undefined) cachedTelemetry.leaf_ready = Number(msg.leaf_ready) === 1;
             if (msg.leaf_last_update_ms !== undefined) cachedTelemetry.leaf_last_update_ms = msg.leaf_last_update_ms;
@@ -3305,6 +3161,7 @@
 
             // Create a merged view with cached data + new msg for backward compatibility
             const telemetry = Object.assign({}, cachedTelemetry, msg);
+            updateStatusSnippet(telemetry);
             const recordingNow = Boolean(telemetry.recording);
             const recordingStarted = !lastRecordingState && recordingNow;
             const recordingEnded = lastRecordingState && !recordingNow;
@@ -3316,7 +3173,7 @@
               startSecondaryRunLogger("recording_sync_start", telemetry, msg);
             }
             if (kDebugStreamLogs) {
-              console.log("📊 Cache+MSG merged. recording:", telemetry.recording, "egt_hot:", telemetry.egt_hot, "air_density:", telemetry.air_density, "drum_rpm:", telemetry.drum_rpm, "brakeTorque:", telemetry.brakeTorque);
+              console.log("­ƒôè Cache+MSG merged. recording:", telemetry.recording, "egt_hot:", telemetry.egt_hot, "air_density:", telemetry.air_density, "drum_rpm:", telemetry.drum_rpm, "brakeTorque:", telemetry.brakeTorque);
             }
 
             if (typeof msg.kp_source === "string") {
@@ -3433,106 +3290,6 @@
                 torqueFill.setAttribute('stroke-dashoffset', offset);
               }
 
-            // Update Manual Torque Control Display
-            if (telemetry.leaf_torque_demand_manual !== undefined) {
-              const manualTorqueEl = document.getElementById("manualTorqueDisplay");
-              if (manualTorqueEl) {
-                manualTorqueEl.textContent = Number(telemetry.leaf_torque_demand_manual).toFixed(2);
-              }
-            }
-            
-            // Update Manual Torque Mode Indicator
-            if (telemetry.leaf_torque_mode !== undefined) {
-              const modeIndicator = document.getElementById("torqueModeIndicator");
-              const modeManualBtn = document.getElementById("torqueModeManualBtn");
-              const modeAutoBtn = document.getElementById("torqueModeAutoBtn");
-              const torqueIncBtn = document.getElementById("torqueIncBtn");
-              const torqueDecBtn = document.getElementById("torqueDecBtn");
-              
-              if (modeIndicator) {
-                modeIndicator.textContent = telemetry.leaf_torque_mode.toUpperCase();
-                modeIndicator.style.color = (telemetry.leaf_torque_mode === "manual") ? "#ff9900" : "#00ff00";
-              }
-              
-              // Highlight active mode button
-              const isManual = telemetry.leaf_torque_mode === "manual";
-              if (modeManualBtn) {
-                modeManualBtn.style.color = isManual ? "#fff" : "#888";
-                modeManualBtn.style.borderColor = isManual ? "#ff9900" : "#666";
-                modeManualBtn.style.background = isManual ? "rgba(255,153,0,0.2)" : "#404040";
-              }
-              if (modeAutoBtn) {
-                modeAutoBtn.style.color = !isManual ? "#fff" : "#888";
-                modeAutoBtn.style.borderColor = !isManual ? "#00ff00" : "#666";
-                modeAutoBtn.style.background = !isManual ? "rgba(0,255,0,0.1)" : "#404040";
-              }
-              
-              // Disable +/- buttons in auto mode
-              if (torqueIncBtn) torqueIncBtn.disabled = !isManual;
-              if (torqueDecBtn) torqueDecBtn.disabled = !isManual;
-            }
-
-            // Update Inverter Status Panel
-            if (telemetry.leaf_1da_inv_fault_map !== undefined) {
-              const faultEl = document.getElementById("inverterFaultValue");
-              if (faultEl) {
-                const faultValue = Number(telemetry.leaf_1da_inv_fault_map);
-                faultEl.textContent = faultValue.toString(2).padStart(6, '0');
-                faultEl.style.color = faultValue === 0 ? "#88ff88" : "#ff6644";
-              }
-            }
-            
-            if (telemetry.leaf_1da_inv_blinky !== undefined) {
-              const statusEl = document.getElementById("inverterStatusValue");
-              if (statusEl) {
-                const statusValue = Number(telemetry.leaf_1da_inv_blinky);
-                statusEl.textContent = statusValue === 0 ? "OK (0)" : "ACTIVE (1)";
-                statusEl.style.color = statusValue === 0 ? "#88ff88" : "#ffaa44";
-              }
-            }
-
-            // Update Inverter HV voltage from 0x1DA
-            const invHVEl = document.getElementById("inverterHVValue");
-            if (invHVEl) {
-              const invHV = Number(cachedTelemetry.leaf_1da_input_v);
-              invHVEl.textContent = isFinite(invHV) ? invHV.toFixed(1) : "---";
-            }
-
-            // Update Temperature values from 0x1DA (always present in cachedTelemetry)
-            const invTempEl = document.getElementById("inverterTempValue");
-            if (invTempEl) {
-              const invTemp = Number(cachedTelemetry.leaf_1da_inv_temp);
-              invTempEl.textContent = isFinite(invTemp) ? invTemp.toFixed(1) : "---";
-            }
-
-            const statorTempEl = document.getElementById("statorTempValue");
-            if (statorTempEl) {
-              const statorTemp = Number(cachedTelemetry.leaf_1da_stator_temp);
-              statorTempEl.textContent = isFinite(statorTemp) ? statorTemp.toFixed(1) : "---";
-            }
-
-            const coolantTempEl = document.getElementById("coolantTempValue");
-            if (coolantTempEl) {
-              const coolantTemp = Number(cachedTelemetry.leaf_coolant_temp);
-              coolantTempEl.textContent = isFinite(coolantTemp) ? coolantTemp.toFixed(1) : "---";
-            }
-
-            // Update HV Relay Status Buttons
-            const updateRelayButton = (btnId, telemetryKey, label) => {
-              const btn = document.getElementById(btnId);
-              if (btn && telemetry[telemetryKey] !== undefined) {
-                const isActive = Number(telemetry[telemetryKey]) === 1;
-                btn.style.background = isActive ? "#005500" : "#330000";
-                btn.style.color = isActive ? "#00ff00" : "#ff6666";
-                btn.style.borderColor = isActive ? "#00ff00" : "#ff6666";
-                btn.textContent = label + (isActive ? " ●" : " ○");
-              }
-            };
-            updateRelayButton("hwPrechargeBtnStatus", "hw_precharge", "HV_PRECHARGE");
-            updateRelayButton("hwRbPlusBtnStatus", "hw_rb_plus", "HV_RB+");
-            updateRelayButton("hwRbMinusBtnStatus", "hw_rb_minus", "HV_RB-");
-            updateRelayButton("hwSsrBtnStatus", "hw_ssr", "HV_SSR");
-
             if (telemetry.load_kg !== undefined) {
               document.getElementById("loadKgDisplay").textContent = Number(telemetry.load_kg).toFixed(1);
             }
@@ -3573,9 +3330,9 @@
             }
             
             document.getElementById("hpPeak").innerHTML = telemetry.recording || peakKW > 0 ? 
-              `🏆 Peak: ${peakKW.toFixed(1)} kW @ ${Math.round(peakKWRPM)} RPM` : "";
+              `­ƒÅå Peak: ${peakKW.toFixed(1)} kW @ ${Math.round(peakKWRPM)} RPM` : "";
             document.getElementById("torquePeak").innerHTML = telemetry.recording || peakTorque > 0 ? 
-              `🏆 Peak: ${peakTorque.toFixed(1)} Nm @ ${Math.round(peakTorqueRPM)} RPM` : "";
+              `­ƒÅå Peak: ${peakTorque.toFixed(1)} Nm @ ${Math.round(peakTorqueRPM)} RPM` : "";
             
             // EGT Handling
             const egtHot = Number.isFinite(Number(telemetry.egt_hot)) ? Number(telemetry.egt_hot) :
@@ -3621,17 +3378,17 @@
     currentPeakTorque_RPM = peakTorqueRPM;
     currentPeakEGT = peakEGTValue;
     if (kDebugStreamLogs) {
-      console.log("🎬 Recording active, suppressDynoModalReopen:", suppressDynoModalReopen);
+      console.log("­ƒÄ¼ Recording active, suppressDynoModalReopen:", suppressDynoModalReopen);
     }
 
             if (!suppressDynoModalReopen) {
           if (kDebugStreamLogs) {
-            console.log("🚪 Showing dynoModal");
+            console.log("­ƒÜ¬ Showing dynoModal");
           }
           document.getElementById("dynoModal").style.display = "block";
             }
     if (reportReadyActive) {
-      document.getElementById("modalTitle").textContent = "✅ RUN COMPLETE!";
+      document.getElementById("modalTitle").textContent = "Ô£à RUN COMPLETE!";
       document.getElementById("savePdfModalButton").style.display = "none";
       document.getElementById("stopAutoRunModal").style.display = "none";
       document.getElementById("finishManualRun").style.display = "none";
@@ -3647,8 +3404,8 @@
     
     appendSecondaryRunPoint(telemetry, msg, displayRPM, currentKW);
     
-    document.getElementById("finalPeakHP").textContent = `🏆 Power max: ${peakKW.toFixed(1)} kW @ ${Math.round(peakKWRPM)} RPM`;
-    document.getElementById("finalPeakTorque").textContent = `🏆 Torque max: ${peakTorque.toFixed(1)} Nm @ ${Math.round(peakTorqueRPM)} RPM`;
+    document.getElementById("finalPeakHP").textContent = `­ƒÅå Power max: ${peakKW.toFixed(1)} kW @ ${Math.round(peakKWRPM)} RPM`;
+    document.getElementById("finalPeakTorque").textContent = `­ƒÅå Torque max: ${peakTorque.toFixed(1)} Nm @ ${Math.round(peakTorqueRPM)} RPM`;
     requestRunChartUpdate(false);
 }
             if (!recordingNow) {
@@ -3659,68 +3416,14 @@
             if (recordingEnded) {
               commitSecondaryRunLogger("recording_edge_stop", currentPeakEGT);
             }
-          }
-          // === CANMONITOR: Process full CAN diagnostic data (100ms cadence) ===
-          else if (msg.type === "canmonitor") {
-            // Merge all canmonitor fields into cached telemetry
-            if (msg.ip !== undefined) cachedTelemetry.ip = msg.ip;
-            if (msg.rssi !== undefined) cachedTelemetry.rssi = msg.rssi;
-            if (msg.rpm !== undefined) cachedTelemetry.rpm = msg.rpm;
-            if (msg.leaf_rpm !== undefined) cachedTelemetry.leaf_rpm = msg.leaf_rpm;
-            if (msg.leaf_inv_temp !== undefined) cachedTelemetry.leaf_inv_temp = msg.leaf_inv_temp;
-            if (msg.leaf_stator_temp !== undefined) cachedTelemetry.leaf_stator_temp = msg.leaf_stator_temp;
-            if (msg.leaf_coolant_temp !== undefined) cachedTelemetry.leaf_coolant_temp = msg.leaf_coolant_temp;
-            if (msg.leaf_1da_input_v !== undefined) cachedTelemetry.leaf_1da_input_v = msg.leaf_1da_input_v;
-            if (msg.leaf_1da_torque_nm !== undefined) cachedTelemetry.leaf_1da_torque_nm = msg.leaf_1da_torque_nm;
-            if (msg.leaf_1da_rpm !== undefined) cachedTelemetry.leaf_1da_rpm = msg.leaf_1da_rpm;
-            if (msg.leaf_1da_clock !== undefined) cachedTelemetry.leaf_1da_clock = msg.leaf_1da_clock;
-            if (msg.leaf_1da_err !== undefined) cachedTelemetry.leaf_1da_err = msg.leaf_1da_err;
-            if (msg.leaf_1da_crc !== undefined) cachedTelemetry.leaf_1da_crc = msg.leaf_1da_crc;
-            if (msg.leaf_1da_crc_calc !== undefined) cachedTelemetry.leaf_1da_crc_calc = msg.leaf_1da_crc_calc;
-            if (msg.leaf_1da_crc_ok !== undefined) cachedTelemetry.leaf_1da_crc_ok = Number(msg.leaf_1da_crc_ok);
-            if (msg.leaf_1da_inv_fault_map !== undefined) cachedTelemetry.leaf_1da_inv_fault_map = msg.leaf_1da_inv_fault_map;
-            if (msg.leaf_1da_inv_blinky !== undefined) cachedTelemetry.leaf_1da_inv_blinky = msg.leaf_1da_inv_blinky;
-            if (msg.leaf_1da_inv_fault_can_timeout !== undefined) cachedTelemetry.leaf_1da_inv_fault_can_timeout = msg.leaf_1da_inv_fault_can_timeout;
-            if (msg.leaf_1da_crc_wire_ok_frames !== undefined) cachedTelemetry.leaf_1da_crc_wire_ok_frames = msg.leaf_1da_crc_wire_ok_frames;
-            if (msg.leaf_1da_crc_wire_bad_frames !== undefined) cachedTelemetry.leaf_1da_crc_wire_bad_frames = msg.leaf_1da_crc_wire_bad_frames;
-            if (msg.leaf_id11a_source !== undefined) cachedTelemetry.leaf_id11a_source = msg.leaf_id11a_source;
-            if (msg.leaf_id11a_frames !== undefined) cachedTelemetry.leaf_id11a_frames = msg.leaf_id11a_frames;
-            if (msg.leaf_id11a_age_ms !== undefined) cachedTelemetry.leaf_id11a_age_ms = msg.leaf_id11a_age_ms;
-            if (msg.leaf_id11a_tx_frames !== undefined) cachedTelemetry.leaf_id11a_tx_frames = msg.leaf_id11a_tx_frames;
-            if (msg.leaf_id11a_tx_age_ms !== undefined) cachedTelemetry.leaf_id11a_tx_age_ms = msg.leaf_id11a_tx_age_ms;
-            if (msg.leaf_11a_gear !== undefined) cachedTelemetry.leaf_11a_gear = msg.leaf_11a_gear;
-            if (msg.leaf_11a_car_onoff !== undefined) cachedTelemetry.leaf_11a_car_onoff = msg.leaf_11a_car_onoff;
-            if (msg.leaf_11a_eco !== undefined) cachedTelemetry.leaf_11a_eco = msg.leaf_11a_eco;
-            if (msg.leaf_11a_button !== undefined) cachedTelemetry.leaf_11a_button = msg.leaf_11a_button;
-            if (msg.leaf_11a_heartbeat !== undefined) cachedTelemetry.leaf_11a_heartbeat = msg.leaf_11a_heartbeat;
-            if (msg.leaf_11a_mux !== undefined) cachedTelemetry.leaf_11a_mux = msg.leaf_11a_mux;
-            if (msg.leaf_1d4_tx_frames !== undefined) cachedTelemetry.leaf_1d4_tx_frames = msg.leaf_1d4_tx_frames;
-            if (msg.leaf_1d4_tx_age_ms !== undefined) cachedTelemetry.leaf_1d4_tx_age_ms = msg.leaf_1d4_tx_age_ms;
-            if (msg.leaf_1d4_tx_torque_nm !== undefined) cachedTelemetry.leaf_1d4_tx_torque_nm = msg.leaf_1d4_tx_torque_nm;
-            if (msg.leaf_1d4_tx_torque_raw !== undefined) cachedTelemetry.leaf_1d4_tx_torque_raw = msg.leaf_1d4_tx_torque_raw;
-            if (msg.leaf_1d4_tx_hv_status !== undefined) cachedTelemetry.leaf_1d4_tx_hv_status = msg.leaf_1d4_tx_hv_status;
-            if (msg.leaf_1d4_tx_relay_plus !== undefined) cachedTelemetry.leaf_1d4_tx_relay_plus = msg.leaf_1d4_tx_relay_plus;
-            if (msg.leaf_1d4_tx_charge_status !== undefined) cachedTelemetry.leaf_1d4_tx_charge_status = msg.leaf_1d4_tx_charge_status;
-            if (msg.leaf_1d4_tx_clock !== undefined) cachedTelemetry.leaf_1d4_tx_clock = msg.leaf_1d4_tx_clock;
-            if (msg.leaf_1d4_tx_crc !== undefined) cachedTelemetry.leaf_1d4_tx_crc = msg.leaf_1d4_tx_crc;
-            if (msg.leaf_1d4_tx_crc_calc !== undefined) cachedTelemetry.leaf_1d4_tx_crc_calc = msg.leaf_1d4_tx_crc_calc;
-            if (msg.leaf_1d4_tx_crc_ok !== undefined) cachedTelemetry.leaf_1d4_tx_crc_ok = msg.leaf_1d4_tx_crc_ok;
-            if (msg.leaf_120_cmd_nm !== undefined) cachedTelemetry.leaf_120_cmd_nm = msg.leaf_120_cmd_nm;
-            if (msg.vcu_torque_demand !== undefined) cachedTelemetry.vcu_torque_demand = msg.vcu_torque_demand;
-            if (msg.vcu_sim !== undefined) cachedTelemetry.vcu_sim = msg.vcu_sim;
-            if (msg.fw_state !== undefined) cachedTelemetry.fw_state = msg.fw_state;
-            if (msg.hw_start_gate !== undefined) cachedTelemetry.hw_start_gate = msg.hw_start_gate;
-            
-            // Update the CAN monitor display with merged telemetry
-            updateCanMonitor(cachedTelemetry);
-          }
+          } 
 else if (msg.type === "run_complete") {
   if (Number.isFinite(Number(msg.peakKW))) currentPeakHP = Number(msg.peakKW);
   if (Number.isFinite(Number(msg.peakKW_RPM))) currentPeakHP_RPM = Number(msg.peakKW_RPM);
   if (Number.isFinite(Number(msg.peakTorque))) currentPeakTorque = Number(msg.peakTorque);
   if (Number.isFinite(Number(msg.peakTorque_RPM))) currentPeakTorque_RPM = Number(msg.peakTorque_RPM);
-  document.getElementById("finalPeakHP").textContent = `🏆 Power max: ${Number(currentPeakHP).toFixed(1)} kW @ ${Math.round(currentPeakHP_RPM)} RPM`;
-  document.getElementById("finalPeakTorque").textContent = `🏆 Torque max: ${Number(currentPeakTorque).toFixed(1)} Nm @ ${Math.round(currentPeakTorque_RPM)} RPM`;
+  document.getElementById("finalPeakHP").textContent = `­ƒÅå Power max: ${Number(currentPeakHP).toFixed(1)} kW @ ${Math.round(currentPeakHP_RPM)} RPM`;
+  document.getElementById("finalPeakTorque").textContent = `­ƒÅå Torque max: ${Number(currentPeakTorque).toFixed(1)} Nm @ ${Math.round(currentPeakTorque_RPM)} RPM`;
   showReportSelection();
     requestRunChartUpdate(true);
 }
@@ -3744,22 +3447,15 @@ else if (msg.type === "info" || msg.type === "status") {
         }
       };
       
-      ws.onerror = function(event) {
-        console.error("❌ WebSocket Error:", event);
-        document.getElementById("status").innerText = "❌ WebSocket Error";
-      };
-      
       ws.onclose = function() { 
-        document.getElementById("status").innerText = "⚠️ Reconnecting...";
+        document.getElementById("status").innerText = "ÔÜá´©Å Reconnecting...";
         setTimeout(connectWS, 1000); 
       };
     }
     
     function init() {
       loadCanMonitorPreference();
-      bindCanMonitorSectionToggles();
-      loadCanMonitorSectionPreferences();
-      bindLeaf1d4Controls();
+      initCanMonitorSections();
       createTicks();
       createHPTicks();
       createTorqueTicks();
@@ -3794,7 +3490,6 @@ else if (msg.type === "info" || msg.type === "status") {
         }
       });
       
-      restorePanelVisibility();
       connectWS();
     }
     
@@ -3848,7 +3543,7 @@ else if (msg.type === "info" || msg.type === "status") {
         updateRunPiPanel();
         showToast("Auto Run activated!");
       } else {
-        showToast("Invalid RPM range! Start < End ≤ 30000");
+        showToast("Invalid RPM range! Start < End Ôëñ 30000");
       }
     };
     
@@ -3866,98 +3561,12 @@ else if (msg.type === "info" || msg.type === "status") {
       const currentlyVisible = !!panel && panel.style.display !== "none";
       setCanMonitorVisibility(!currentlyVisible, true);
     };
-
-    // Toggle Ambient panel visibility
-    document.getElementById("toggleAmbientBtn").onclick = function() {
-      const panel = document.getElementById("ambientPanel");
-      const btn = document.getElementById("toggleAmbientBtn");
-      if (panel && panel.style.display !== "none") {
-        panel.style.display = "none";
-        btn.classList.remove("active");
-        localStorage.setItem("ambientPanelVisible", "false");
-      } else if (panel) {
-        panel.style.display = "block";
-        btn.classList.add("active");
-        localStorage.setItem("ambientPanelVisible", "true");
-      }
+    document.getElementById("canMon1d4TxTargetDec").onclick = function() {
+      adjustLeaf1d4TxTargetNm(-kLeaf1d4TxStepNm);
     };
-
-    // Toggle Acc. Energy panel visibility
-    document.getElementById("toggleEnergyBtn").onclick = function() {
-      const panel = document.getElementById("accEnergyPanel");
-      const btn = document.getElementById("toggleEnergyBtn");
-      if (panel && panel.style.display !== "none") {
-        panel.style.display = "none";
-        btn.classList.remove("active");
-        localStorage.setItem("energyPanelVisible", "false");
-      } else if (panel) {
-        panel.style.display = "block";
-        btn.classList.add("active");
-        localStorage.setItem("energyPanelVisible", "true");
-      }
+    document.getElementById("canMon1d4TxTargetInc").onclick = function() {
+      adjustLeaf1d4TxTargetNm(kLeaf1d4TxStepNm);
     };
-
-    // Toggle Manual Torque panel visibility
-    document.getElementById("toggleManualTorqueBtn").onclick = function() {
-      const panel = document.getElementById("manualTorquePanel");
-      const btn = document.getElementById("toggleManualTorqueBtn");
-      if (panel && panel.style.display !== "none") {
-        panel.style.display = "none";
-        btn.classList.remove("active");
-        localStorage.setItem("manualTorquePanelVisible", "false");
-      } else if (panel) {
-        panel.style.display = "block";
-        btn.classList.add("active");
-        localStorage.setItem("manualTorquePanelVisible", "true");
-      }
-    };
-
-    // Toggle Inverter Status panel visibility
-    document.getElementById("toggleInverterBtn").onclick = function() {
-      const panel = document.getElementById("inverterStatusPanel");
-      const btn = document.getElementById("toggleInverterBtn");
-      if (panel && panel.style.display !== "none") {
-        panel.style.display = "none";
-        btn.classList.remove("active");
-        localStorage.setItem("inverterPanelVisible", "false");
-      } else if (panel) {
-        panel.style.display = "block";
-        btn.classList.add("active");
-        localStorage.setItem("inverterPanelVisible", "true");
-      }
-    };
-
-    // Restore panel visibility from localStorage on load
-    function restorePanelVisibility() {
-      const ambientBtn = document.getElementById("toggleAmbientBtn");
-      const energyBtn = document.getElementById("toggleEnergyBtn");
-      const torqueBtn = document.getElementById("toggleManualTorqueBtn");
-      const inverterBtn = document.getElementById("toggleInverterBtn");
-      
-      if (localStorage.getItem("ambientPanelVisible") === "false") {
-        document.getElementById("ambientPanel").style.display = "none";
-      } else {
-        ambientBtn.classList.add("active");
-      }
-      
-      if (localStorage.getItem("energyPanelVisible") === "false") {
-        document.getElementById("accEnergyPanel").style.display = "none";
-      } else {
-        energyBtn.classList.add("active");
-      }
-      
-      if (localStorage.getItem("manualTorquePanelVisible") === "false") {
-        document.getElementById("manualTorquePanel").style.display = "none";
-      } else {
-        torqueBtn.classList.add("active");
-      }
-      
-      if (localStorage.getItem("inverterPanelVisible") === "false") {
-        document.getElementById("inverterStatusPanel").style.display = "none";
-      } else {
-        inverterBtn.classList.add("active");
-      }
-    }
     
     document.getElementById("confirmManual").onclick = function() {
       currentCustomer = document.getElementById("manualCustomerName").value.trim();
@@ -3997,85 +3606,6 @@ else if (msg.type === "info" || msg.type === "status") {
       if (energyEl) energyEl.textContent = "0";
       showToast("Accumulated energy reset");
     };
-    
-    // Manual Torque Control Handlers
-    const manualModeBtn = document.getElementById("torqueModeManualBtn");
-    const autoModeBtn = document.getElementById("torqueModeAutoBtn");
-    const incBtn = document.getElementById("torqueIncBtn");
-    const decBtn = document.getElementById("torqueDecBtn");
-    
-    if (!manualModeBtn) console.error("torqueModeManualBtn not found");
-    if (!autoModeBtn) console.error("torqueModeAutoBtn not found");
-    if (!incBtn) console.error("torqueIncBtn not found");
-    if (!decBtn) console.error("torqueDecBtn not found");
-    
-    if (manualModeBtn) {
-      manualModeBtn.onclick = function() {
-        console.log("Manual mode clicked, ws state:", ws ? ws.readyState : "no ws");
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          const cmd = "SET_SINGLE:leaf1d4TorqueMode=manual";
-          console.log("Sending:", cmd);
-          ws.send(cmd);
-          showToast("Switched to MANUAL torque mode");
-        } else {
-          showToast("Not connected to device");
-        }
-      };
-    }
-    
-    if (autoModeBtn) {
-      autoModeBtn.onclick = function() {
-        console.log("Auto mode clicked, ws state:", ws ? ws.readyState : "no ws");
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          const cmd = "SET_SINGLE:leaf1d4TorqueMode=auto";
-          console.log("Sending:", cmd);
-          ws.send(cmd);
-          showToast("Switched to AUTO torque mode");
-        } else {
-          showToast("Not connected to device");
-        }
-      };
-    }
-    
-    if (incBtn) {
-      incBtn.onclick = function() {
-        console.log("Inc button clicked, ws state:", ws ? ws.readyState : "no ws");
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          // Instant UI feedback
-          const current = Number(cachedTelemetry.leaf_torque_demand_manual || 0);
-          const updated = Number((current + 0.1).toFixed(2));
-          const manualEl = document.getElementById("manualTorqueDisplay");
-          if (manualEl) manualEl.textContent = updated.toFixed(2);
-          
-          const cmd = "SET_SINGLE:leaf1d4TorqueInc=1";
-          console.log("Sending:", cmd);
-          ws.send(cmd);
-          showToast("Torque +0.1 Nm");
-        } else {
-          showToast("Not connected to device");
-        }
-      };
-    }
-    
-    if (decBtn) {
-      decBtn.onclick = function() {
-        console.log("Dec button clicked, ws state:", ws ? ws.readyState : "no ws");
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          // Instant UI feedback
-          const current = Number(cachedTelemetry.leaf_torque_demand_manual || 0);
-          const updated = Number((current - 0.1).toFixed(2));
-          const manualEl = document.getElementById("manualTorqueDisplay");
-          if (manualEl) manualEl.textContent = updated.toFixed(2);
-          
-          const cmd = "SET_SINGLE:leaf1d4TorqueDec=1";
-          console.log("Sending:", cmd);
-          ws.send(cmd);
-          showToast("Torque −0.1 Nm");
-        } else {
-          showToast("Not connected to device");
-        }
-      };
-    }
     
     document.getElementById("finishManualRun").onclick = finishManualRun;
     document.getElementById("stopAutoRunModal").onclick = cancelAutoRunFromUi;

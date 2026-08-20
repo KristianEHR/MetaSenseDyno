@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MetaSense Settings v3.0</title>
+  <link rel="icon" href="/favicon.png" type="image/x-icon">
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body { 
+      font-family: 'Courier New', monospace; 
+      background: #404040; 
+      color: #cccccc; 
+      padding: 40px; 
+      margin: 0; 
+    }
+    h1 { 
+      color: #e0e0e0; 
+      text-align: center; 
+      text-shadow: 0 0 8px #444; 
+      margin-top: 20px;
+    }
+    .container { 
+      max-width: 600px; 
+      margin: 0 auto; 
+      background: #353535; 
+      padding: 40px; 
+      border-radius: 15px; 
+      border: 1px solid #666; 
+      box-shadow: 0 10px 30px rgba(0,0,0,0.8); 
+    }
+    label { 
+      display: block; 
+      margin: 20px 0 10px; 
+      font-size: 20px; 
+      color: #aaaaaa; 
+    }
+    input, select { 
+      width: 100%; 
+      padding: 15px; 
+      font-size: 20px; 
+      background: #404040; 
+      color: #ffffff; 
+      border: 2px solid #888888; 
+      border-radius: 8px; 
+      box-sizing: border-box;
+      transition: all 0.2s ease;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: #88ff88;
+    }
+    button { 
+      margin-top: 20px; 
+      padding: 18px; 
+      font-size: 22px; 
+      background: #404040; 
+      color: #ffffff; 
+      border: none; 
+      border-radius: 10px; 
+      cursor: pointer; 
+      width: 100%; 
+      box-shadow: 0 6px 15px rgba(0,0,0,0.6); 
+      transition: all 0.2s ease;
+    }
+    button:hover { 
+      background: #505050; 
+      transform: scale(1.02);
+    }
+    .section { 
+      margin-top: 40px; 
+      padding-top: 30px; 
+      border-top: 1px solid #666; 
+    }
+    .hidden { 
+      display: none !important; 
+    }
+    .info { 
+      font-size: 14px; 
+      color: #888; 
+      margin: 10px 0 20px; 
+      line-height: 1.5; 
+      background: #2a2a2a;
+      padding: 12px;
+      border-radius: 8px;
+      border-left: 3px solid #88ff88;
+    }
+    .param-row { 
+      display: flex; 
+      align-items: center; 
+      gap: 10px; 
+      margin-bottom: 10px; 
+    }
+    .param-row input, .param-row select { 
+      flex: 1; 
+    }
+    .param-row button { 
+      width: auto; 
+      padding: 15px 30px; 
+      font-size: 20px; 
+      margin-top: 0;
+    }
+    .radio-row {
+      display: flex;
+      gap: 18px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin: 6px 0 10px;
+    }
+    .radio-row label {
+      margin: 0;
+      font-size: 18px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #dddddd;
+    }
+    .radio-row input[type="radio"] {
+      width: auto;
+      margin: 0;
+      transform: scale(1.2);
+    }
+    .kp-source-card {
+      margin-top: 14px;
+      padding: 14px;
+      border: 2px solid #88ff88;
+      border-radius: 10px;
+      background: rgba(20, 60, 20, 0.32);
+      box-shadow: inset 0 0 0 1px rgba(136, 255, 136, 0.2);
+    }
+    .kp-source-card .card-title {
+      margin: 0 0 8px;
+      font-size: 18px;
+      font-weight: 700;
+      color: #bbffbb;
+    }
+
+    .back-btn {
+      position: fixed;
+      top: 15px;
+      left: 15px;
+      z-index: 1000;
+      padding: 12px 20px;
+      font-size: 18px;
+      background: #505050;
+      color: #ffffff;
+      border: 1px solid #777;
+      border-radius: 8px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.7);
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+
+    .back-btn:hover {
+      background: #606060;
+      transform: scale(1.02);
+    }
+
+    
+    #settingsStatus {
+      text-align: center;
+      margin-bottom: 20px;
+      padding: 12px;
+      background: rgba(0,0,0,0.5);
+      border-radius: 8px;
+      color: #88ff88;
+      font-weight: bold;
+    }
+    
+    .current-value {
+      font-size: 12px;
+      color: #88ff88;
+      margin-top: 5px;
+    }
+    
+    .reset-btn {
+      background: #804040;
+      margin-top: 10px;
+    }
+    
+    .reset-btn:hover {
+      background: #a05050;
+    }
+
+    @media (max-width: 600px) {
+      .update-section-removed {
+        display: none;
+      }
+      .param-row {
+        flex-wrap: wrap;
+      }
+      .param-row button {
+        width: 100%;
+      }
+    }
+
+    @media (max-width: 500px) {
+      .back-btn {
+        padding: 10px 16px;
+        font-size: 16px;
+        top: 10px;
+        left: 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <a href="/" class="back-btn">← BACK TO DASHBOARD</a>
+
+  <h1 id="versionInfo" style="text-align: center; color: #e0e0e0; text-shadow: 0 0 8px #444;">
+  MetaSense --:-- | --
+</h1>
+  <div class="container">
+    
+    <div id="settingsStatus">Loading settings...</div>
+
+    <div class="section calib-section">
+      <label>Load Cell Calibration (Known Weight)</label>
+      <div class="info">
+        1. Remove all weight → click TARE on main page<br>
+        2. Place known weight → enter it below → click CALIBRATE<br>
+        <strong>Important:</strong> New calibration factor will be very small (usually 0.0001–0.01 range) — this is normal!
+      </div>
+      <button id="tareButton" onclick="tare()">⚖️ TARE (ZERO)</button>
+      <label>Known Weight (kg)</label>
+      <input type="number" id="knownWeight" value="3.404" placeholder="e.g. 3.404" step="0.001">
+      <button id="calibrateButton" onclick="calibrate()">🔧 CALIBRATE</button>
+    </div>
+
+    <label>Current Calibration Factor</label>
+    <input type="text" id="calFactor" readonly style="background:#303030; font-family: monospace;">
+    <div class="current-value" id="calFactorCurrent"></div>
+
+    <div class="section">
+      <label>PI Control Gains</label>
+      <div class="info">
+        These values control the active dyno PI loop and are saved to NVS.<br>
+        Stable baseline recommendation: Kp = 0.0500, Ki = 0.0200.
+      </div>
+      <label>Kp (Proportional Gain)</label>
+      <div class="param-row">
+        <input type="number" id="kp" value="0.0200" min="0" max="10" step="0.0001">
+        <button onclick="saveSingle('kp', event)">💾 SAVE</button>
+      </div>
+      <label>Ki (Integral Gain)</label>
+      <div class="param-row">
+        <input type="number" id="ki" value="0.0500" min="0" max="10" step="0.0001">
+        <button onclick="saveSingle('ki', event)">💾 SAVE</button>
+      </div>
+
+      <div class="kp-source-card">
+        <p class="card-title">Kp Source Selector</p>
+        <div class="info" style="margin-top: 0; margin-bottom: 10px;">
+          Choose whether PI Kp comes from firmware setting above or live Pot3 adjustment.
+        </div>
+        <div class="param-row">
+          <div class="radio-row" role="radiogroup" aria-label="Kp source selector">
+            <label><input type="radio" name="kpSource" id="kpSourceFirmware" value="firmware" checked> Firmware Kp</label>
+            <label><input type="radio" name="kpSource" id="kpSourcePot3" value="pot3"> Pot3 (live)</label>
+          </div>
+          <input type="hidden" id="kpSource" value="firmware">
+          <button onclick="saveSingle('kpSource', event)">💾 SAVE</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <label>Max RPM Gauge Range</label>
+      <div class="param-row">
+        <input type="number" id="maxRPM" value="16000" min="5000" max="50000" step="1000">
+        <button onclick="saveSingle('maxRPM', event)">💾 SAVE</button>
+      </div>
+
+      <label>Max power Gauge Range</label>
+      <div class="param-row">
+        <input type="number" id="maxHP" value="15" min="5" max="100" step="0.5">
+        <button onclick="saveSingle('maxHP', event)">💾 SAVE</button>
+      </div>
+
+      <label>Max Torque Gauge Range (Nm)</label>
+      <div class="param-row">
+        <input type="number" id="maxTorque" value="15" min="5" max="100" step="0.5">
+        <button onclick="saveSingle('maxTorque', event)">💾 SAVE</button>
+      </div>
+
+      <label>Lever Arm Length (cm)</label>
+      <div class="param-row">
+        <input type="number" id="armCm" value="20.0" min="5" max="100" step="0.1">
+        <button onclick="saveSingle('armCm', event)">💾 SAVE</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <label>Dyno Mode</label>
+      <div class="param-row">
+        <select id="dynoMode" onchange="updateUIVisibility()">
+          <option value="brake">Brake Dyno</option>
+          <option value="inertia">Inertia Dyno</option>
+        </select>
+        <button onclick="saveSingle('dynoMode', event)">💾 SAVE</button>
+      </div>
+
+      <label>RPM Source</label>
+      <div class="info" id="rpmSourceInfo">
+        Leaf CAN RPM is fixed as the primary RPM source with automatic tachogen fallback on GPIO 3.
+      </div>
+
+      <!-- Brake-specific settings -->
+      <div id="brakeRatioSection">
+        <label>Brake Roller Ratio (Engine ↔ Roller RPM)</label>
+        <div class="param-row">
+          <input type="number" id="brakeToEngineRatio" value="1.00" min="0.1" max="50" step="0.01">
+          <button onclick="saveSingle('brakeToEngineRatio', event)">💾 SAVE</button>
+        </div>
+        <div class="info" id="brakeRatioInfo">
+          <strong>How this ratio works:</strong><br>
+          • <strong>Brake Roller Hall mode:</strong> Display RPM = Roller RPM × Ratio<br>
+          • <strong>Engine Hall mode (no roller signal):</strong> Virtual Roller RPM = Engine RPM ÷ Ratio<br><br>
+          Example: If engine spins 4× faster than roller → enter <strong>4.0</strong>
+        </div>
+      </div>
+
+      <!-- Engine Hall pulses setting -->
+      <div id="enginePulsesSection">
+        <label>Triggers Per Revolution (Engine Hall)</label>
+        <div class="info">
+          How many times the hall sensor triggers per full crankshaft revolution.<br>
+          • 1 = single magnet/tooth (most common)<br>
+          • 0.5 = ignition coil signal (fires once every 2 crank revs)<br>
+          • Other: 2, 4, 6, 8, 10
+        </div>
+        <div class="param-row">
+          <input type="number" id="pulsesPerRev" value="1.0" min="0.5" max="10" step="0.5">
+          <button onclick="saveSingle('pulsesPerRev', event)">💾 SAVE</button>
+        </div>
+      </div>
+
+      <!-- Roller/Drum pulses setting -->
+      <label>Triggers Per Revolution (Roller/Drum Hall)</label>
+      <div class="info">
+        Number of triggers per full revolution of the brake roller/drum (pin 26).<br>
+        • Usually 1 (single magnet) – most common<br>
+        • Higher if using multi-tooth wheel or encoder
+      </div>
+      <div class="param-row">
+        <input type="number" id="pulsesPerRevDrum" value="1.0" min="0.5" max="30" step="0.5">
+        <button onclick="saveSingle('pulsesPerRevDrum', event)">💾 SAVE</button>
+      </div>
+
+      <label>RPM Noise Filter (0.1–0.9, higher = faster response)</label>
+      <div class="info">Higher for quick 2-stroke spool-up (0.5–0.8), lower for smooth 4-stroke (0.2–0.3)</div>
+      <div class="param-row">
+        <input type="number" id="rpmFilter" value="0.50" min="0.1" max="0.9" step="0.05">
+        <button onclick="saveSingle('rpmFilter', event)">💾 SAVE</button>
+      </div>
+
+      <label>Load Moving Average Window (N samples)</label>
+      <div class="info">Applies to load-cell raw smoothing before zero/deadband and torque conversion. Lower N = faster response.</div>
+      <div class="param-row">
+        <input type="number" id="loadAvgN" value="5" min="1" max="255" step="1">
+        <button onclick="saveSingle('loadAvgN', event)">💾 SAVE</button>
+      </div>
+
+      <label>Load Stage B Window (N2 samples)</label>
+      <div class="info">Used only when Load Filter Mode is set to B. This is the second MA coefficient/window.</div>
+      <div class="param-row">
+        <input type="number" id="loadAvgN2" value="5" min="1" max="255" step="1">
+        <button onclick="saveSingle('loadAvgN2', event)">💾 SAVE</button>
+      </div>
+
+      <label>Load Filter Mode (A/B compare)</label>
+      <div class="info">
+        <strong>A: Moving Average</strong> (fast, low CPU) using N from Load Moving Average Window.<br>
+        <strong>B: Two-stage Moving Average</strong> (more smoothing, more lag) uses a second MA stage instead of the alpha stage.<br>
+        A keeps the original MA + alpha order.
+      </div>
+      <div class="param-row">
+        <select id="loadFilterMode">
+          <option value="moving_avg">A - Moving Average (fast)</option>
+          <option value="two_stage_ma">B - Two-stage Moving Average (effective)</option>
+        </select>
+        <button onclick="saveSingle('loadFilterMode', event)">💾 SAVE</button>
+      </div>
+
+      <label>Ambient RH Offset (%)</label>
+      <div class="info">Calibration offset added to measured relative humidity before display and correction.</div>
+      <div class="param-row">
+        <input type="number" id="rhOffsetPct" value="0.0" min="-50" max="50" step="0.1">
+        <button onclick="saveSingle('rhOffsetPct', event)">💾 SAVE</button>
+      </div>
+
+      <label>Motor Mode Max RPM</label>
+      <div class="info">Upper RPM target cap applied while hardware output state machine is in motor mode.</div>
+      <div class="param-row">
+        <input type="number" id="motorModeMaxRpm" value="2000" min="100" max="20000" step="100">
+        <button onclick="saveSingle('motorModeMaxRpm', event)">💾 SAVE</button>
+      </div>
+
+      <label>IDLE Torque (Nm)</label>
+      <div class="info">Fixed torque command used when hardware output state machine is in IDLE mode. Range 0.0 to 10.0 Nm.</div>
+      <div class="param-row">
+        <input type="number" id="idleTorqueNm" value="4.0" min="0" max="10" step="0.1">
+        <button onclick="saveSingle('idleTorqueNm', event)">💾 SAVE</button>
+      </div>
+
+      <label>Brake Max Torque (Nm)</label>
+      <div class="info">Maximum absolute torque command allowed while dyno mode is BRAKE. Range 0.0 to 200.0 Nm.</div>
+      <div class="param-row">
+        <input type="number" id="brakeMaxTorqueNm" value="30.0" min="0" max="200" step="0.5">
+        <button onclick="saveSingle('brakeMaxTorqueNm', event)">💾 SAVE</button>
+      </div>
+
+      <label>VCU Ready Override (UI Test)</label>
+      <div class="info">Temporary test override when inverter is disconnected. Enables Manual/Auto run flow, but firmware keeps outputs inhibited unless real inverter-ready CAN status is present. Set OFF for normal operation.</div>
+      <div class="param-row">
+        <select id="forceVcuReadyForUiTest">
+          <option value="0" selected>OFF (Normal)</option>
+          <option value="1">ON (UI Test Only)</option>
+        </select>
+        <button onclick="saveSingle('forceVcuReadyForUiTest', event)">💾 SAVE</button>
+      </div>
+	  
+	       <!-- Drivetrain Efficiency -->
+      <label>Drivetrain Efficiency (%) — Crank Power Correction</label>
+      <div class="info">
+        Accounts for power losses in chain, sprockets and gearbox.<br>
+        Typical values:<br>
+        • Simple chain drive: 93–96%<br>
+        • Chain + gearbox/CVT: 88–93%<br>
+        • Worn chain/sprockets: 85–90%<br><br>
+        Set to 100% to disable correction (show wheel power).
+      </div>
+      <div class="param-row">
+        <input type="number" id="drivetrainEff" value="95" min="70" max="99" step="0.5">
+        <button onclick="saveSingle('drivetrainEff', event)">💾 SAVE</button>
+      </div>
+
+      <!-- Inertia-only gear ratio -->
+      <div id="gearRatioSection" class="hidden">
+        <label>Drum/Engine RPM Ratio</label>
+        <div class="param-row">
+          <input type="number" id="virtGearRatio" value="1.0" min="0.1" max="50" step="0.1">
+          <button onclick="saveSingle('virtGearRatio', event)">💾 SAVE</button>
+        </div>
+        <div class="info">
+          Use this as the multiplier from drum RPM to engine RPM:<br>
+          <strong>engine RPM = drum RPM × ratio</strong><br>
+          Example: Leaf CAN / drum RPM of 3000 with a 16/11 drivetrain means engine RPM = 3000 × 1.455 = 4364.<br>
+          Enter <strong>16/11 = 1.455</strong> for that drivetrain.
+        </div>
+      </div>
+
+      <label>Factory Settings File (FS Refresh)</label>
+      <div class="info">
+        Writes current NVS-backed settings and calibration into the factory profile file on filesystem.
+        Use this after uploading filesystem if you want a fresh factory file snapshot.
+      </div>
+      <button onclick="uploadFactorySettings(event)">🏭 UPLOAD FACTORY SETTINGS TO FS</button>
+
+      <button onclick="resetSectionDefaults(event)" class="reset-btn">⟳ Reset All to Defaults</button>
+    </div>
+
+    <div id="inertiaSection" class="section hidden">
+      <label>Drum Mass (kg) — Inertia Mode</label>
+      <div class="param-row">
+        <input type="number" id="drumMass" value="10.0" min="1" max="100" step="0.1">
+        <button onclick="saveSingle('drumMass', event)">💾 SAVE</button>
+      </div>
+
+      <label>Drum Diameter (cm) — Inertia Mode</label>
+      <div class="param-row">
+        <input type="number" id="drumCm" value="30.0" min="10" max="100" step="0.1">
+        <button onclick="saveSingle('drumCm', event)">💾 SAVE</button>
+      </div>
+
+      <label>Drum Inertia Type</label>
+      <div class="param-row">
+        <select id="drumInertiaType">
+          <option value="solid">Solid Cylinder</option>
+          <option value="hollow">Hollow Cylinder</option>
+          <option value="custom">Custom Inertia (kg·m²)</option>
+        </select>
+        <button onclick="saveSingle('drumInertiaType', event)">💾 SAVE</button>
+      </div>
+
+      <label>Wall Thickness (cm) — Hollow only</label>
+      <div class="param-row">
+        <input type="number" id="drumWallCm" value="2.0" min="0.5" max="20" step="0.1">
+        <button onclick="saveSingle('drumWallCm', event)">💾 SAVE</button>
+      </div>
+
+      <label>Custom Drum Inertia (kg·m²)</label>
+      <div class="param-row">
+        <input type="number" id="drumInertiaCustom" value="0.5" min="0.01" max="10" step="0.01">
+        <button onclick="saveSingle('drumInertiaCustom', event)">💾 SAVE</button>
+      </div>
+    </div>
+
+    <div class="section wifi-section">
+      <label>Connect to Existing WiFi Network (Client Mode)</label>
+      <div class="info">Enter credentials → click CONNECT → ESP32 will reboot as client</div>
+      <label>WiFi SSID</label>
+      <input type="text" id="wifiSSID" placeholder="Your network name">
+      <label>WiFi Password</label>
+      <input type="password" id="wifiPass" placeholder="Your network password">
+      <button onclick="connectWiFi(event)">📡 CONNECT TO WIFI</button>
+    </div>
+
+
+  </div>
+
+  <script>
+    function showToast(message) {
+      const existing = document.getElementById("toast");
+      if (existing) existing.remove();
+
+      const toast = document.createElement("div");
+      toast.id = "toast";
+      toast.textContent = message;
+      toast.style.position = "fixed";
+      toast.style.bottom = "100px";
+      toast.style.left = "50%";
+      toast.style.transform = "translateX(-50%)";
+      toast.style.background = "rgba(0, 150, 0, 0.95)";
+      toast.style.color = "#ffffff";
+      toast.style.padding = "16px 40px";
+      toast.style.borderRadius = "12px";
+      toast.style.fontSize = "18px";
+      toast.style.fontWeight = "bold";
+      toast.style.zIndex = "2000";
+      toast.style.boxShadow = "0 6px 20px rgba(0,0,0,0.8)";
+      document.body.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.opacity = "0";
+        setTimeout(() => toast.remove(), 600);
+      }, 3000);
+    }
+
+    function updateUIVisibility() {
+      const mode = document.getElementById("dynoMode").value;
+      const source = "leafrpm";
+
+      document.getElementById("inertiaSection").classList.toggle("hidden", mode !== "inertia");
+      document.getElementById("gearRatioSection").classList.toggle("hidden", mode !== "inertia");
+      document.getElementById("enginePulsesSection").classList.toggle("hidden", source !== "leafrpm");
+      
+      // Brake ratio section is always visible in brake mode
+      document.getElementById("brakeRatioSection").classList.toggle("hidden", mode !== "brake");
+
+      const infoDiv = document.getElementById("rpmSourceInfo");
+      if (infoDiv) {
+        infoDiv.innerHTML = "🔧 <strong>LEAF CAN RPM:</strong><br>Primary source. Tachogen analog on GPIO 3 is used automatically if CAN is unavailable.";
+      }
+    }
+
+    function rebuildRpmSourceOptions() {
+      const infoDiv = document.getElementById("rpmSourceInfo");
+      if (infoDiv) {
+        infoDiv.innerHTML = "🔧 <strong>LEAF CAN RPM:</strong><br>Primary source. Tachogen analog on GPIO 3 is used automatically if CAN is unavailable.";
+      }
+    }
+
+    function setKpSourceSelection(source) {
+      const sourceVal = source === "pot3" ? "pot3" : "firmware";
+      const hidden = document.getElementById("kpSource");
+      if (hidden) hidden.value = sourceVal;
+
+      const fw = document.getElementById("kpSourceFirmware");
+      const pot3 = document.getElementById("kpSourcePot3");
+      if (fw) fw.checked = sourceVal === "firmware";
+      if (pot3) pot3.checked = sourceVal === "pot3";
+    }
+
+    function formatBrakeRatioTwoDigits(rawValue) {
+      const parsed = Number(rawValue);
+      if (!Number.isFinite(parsed) || parsed <= 0) return "1.00";
+      return parsed.toFixed(2);
+    }
+
+    let ws = null;
+    let tarePending = false;
+    let calibratePending = false;
+    const criticalActionArms = {};
+
+    function resetArmedButton(button) {
+      if (!button) return;
+      const defaultText = button.dataset.defaultText || button.textContent;
+      button.textContent = defaultText;
+      button.style.background = "#404040";
+    }
+
+    function requireArmedClick(button, key, armedLabel) {
+      if (!button) return false;
+
+      if (!button.dataset.defaultText) {
+        button.dataset.defaultText = button.textContent;
+      }
+
+      const now = Date.now();
+      const armTs = criticalActionArms[key] || 0;
+      const armWindowMs = 5000;
+
+      if (now - armTs > armWindowMs) {
+        criticalActionArms[key] = now;
+        button.textContent = armedLabel;
+        button.style.background = "#a05050";
+        showToast("Confirm action: click the same button again");
+
+        setTimeout(() => {
+          if (criticalActionArms[key] === now) {
+            delete criticalActionArms[key];
+            resetArmedButton(button);
+          }
+        }, armWindowMs);
+        return false;
+      }
+
+      delete criticalActionArms[key];
+      resetArmedButton(button);
+      return true;
+    }
+
+
+    function setTareButtonBusy(isBusy) {
+      const tareBtn = document.getElementById("tareButton");
+      if (!tareBtn) return;
+      tareBtn.disabled = isBusy;
+      tareBtn.textContent = isBusy ? "⏳ TARE IN PROGRESS..." : "⚖️ TARE (ZERO)";
+      tareBtn.style.opacity = isBusy ? "0.75" : "1";
+      tareBtn.style.cursor = isBusy ? "wait" : "pointer";
+    }
+
+    function setCalibrateButtonBusy(isBusy) {
+      const calibrateBtn = document.getElementById("calibrateButton");
+      if (!calibrateBtn) return;
+      calibrateBtn.disabled = isBusy;
+      calibrateBtn.textContent = isBusy ? "⏳ CALIBRATING..." : "🔧 CALIBRATE";
+      calibrateBtn.style.opacity = isBusy ? "0.75" : "1";
+      calibrateBtn.style.cursor = isBusy ? "wait" : "pointer";
+    }
+
+    function uploadFactorySettings(event) {
+      const btn = event ? event.currentTarget : null;
+      if (!requireArmedClick(btn, "uploadFactoryFs", "⚠️ CLICK AGAIN TO UPLOAD FACTORY SETTINGS")) {
+        return;
+      }
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        showToast("Not connected. Cannot upload factory settings to FS.");
+        return;
+      }
+      ws.send("SAVE_FACTORY_PROFILE");
+    }
+
+    const connectWS = function() {
+      ws = new WebSocket("ws://" + location.hostname + "/ws");
+      ws.onopen = function() {
+        document.getElementById("settingsStatus").style.display = "none";
+        ws.send("PAGE_SETTINGS");
+        ws.send("GET_SETTINGS");
+      };
+      ws.onmessage = function(evt) {
+        try {
+          const msg = JSON.parse(evt.data);
+          if (msg.type === "settings") {
+            document.getElementById("calFactor").value = msg.calFactor !== undefined ? Number(msg.calFactor).toFixed(6) : "0.000000";
+            const kpElem = document.getElementById("kp");
+            const kiElem = document.getElementById("ki");
+            if (kpElem && msg.kp !== undefined) {
+              const kpVal = Number(msg.kp);
+              if (Number.isFinite(kpVal)) {
+                kpElem.value = kpVal.toFixed(4);
+              }
+            }
+            if (kiElem && msg.ki !== undefined) {
+              const kiVal = Number(msg.ki);
+              if (Number.isFinite(kiVal)) {
+                kiElem.value = kiVal.toFixed(4);
+              }
+            }
+            setKpSourceSelection(msg.kpSource || "firmware");
+            document.getElementById("maxRPM").value = msg.maxRPM;
+            document.getElementById("maxHP").value = msg.maxHP;
+            document.getElementById("maxTorque").value = msg.maxTorque;
+            document.getElementById("armCm").value = msg.armCm;
+            document.getElementById("pulsesPerRev").value = msg.pulsesPerRev || 1.0;
+            document.getElementById("rpmFilter").value = msg.rpmFilter;
+            document.getElementById("loadAvgN").value = msg.loadAvgN !== undefined ? msg.loadAvgN : 5;
+            document.getElementById("loadAvgN2").value = msg.loadAvgN2 !== undefined ? msg.loadAvgN2 : 5;
+            document.getElementById("loadFilterMode").value = msg.loadFilterMode || "moving_avg";
+            document.getElementById("rhOffsetPct").value = msg.rhOffsetPct !== undefined ? msg.rhOffsetPct : 0.0;
+            document.getElementById("motorModeMaxRpm").value = msg.motorModeMaxRpm !== undefined ? msg.motorModeMaxRpm : 2000;
+            document.getElementById("idleTorqueNm").value = msg.idleTorqueNm !== undefined ? msg.idleTorqueNm : 4.0;
+            document.getElementById("brakeMaxTorqueNm").value = msg.brakeMaxTorqueNm !== undefined ? msg.brakeMaxTorqueNm : 30.0;
+            document.getElementById("forceVcuReadyForUiTest").value = msg.forceVcuReadyForUiTest ? "1" : "0";
+            document.getElementById("dynoMode").value = msg.mode;
+            document.getElementById("virtGearRatio").value = msg.virtGearRatio || 1.0;
+            document.getElementById("drumMass").value = msg.drumMass;
+            document.getElementById("drumCm").value = msg.drumCm;
+            document.getElementById("pulsesPerRevDrum").value = msg.pulsesPerRevDrum || 1.0;
+            document.getElementById("drumInertiaType").value = msg.drumInertiaType;
+            document.getElementById("drumWallCm").value = msg.drumWallCm;
+            document.getElementById("drumInertiaCustom").value = msg.drumInertiaCustom;
+            const ratioFromMsg = (msg.brakeToEngineRatio !== undefined)
+              ? msg.brakeToEngineRatio
+              : (msg.virtGearRatio !== undefined ? msg.virtGearRatio : 1.0);
+            document.getElementById("brakeToEngineRatio").value = formatBrakeRatioTwoDigits(ratioFromMsg);
+			document.getElementById("drivetrainEff").value = msg.drivetrainEff || 93.0;
+            
+            rebuildRpmSourceOptions();
+
+            updateUIVisibility();
+			 // Update version display
+  const versionEl = document.getElementById("versionInfo");
+  if (versionEl && msg.version && msg.buildDate) {
+    versionEl.innerHTML = `MetaSense V${msg.version} | ${msg.buildDate}`;
+  }
+
+          } else if (msg.type === "info" || msg.type === "status") {
+            showToast(msg.msg);
+            const text = String(msg.msg || "").toLowerCase();
+
+            if (tarePending) {
+              if (text.includes("tare applied") || text.includes("zero=")) {
+                tarePending = false;
+                setTareButtonBusy(false);
+              }
+            }
+
+            const calibrationDone =
+              text.includes("calibration done") ||
+              text.includes("new factor") ||
+              text.includes("calibration factor updated") ||
+              text.includes("factor=");
+
+            const calibrationFailed =
+              text.includes("calibration rejected") ||
+              text.includes("calibration failed") ||
+              text.includes("not enough stable readings") ||
+              text.includes("load not stable enough") ||
+              text.includes("calibration busy") ||
+              text.includes("invalid calibration weight");
+
+            if (calibrationDone) {
+              const factorMatch = String(msg.msg || "").match(/factor\s*=\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
+              const factorMatchAlt = String(msg.msg || "").match(/new factor:\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/i);
+              if (factorMatch && factorMatch[1] !== undefined) {
+                const parsed = Number(factorMatch[1]);
+                if (Number.isFinite(parsed)) {
+                  document.getElementById("calFactor").value = parsed.toFixed(6);
+                }
+              } else if (factorMatchAlt && factorMatchAlt[1] !== undefined) {
+                const parsed = Number(factorMatchAlt[1]);
+                if (Number.isFinite(parsed)) {
+                  document.getElementById("calFactor").value = parsed.toFixed(6);
+                }
+              }
+              if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send("GET_SETTINGS");
+              }
+              if (calibratePending) {
+                calibratePending = false;
+                setCalibrateButtonBusy(false);
+              }
+            } else if (calibrationFailed && calibratePending) {
+                calibratePending = false;
+                setCalibrateButtonBusy(false);
+            }
+          }
+        } catch (e) {
+          console.error("WebSocket message error:", e);
+        }
+      };
+      ws.onclose = function() {
+        document.getElementById("settingsStatus").style.display = "block";
+        document.getElementById("settingsStatus").textContent = "⚠️ Reconnecting...";
+        setTimeout(connectWS, 1000);
+      };
+    };
+
+    connectWS();
+
+    const tare = function() {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        showToast("Not connected. Cannot tare now.");
+        return;
+      }
+
+      tarePending = true;
+      setTareButtonBusy(true);
+      ws.send("CALIBRATE_ZERO");
+      showToast("Tare command sent, waiting for confirmation...");
+
+      setTimeout(() => {
+        if (!tarePending) return;
+        tarePending = false;
+        setTareButtonBusy(false);
+        showToast("No tare confirmation received. Check connection and retry.");
+      }, 2500);
+    };
+    
+    const calibrate = function() {
+      const knownWeightInput = document.getElementById("knownWeight");
+      let weight = knownWeightInput.value.trim();
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        showToast("Not connected. Cannot calibrate now.");
+        return;
+      }
+
+      if (!weight || !(parseFloat(weight) > 0)) {
+        weight = "3.404";
+        knownWeightInput.value = weight;
+      }
+
+      if (parseFloat(weight) > 0) {
+        calibratePending = true;
+        setCalibrateButtonBusy(true);
+        ws.send("CALIBRATE:" + weight);
+        showToast("Calibration sent with " + weight + "kg, waiting for confirmation...");
+
+        setTimeout(() => {
+          if (!calibratePending) return;
+          calibratePending = false;
+          setCalibrateButtonBusy(false);
+          showToast("No calibration confirmation received. Check load and retry.");
+        }, 18000);
+      } else {
+        showToast("Enter valid weight!");
+      }
+    };
+
+    const saveSingle = function(key, event) {
+      const elem = document.getElementById(key);
+      if (!elem) return;
+      if (key === "kpSource") {
+        const selected = document.querySelector('input[name="kpSource"]:checked');
+        if (selected) {
+          elem.value = selected.value;
+        }
+      }
+      let val = elem.tagName === "SELECT" ? elem.value : elem.value.trim();
+      if (key === "brakeToEngineRatio" || key === "virtGearRatio") {
+        val = formatBrakeRatioTwoDigits(val);
+        elem.value = val;
+      }
+      if (ws) ws.send("SET_SINGLE:" + key + "=" + val);
+      
+      const btn = event.target;
+      const originalText = btn.textContent;
+      btn.textContent = "✓ SAVED!";
+      btn.style.background = "#008000";
+      setTimeout(() => { 
+        btn.textContent = originalText;
+        btn.style.background = "#404040";
+      }, 1500);
+      
+      showToast(key + " saved!");
+    };
+
+    const connectWiFi = function(event) {
+      const btn = event ? event.currentTarget : null;
+      if (!requireArmedClick(btn, "connectWifi", "⚠️ CLICK AGAIN TO CONNECT")) {
+        return;
+      }
+      const ssid = document.getElementById("wifiSSID").value.trim();
+      const pass = document.getElementById("wifiPass").value;
+      if (ssid) {
+        if (ws) ws.send("WIFI_CLIENT:" + ssid + ":" + pass);
+        showToast("Connecting to WiFi... ESP32 will reboot");
+      } else {
+        showToast("Enter SSID!");
+      }
+    };
+
+    const resetSectionDefaults = function(event) {
+      const btn = event ? event.currentTarget : null;
+      if (!requireArmedClick(btn, "resetDefaults", "⚠️ CLICK AGAIN TO RESET")) {
+        return;
+      }
+      if (ws) ws.send("RESET_ALL_SETTINGS");
+      showToast("All settings reset to defaults");
+    };
+
+    rebuildRpmSourceOptions();
+    document.querySelectorAll('input[name="kpSource"]').forEach((radio) => {
+      radio.addEventListener("change", () => {
+        setKpSourceSelection(radio.value);
+      });
+    });
+    setKpSourceSelection("firmware");
+    const brakeRatioInput = document.getElementById("brakeToEngineRatio");
+    if (brakeRatioInput) {
+      brakeRatioInput.addEventListener("blur", () => {
+        brakeRatioInput.value = formatBrakeRatioTwoDigits(brakeRatioInput.value);
+      });
+    }
+    updateUIVisibility();
+  </script>
+</body>
+</html>

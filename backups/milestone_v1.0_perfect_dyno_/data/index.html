@@ -1360,17 +1360,9 @@
         <div class="reading" style="color: #ffddaa;">Inverter Fault (6b): <span id="inverterFaultValue" style="font-weight: bold; color: #ff6644;">---</span></div>
         <div class="reading" style="color: #ffddaa;">Status: <span id="inverterStatusValue" style="font-weight: bold; color: #88ff88;">---</span></div>
         <hr style="border: none; border-top: 1px solid #666; margin: 8px 0;"/>
-        <div class="reading" style="color: #ffddaa;">Inverter HV: <span id="inverterHVValue" style="font-weight: bold; color: #88ccff;">---</span> V</div>
         <div class="reading" style="color: #ffddaa;">Inv. Temp: <span id="inverterTempValue" style="font-weight: bold; color: #ffaa88;">---</span> °C</div>
         <div class="reading" style="color: #ffddaa;">Stator Temp: <span id="statorTempValue" style="font-weight: bold; color: #ffaa88;">---</span> °C</div>
         <div class="reading" style="color: #ffddaa;">Coolant Temp: <span id="coolantTempValue" style="font-weight: bold; color: #ffaa88;">---</span> °C</div>
-        <hr style="border: none; border-top: 1px solid #666; margin: 8px 0;"/>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px;">
-          <button id="hwPrechargeBtnStatus" style="padding: 6px; border: 2px solid #666; border-radius: 4px; background: #333; color: #aaa; font-size: 11px; font-weight: bold; cursor: default;">HV_PRECHARGE</button>
-          <button id="hwRbPlusBtnStatus" style="padding: 6px; border: 2px solid #666; border-radius: 4px; background: #333; color: #aaa; font-size: 11px; font-weight: bold; cursor: default;">HV_RB+</button>
-          <button id="hwRbMinusBtnStatus" style="padding: 6px; border: 2px solid #666; border-radius: 4px; background: #333; color: #aaa; font-size: 11px; font-weight: bold; cursor: default;">HV_RB-</button>
-          <button id="hwSsrBtnStatus" style="padding: 6px; border: 2px solid #666; border-radius: 4px; background: #333; color: #aaa; font-size: 11px; font-weight: bold; cursor: default;">HV_SSR</button>
-        </div>
       </div>
     </div>
   </div>
@@ -3491,13 +3483,6 @@
               }
             }
 
-            // Update Inverter HV voltage from 0x1DA
-            const invHVEl = document.getElementById("inverterHVValue");
-            if (invHVEl) {
-              const invHV = Number(cachedTelemetry.leaf_1da_input_v);
-              invHVEl.textContent = isFinite(invHV) ? invHV.toFixed(1) : "---";
-            }
-
             // Update Temperature values from 0x1DA (always present in cachedTelemetry)
             const invTempEl = document.getElementById("inverterTempValue");
             if (invTempEl) {
@@ -3516,22 +3501,6 @@
               const coolantTemp = Number(cachedTelemetry.leaf_coolant_temp);
               coolantTempEl.textContent = isFinite(coolantTemp) ? coolantTemp.toFixed(1) : "---";
             }
-
-            // Update HV Relay Status Buttons
-            const updateRelayButton = (btnId, telemetryKey, label) => {
-              const btn = document.getElementById(btnId);
-              if (btn && telemetry[telemetryKey] !== undefined) {
-                const isActive = Number(telemetry[telemetryKey]) === 1;
-                btn.style.background = isActive ? "#005500" : "#330000";
-                btn.style.color = isActive ? "#00ff00" : "#ff6666";
-                btn.style.borderColor = isActive ? "#00ff00" : "#ff6666";
-                btn.textContent = label + (isActive ? " ●" : " ○");
-              }
-            };
-            updateRelayButton("hwPrechargeBtnStatus", "hw_precharge", "HV_PRECHARGE");
-            updateRelayButton("hwRbPlusBtnStatus", "hw_rb_plus", "HV_RB+");
-            updateRelayButton("hwRbMinusBtnStatus", "hw_rb_minus", "HV_RB-");
-            updateRelayButton("hwSsrBtnStatus", "hw_ssr", "HV_SSR");
 
             if (telemetry.load_kg !== undefined) {
               document.getElementById("loadKgDisplay").textContent = Number(telemetry.load_kg).toFixed(1);
