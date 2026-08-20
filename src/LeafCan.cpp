@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <math.h>
+#include "TelnetSerialBridge.h"
 
 #ifndef METASENSE_LEAF_VARIANT_120_55A
 #define METASENSE_LEAF_VARIANT_120_55A 0

@@ -1,0 +1,19 @@
+CHECKPOINT: 2026-08-20 - Before Telemetry Simplification
+=====================================================
+
+Current State:
+- index.html has both CAN Monitor and Dashboard displays
+- Input.cpp sends detailed JSON with all CAN data (0x1DA, 0x1D4, 0x11A, raw bytes, CRC, etc.)
+- JSON payload: ~850+ bytes per message
+
+Next Changes:
+1. Remove CAN Monitor section from index.html completely
+2. Keep only main Dashboard/Gauges display
+3. Simplify Input.cpp JSON to send only:
+   - Essential 0x1DA data: HV voltage, effective torque, inverter voltage, temps
+   - Remove: 0x1D4, 0x11A, relay states, sim mode, all CRC/raw/debugging data
+4. Reduce JSON payload to ~300-400 bytes (60% reduction)
+5. Improve WebSocket responsiveness
+
+Rollback: Restore from data/index.html.backup-before-telemetry-simplify if needed
+Git: Last clean commit hash before these changes

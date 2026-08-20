@@ -16,7 +16,7 @@
       --side-gauge-size: clamp(260px, 19vw, 365px);
       --center-gauge-size: clamp(460px, calc(var(--side-gauge-size) * 1.7), 620px);
       --top-info-offset: clamp(180px, 16vw, 280px);
-      --main-button-width: 110px;
+      --main-button-width: 220px;
     }
 
     body { 
@@ -90,14 +90,14 @@
 
     .button-stack button, 
     .button-stack a button { 
-      padding: 8px 16px; 
-      font-size: 13px; 
+      padding: 12px 24px; 
+      font-size: 16px; 
       background: #404040; 
       color: #ffffff; 
-      border: 2px solid #00ff00; 
-      border-radius: 8px; 
+      border: 3px solid #00ff00; 
+      border-radius: 12px; 
       cursor: pointer; 
-      box-shadow: 0 4px 10px rgba(0,0,0,0.4); 
+      box-shadow: 0 6px 15px rgba(0,0,0,0.5); 
       width: var(--main-button-width);
       min-width: var(--main-button-width);
       max-width: var(--main-button-width);
@@ -127,46 +127,6 @@
       50% { box-shadow: 0 0 30px #ff0000; } 
       100% { box-shadow: 0 0 10px #ff0000; } 
     }
-
-    /* Slim toggle buttons for panel visibility */
-    .slim-button-stack {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      align-items: center;
-      margin-left: 12px;
-    }
-
-    .slim-btn {
-      width: 36px;
-      height: 36px;
-      padding: 0;
-      font-size: 18px;
-      background: #505050;
-      color: #ffffff;
-      border: 2px solid #666;
-      border-radius: 6px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s ease;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.4);
-    }
-
-    .slim-btn:hover {
-      background: #606060;
-      border-color: #888;
-      transform: scale(1.1);
-    }
-
-    .slim-btn.active {
-      background: #00ff00;
-      border-color: #00ff00;
-      color: #000;
-      box-shadow: 0 4px 15px rgba(0, 255, 0, 0.5);
-    }
-
 
     /* Status Display */
     #status { 
@@ -555,50 +515,6 @@
       background: #008000;
     }
     
-    /* Manual Torque Control Button Styles */
-    .mode-btn {
-      transition: all 0.15s ease !important;
-      font-size: 12px !important;
-    }
-    
-    .mode-btn:hover:not(:disabled) {
-      transform: scale(1.05);
-      box-shadow: 0 0 10px rgba(255,255,255,0.3);
-    }
-    
-    .mode-btn:active:not(:disabled) {
-      transform: scale(0.98);
-    }
-    
-    #torqueIncBtn, #torqueDecBtn {
-      transition: all 0.15s ease;
-      font-weight: bold;
-      font-size: 14px;
-    }
-    
-    #torqueIncBtn:hover:not(:disabled) {
-      transform: scale(1.08);
-      box-shadow: 0 0 15px rgba(102,255,102,0.5);
-    }
-    
-    #torqueIncBtn:active:not(:disabled) {
-      transform: scale(0.95);
-    }
-    
-    #torqueDecBtn:hover:not(:disabled) {
-      transform: scale(1.08);
-      box-shadow: 0 0 15px rgba(255,102,102,0.5);
-    }
-    
-    #torqueDecBtn:active:not(:disabled) {
-      transform: scale(0.95);
-    }
-    
-    #torqueIncBtn:disabled, #torqueDecBtn:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
-    
     /* Modal Graph Styles */
     .graph-container { 
       width: 100%; 
@@ -979,16 +895,9 @@
       <button id="tareButton">TARE (ZERO)</button>
       <button id="autoRunButton">Auto Run (F8)</button>
       <button id="manualRunButton">Manual Run (F12)</button>
+      <button id="toggleCanMonitorButton">CAN Monitor: ON</button>
       <a href="/settings"><button>⚙ SETTINGS</button></a>
       <a href="/trend.html" target="_blank"><button>📊 Trends</button></a>
-    </div>
-    <!-- Slim toggle buttons for panel visibility -->
-    <div class="slim-button-stack">
-      <button id="toggleAmbientBtn" class="slim-btn" title="Toggle Ambient panel">🌡</button>
-      <button id="toggleEnergyBtn" class="slim-btn" title="Toggle Acc. Energy panel">⚡</button>
-      <button id="toggleManualTorqueBtn" class="slim-btn" title="Toggle Manual Torque panel">⚙</button>
-      <button id="toggleCanMonitorButton" class="slim-btn" title="Toggle CAN Monitor">📡</button>
-      <button id="toggleInverterBtn" class="slim-btn" title="Toggle Inverter Status panel">🔌</button>
     </div>
   </div>
 
@@ -1220,7 +1129,7 @@
       </div>
 
       <!-- Ambient Box -->
-      <div id="ambientPanel" class="bmp-box" style="position: static; transform: none; margin-top: 12px; width: var(--side-gauge-size);">
+      <div class="bmp-box" style="position: static; transform: none; margin-top: 12px; width: var(--side-gauge-size);">
         <div class="title"> 🌡️ AMBIENT 🌡️</div>
         <div class="reading">Temperature: <span id="ambientTempValue">---</span> °C</div>
         <div class="reading">Pressure: <span id="pressureValue">---</span> hPa</div>
@@ -1312,57 +1221,11 @@
       </div>
 
       <!-- Acc. Energy Box -->
-      <div id="accEnergyPanel" class="gear-box" style="position: static; transform: none; margin-top: 12px; width: var(--side-gauge-size);">
+      <div class="gear-box" style="position: static; transform: none; margin-top: 12px; width: var(--side-gauge-size);">
         <div class="title">⚡ Acc. Energy</div>
         <div class="reading">E_torque: <span id="gearRatioValue">---</span> Nm</div>
         <div class="reading">Energy:  <span id="EnergyValue">---</span> GJ</div>
         <button id="resetEnergyButton">⟳ Reset Energy</button>
-      </div>
-
-      <!-- Manual Torque Control Panel -->
-      <div id="manualTorquePanel" class="gear-box" style="position: static; transform: none; margin-top: 12px; width: var(--side-gauge-size); background: rgba(0,0,0,0.7); border: 1px solid #88ff88;">
-        <div class="title" style="color: #88ff88;">⚙ MANUAL TORQUE</div>
-        
-        <!-- Mode Toggle -->
-        <div style="display: flex; gap: 8px; margin: 8px 0; justify-content: center;">
-          <button id="torqueModeManualBtn" class="mode-btn" style="flex: 1; padding: 8px 12px; background: #404040; color: #888; border: 2px solid #666; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; transition: all 0.15s;">Manual</button>
-          <button id="torqueModeAutoBtn" class="mode-btn" style="flex: 1; padding: 8px 12px; background: #404040; color: #888; border: 2px solid #666; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; transition: all 0.15s;">Auto</button>
-        </div>
-        
-        <!-- Current Mode Indicator -->
-        <div style="text-align: center; font-size: 12px; color: #00ff00; margin: 4px 0; font-weight: bold;">
-          Mode: <span id="torqueModeIndicator">AUTO</span>
-        </div>
-        
-        <!-- Torque Display -->
-        <div style="text-align: center; margin: 8px 0;">
-          <div style="font-size: 11px; color: #999;">Current Manual Torque</div>
-          <div style="font-size: 28px; color: #00ffff; font-weight: bold; margin: 4px 0;">
-            <span id="manualTorqueDisplay">0.00</span> Nm
-          </div>
-        </div>
-        
-        <!-- +/- Buttons -->
-        <div style="display: flex; gap: 8px; margin: 8px 0; justify-content: center;">
-          <button id="torqueDecBtn" style="flex: 1; padding: 10px 8px; background: #660000; color: #fff; border: 2px solid #ff6666; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 16px; transition: all 0.15s; text-shadow: 0 0 4px rgba(0,0,0,0.8);">−0.1</button>
-          <button id="torqueIncBtn" style="flex: 1; padding: 10px 8px; background: #006600; color: #fff; border: 2px solid #66ff66; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 16px; transition: all 0.15s; text-shadow: 0 0 4px rgba(0,0,0,0.8);">+0.1</button>
-        </div>
-        
-        <!-- Range Info -->
-        <div style="text-align: center; font-size: 11px; color: #888; margin-top: 6px;">
-          Range: −300 to +300 Nm
-        </div>
-      </div>
-
-      <!-- Inverter Status Panel -->
-      <div id="inverterStatusPanel" class="gear-box" style="position: static; transform: none; margin-top: 12px; width: var(--side-gauge-size); background: rgba(0,0,0,0.7); border: 1px solid #ff8844;">
-        <div class="title" style="color: #ff8844;">🔌 INVERTER STATUS</div>
-        <div class="reading" style="color: #ffddaa;">Inverter Fault (6b): <span id="inverterFaultValue" style="font-weight: bold; color: #ff6644;">---</span></div>
-        <div class="reading" style="color: #ffddaa;">Status: <span id="inverterStatusValue" style="font-weight: bold; color: #88ff88;">---</span></div>
-        <hr style="border: none; border-top: 1px solid #666; margin: 8px 0;"/>
-        <div class="reading" style="color: #ffddaa;">Inv. Temp: <span id="inverterTempValue" style="font-weight: bold; color: #ffaa88;">---</span> °C</div>
-        <div class="reading" style="color: #ffddaa;">Stator Temp: <span id="statorTempValue" style="font-weight: bold; color: #ffaa88;">---</span> °C</div>
-        <div class="reading" style="color: #ffddaa;">Coolant Temp: <span id="coolantTempValue" style="font-weight: bold; color: #ffaa88;">---</span> °C</div>
       </div>
     </div>
   </div>
@@ -1704,8 +1567,8 @@
       leaf_120_tx_b5: 0,
       leaf_120_tx_b6: 0,
       leaf_120_tx_b7: 0,
-      leaf_1da_inv_temp: 0,
-      leaf_1da_stator_temp: 0,
+      leaf_inv_temp: 0,
+      leaf_stator_temp: 0,
       leaf_coolant_temp: 0,
       leaf_ready: false,
       leaf_warning: false,
@@ -2680,11 +2543,7 @@
         panel.style.display = visible ? "block" : "none";
       }
       if (btn) {
-        if (visible) {
-          btn.classList.add("active");
-        } else {
-          btn.classList.remove("active");
-        }
+        btn.textContent = visible ? "CAN Monitor: ON" : "CAN Monitor: OFF";
       }
       if (persist) {
         try {
@@ -3275,8 +3134,8 @@
             if (msg.leaf_120_tx_b5 !== undefined) cachedTelemetry.leaf_120_tx_b5 = msg.leaf_120_tx_b5;
             if (msg.leaf_120_tx_b6 !== undefined) cachedTelemetry.leaf_120_tx_b6 = msg.leaf_120_tx_b6;
             if (msg.leaf_120_tx_b7 !== undefined) cachedTelemetry.leaf_120_tx_b7 = msg.leaf_120_tx_b7;
-            if (msg.leaf_1da_inv_temp !== undefined) cachedTelemetry.leaf_1da_inv_temp = msg.leaf_1da_inv_temp;
-            if (msg.leaf_1da_stator_temp !== undefined) cachedTelemetry.leaf_1da_stator_temp = msg.leaf_1da_stator_temp;
+            if (msg.leaf_inv_temp !== undefined) cachedTelemetry.leaf_inv_temp = msg.leaf_inv_temp;
+            if (msg.leaf_stator_temp !== undefined) cachedTelemetry.leaf_stator_temp = msg.leaf_stator_temp;
             if (msg.leaf_coolant_temp !== undefined) cachedTelemetry.leaf_coolant_temp = msg.leaf_coolant_temp;
             if (msg.leaf_ready !== undefined) cachedTelemetry.leaf_ready = Number(msg.leaf_ready) === 1;
             if (msg.leaf_last_update_ms !== undefined) cachedTelemetry.leaf_last_update_ms = msg.leaf_last_update_ms;
@@ -3424,83 +3283,6 @@
               if (torqueFill) {
                 torqueFill.setAttribute('stroke-dashoffset', offset);
               }
-
-            // Update Manual Torque Control Display
-            if (telemetry.leaf_torque_demand_manual !== undefined) {
-              const manualTorqueEl = document.getElementById("manualTorqueDisplay");
-              if (manualTorqueEl) {
-                manualTorqueEl.textContent = Number(telemetry.leaf_torque_demand_manual).toFixed(2);
-              }
-            }
-            
-            // Update Manual Torque Mode Indicator
-            if (telemetry.leaf_torque_mode !== undefined) {
-              const modeIndicator = document.getElementById("torqueModeIndicator");
-              const modeManualBtn = document.getElementById("torqueModeManualBtn");
-              const modeAutoBtn = document.getElementById("torqueModeAutoBtn");
-              const torqueIncBtn = document.getElementById("torqueIncBtn");
-              const torqueDecBtn = document.getElementById("torqueDecBtn");
-              
-              if (modeIndicator) {
-                modeIndicator.textContent = telemetry.leaf_torque_mode.toUpperCase();
-                modeIndicator.style.color = (telemetry.leaf_torque_mode === "manual") ? "#ff9900" : "#00ff00";
-              }
-              
-              // Highlight active mode button
-              const isManual = telemetry.leaf_torque_mode === "manual";
-              if (modeManualBtn) {
-                modeManualBtn.style.color = isManual ? "#fff" : "#888";
-                modeManualBtn.style.borderColor = isManual ? "#ff9900" : "#666";
-                modeManualBtn.style.background = isManual ? "rgba(255,153,0,0.2)" : "#404040";
-              }
-              if (modeAutoBtn) {
-                modeAutoBtn.style.color = !isManual ? "#fff" : "#888";
-                modeAutoBtn.style.borderColor = !isManual ? "#00ff00" : "#666";
-                modeAutoBtn.style.background = !isManual ? "rgba(0,255,0,0.1)" : "#404040";
-              }
-              
-              // Disable +/- buttons in auto mode
-              if (torqueIncBtn) torqueIncBtn.disabled = !isManual;
-              if (torqueDecBtn) torqueDecBtn.disabled = !isManual;
-            }
-
-            // Update Inverter Status Panel
-            if (telemetry.leaf_1da_inv_fault_map !== undefined) {
-              const faultEl = document.getElementById("inverterFaultValue");
-              if (faultEl) {
-                const faultValue = Number(telemetry.leaf_1da_inv_fault_map);
-                faultEl.textContent = faultValue.toString(2).padStart(6, '0');
-                faultEl.style.color = faultValue === 0 ? "#88ff88" : "#ff6644";
-              }
-            }
-            
-            if (telemetry.leaf_1da_inv_blinky !== undefined) {
-              const statusEl = document.getElementById("inverterStatusValue");
-              if (statusEl) {
-                const statusValue = Number(telemetry.leaf_1da_inv_blinky);
-                statusEl.textContent = statusValue === 0 ? "OK (0)" : "ACTIVE (1)";
-                statusEl.style.color = statusValue === 0 ? "#88ff88" : "#ffaa44";
-              }
-            }
-
-            // Update Temperature values from 0x1DA (always present in cachedTelemetry)
-            const invTempEl = document.getElementById("inverterTempValue");
-            if (invTempEl) {
-              const invTemp = Number(cachedTelemetry.leaf_1da_inv_temp);
-              invTempEl.textContent = isFinite(invTemp) ? invTemp.toFixed(1) : "---";
-            }
-
-            const statorTempEl = document.getElementById("statorTempValue");
-            if (statorTempEl) {
-              const statorTemp = Number(cachedTelemetry.leaf_1da_stator_temp);
-              statorTempEl.textContent = isFinite(statorTemp) ? statorTemp.toFixed(1) : "---";
-            }
-
-            const coolantTempEl = document.getElementById("coolantTempValue");
-            if (coolantTempEl) {
-              const coolantTemp = Number(cachedTelemetry.leaf_coolant_temp);
-              coolantTempEl.textContent = isFinite(coolantTemp) ? coolantTemp.toFixed(1) : "---";
-            }
 
             if (telemetry.load_kg !== undefined) {
               document.getElementById("loadKgDisplay").textContent = Number(telemetry.load_kg).toFixed(1);
@@ -3763,7 +3545,6 @@ else if (msg.type === "info" || msg.type === "status") {
         }
       });
       
-      restorePanelVisibility();
       connectWS();
     }
     
@@ -3835,98 +3616,6 @@ else if (msg.type === "info" || msg.type === "status") {
       const currentlyVisible = !!panel && panel.style.display !== "none";
       setCanMonitorVisibility(!currentlyVisible, true);
     };
-
-    // Toggle Ambient panel visibility
-    document.getElementById("toggleAmbientBtn").onclick = function() {
-      const panel = document.getElementById("ambientPanel");
-      const btn = document.getElementById("toggleAmbientBtn");
-      if (panel && panel.style.display !== "none") {
-        panel.style.display = "none";
-        btn.classList.remove("active");
-        localStorage.setItem("ambientPanelVisible", "false");
-      } else if (panel) {
-        panel.style.display = "block";
-        btn.classList.add("active");
-        localStorage.setItem("ambientPanelVisible", "true");
-      }
-    };
-
-    // Toggle Acc. Energy panel visibility
-    document.getElementById("toggleEnergyBtn").onclick = function() {
-      const panel = document.getElementById("accEnergyPanel");
-      const btn = document.getElementById("toggleEnergyBtn");
-      if (panel && panel.style.display !== "none") {
-        panel.style.display = "none";
-        btn.classList.remove("active");
-        localStorage.setItem("energyPanelVisible", "false");
-      } else if (panel) {
-        panel.style.display = "block";
-        btn.classList.add("active");
-        localStorage.setItem("energyPanelVisible", "true");
-      }
-    };
-
-    // Toggle Manual Torque panel visibility
-    document.getElementById("toggleManualTorqueBtn").onclick = function() {
-      const panel = document.getElementById("manualTorquePanel");
-      const btn = document.getElementById("toggleManualTorqueBtn");
-      if (panel && panel.style.display !== "none") {
-        panel.style.display = "none";
-        btn.classList.remove("active");
-        localStorage.setItem("manualTorquePanelVisible", "false");
-      } else if (panel) {
-        panel.style.display = "block";
-        btn.classList.add("active");
-        localStorage.setItem("manualTorquePanelVisible", "true");
-      }
-    };
-
-    // Toggle Inverter Status panel visibility
-    document.getElementById("toggleInverterBtn").onclick = function() {
-      const panel = document.getElementById("inverterStatusPanel");
-      const btn = document.getElementById("toggleInverterBtn");
-      if (panel && panel.style.display !== "none") {
-        panel.style.display = "none";
-        btn.classList.remove("active");
-        localStorage.setItem("inverterPanelVisible", "false");
-      } else if (panel) {
-        panel.style.display = "block";
-        btn.classList.add("active");
-        localStorage.setItem("inverterPanelVisible", "true");
-      }
-    };
-
-    // Restore panel visibility from localStorage on load
-    function restorePanelVisibility() {
-      const ambientBtn = document.getElementById("toggleAmbientBtn");
-      const energyBtn = document.getElementById("toggleEnergyBtn");
-      const torqueBtn = document.getElementById("toggleManualTorqueBtn");
-      const inverterBtn = document.getElementById("toggleInverterBtn");
-      
-      if (localStorage.getItem("ambientPanelVisible") === "false") {
-        document.getElementById("ambientPanel").style.display = "none";
-      } else {
-        ambientBtn.classList.add("active");
-      }
-      
-      if (localStorage.getItem("energyPanelVisible") === "false") {
-        document.getElementById("accEnergyPanel").style.display = "none";
-      } else {
-        energyBtn.classList.add("active");
-      }
-      
-      if (localStorage.getItem("manualTorquePanelVisible") === "false") {
-        document.getElementById("manualTorquePanel").style.display = "none";
-      } else {
-        torqueBtn.classList.add("active");
-      }
-      
-      if (localStorage.getItem("inverterPanelVisible") === "false") {
-        document.getElementById("inverterStatusPanel").style.display = "none";
-      } else {
-        inverterBtn.classList.add("active");
-      }
-    }
     
     document.getElementById("confirmManual").onclick = function() {
       currentCustomer = document.getElementById("manualCustomerName").value.trim();
@@ -3966,85 +3655,6 @@ else if (msg.type === "info" || msg.type === "status") {
       if (energyEl) energyEl.textContent = "0";
       showToast("Accumulated energy reset");
     };
-    
-    // Manual Torque Control Handlers
-    const manualModeBtn = document.getElementById("torqueModeManualBtn");
-    const autoModeBtn = document.getElementById("torqueModeAutoBtn");
-    const incBtn = document.getElementById("torqueIncBtn");
-    const decBtn = document.getElementById("torqueDecBtn");
-    
-    if (!manualModeBtn) console.error("torqueModeManualBtn not found");
-    if (!autoModeBtn) console.error("torqueModeAutoBtn not found");
-    if (!incBtn) console.error("torqueIncBtn not found");
-    if (!decBtn) console.error("torqueDecBtn not found");
-    
-    if (manualModeBtn) {
-      manualModeBtn.onclick = function() {
-        console.log("Manual mode clicked, ws state:", ws ? ws.readyState : "no ws");
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          const cmd = "SET_SINGLE:leaf1d4TorqueMode=manual";
-          console.log("Sending:", cmd);
-          ws.send(cmd);
-          showToast("Switched to MANUAL torque mode");
-        } else {
-          showToast("Not connected to device");
-        }
-      };
-    }
-    
-    if (autoModeBtn) {
-      autoModeBtn.onclick = function() {
-        console.log("Auto mode clicked, ws state:", ws ? ws.readyState : "no ws");
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          const cmd = "SET_SINGLE:leaf1d4TorqueMode=auto";
-          console.log("Sending:", cmd);
-          ws.send(cmd);
-          showToast("Switched to AUTO torque mode");
-        } else {
-          showToast("Not connected to device");
-        }
-      };
-    }
-    
-    if (incBtn) {
-      incBtn.onclick = function() {
-        console.log("Inc button clicked, ws state:", ws ? ws.readyState : "no ws");
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          // Instant UI feedback
-          const current = Number(cachedTelemetry.leaf_torque_demand_manual || 0);
-          const updated = Number((current + 0.1).toFixed(2));
-          const manualEl = document.getElementById("manualTorqueDisplay");
-          if (manualEl) manualEl.textContent = updated.toFixed(2);
-          
-          const cmd = "SET_SINGLE:leaf1d4TorqueInc=1";
-          console.log("Sending:", cmd);
-          ws.send(cmd);
-          showToast("Torque +0.1 Nm");
-        } else {
-          showToast("Not connected to device");
-        }
-      };
-    }
-    
-    if (decBtn) {
-      decBtn.onclick = function() {
-        console.log("Dec button clicked, ws state:", ws ? ws.readyState : "no ws");
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          // Instant UI feedback
-          const current = Number(cachedTelemetry.leaf_torque_demand_manual || 0);
-          const updated = Number((current - 0.1).toFixed(2));
-          const manualEl = document.getElementById("manualTorqueDisplay");
-          if (manualEl) manualEl.textContent = updated.toFixed(2);
-          
-          const cmd = "SET_SINGLE:leaf1d4TorqueDec=1";
-          console.log("Sending:", cmd);
-          ws.send(cmd);
-          showToast("Torque −0.1 Nm");
-        } else {
-          showToast("Not connected to device");
-        }
-      };
-    }
     
     document.getElementById("finishManualRun").onclick = finishManualRun;
     document.getElementById("stopAutoRunModal").onclick = cancelAutoRunFromUi;

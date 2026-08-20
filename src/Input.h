@@ -40,6 +40,8 @@ namespace MetaSense::Input {
     void updateCanStatus(bool ready, bool fault, bool warning, bool limp);
     void setLeafUiTorqueDemandNm(float torqueNm);
     float getLeafUiTorqueDemandNm();
+    void setLeafManualTorqueMode(bool manualMode);
+    bool getLeafManualTorqueMode();
     bool sendLeafTorqueCommand1d4(float torqueDemandNm,
                                   bool inverterReadyBit,
                                   bool hvOkBit,

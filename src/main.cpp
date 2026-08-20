@@ -19,6 +19,7 @@
 
 #include "globals.h"
 #include "I2cBusLock.h"
+#include "TelnetSerialBridge.h"
 
 // Enable/disable runtime task instrumentation (set to 0 to disable)
 #define ENABLE_RUNTIME_INSTRUMENTATION 0
@@ -291,6 +292,11 @@ void logLine(const char* message)
 {
     Serial.println(message);
     Serial0.println(message);
+    // Also send to telnet clients
+    MetaSense::TelnetSerialBridge::telnetSerialBridge.writeToClients(
+        (const uint8_t*)message, strlen(message));
+    MetaSense::TelnetSerialBridge::telnetSerialBridge.writeToClients(
+        (const uint8_t*)"\r\n", 2);
 }
 
 void logWifiConnecting(const char* targetSsid)
@@ -1026,6 +1032,13 @@ void setup()
         logLine("[BOOT] ModbusPublisher begin failed");
     }
 
+    // Initialize telnet serial bridge for remote monitoring
+    if (MetaSense::TelnetSerialBridge::telnetSerialBridge.begin(23)) {
+        logLine("[BOOT] Telnet Serial Bridge started on port 23");
+    } else {
+        logLine("[BOOT] Telnet Serial Bridge failed to start");
+    }
+
     BaseType_t controlCreated = xTaskCreatePinnedToCore(
         controlTaskEntry,
         "controlTask",
@@ -1072,5 +1085,6 @@ void setup()
 
 void loop()
 {
+    MetaSense::TelnetSerialBridge::telnetSerialBridge.update();
     vTaskDelay(pdMS_TO_TICKS(1000));
 }

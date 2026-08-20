@@ -6,6 +6,7 @@
 
 #include <ESPAsyncWebServer.h>
 #include "DynoStateMachine.h"
+#include "HardwareOutputStateMachine.h"
 #include "Settings.h"
 #include "Input.h"
 class AsyncWebSocketClient;
@@ -774,8 +775,42 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
         bool persistSettings = true;
         bool applyLoadCellProfile = false;
 
+        // Safety check: prevent manual torque commands during INIT state
+        const char* hwState = MetaSense::HardwareOutputStateMachine::stateName();
+        const bool isInitState = (hwState != nullptr) && (strcmp(hwState, "INIT") == 0);
+        
         if (key == "leaf1d4TorqueNm") {
-            MetaSense::Input::setLeafUiTorqueDemandNm(fval);
+            if (!isInitState) {
+                MetaSense::Input::setLeafUiTorqueDemandNm(fval);
+            } else {
+                Serial.printf("[SAFETY] Manual torque command rejected during INIT state\n");
+            }
+            persistSettings = false;
+        } else if (key == "leaf1d4TorqueInc") {
+            // Increment torque by +0.1 Nm (only in IDLE/MOTOR states)
+            if (!isInitState) {
+                float current = MetaSense::Input::getLeafUiTorqueDemandNm();
+                MetaSense::Input::setLeafUiTorqueDemandNm(current + 0.1f);
+            } else {
+                Serial.printf("[SAFETY] Manual torque inc rejected during INIT state\n");
+            }
+            persistSettings = false;
+        } else if (key == "leaf1d4TorqueDec") {
+            // Decrement torque by -0.1 Nm (only in IDLE/MOTOR states)
+            if (!isInitState) {
+                float current = MetaSense::Input::getLeafUiTorqueDemandNm();
+                MetaSense::Input::setLeafUiTorqueDemandNm(current - 0.1f);
+            } else {
+                Serial.printf("[SAFETY] Manual torque dec rejected during INIT state\n");
+            }
+            persistSettings = false;
+        } else if (key == "leaf1d4TorqueMode") {
+            // Set manual/auto mode: "manual" or "auto" (only in IDLE/MOTOR states)
+            if (!isInitState) {
+                MetaSense::Input::setLeafManualTorqueMode(val == "manual");
+            } else {
+                Serial.printf("[SAFETY] Manual torque mode change rejected during INIT state\n");
+            }
             persistSettings = false;
         } else if (key == "rpmFilter") {
             MetaSense::Settings::filterAlpha = fval;

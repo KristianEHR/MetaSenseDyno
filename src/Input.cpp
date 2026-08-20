@@ -7,6 +7,7 @@
 #include <math.h>
 #include <esp_timer.h>
 #include <Wire.h>
+#include <cstdarg>
 
 #include <Adafruit_BME680.h>
 #include <Adafruit_NAU7802.h>
@@ -23,6 +24,13 @@
 #include "LeafCrc.h"
 #include "Leaf1d4ReplaySeries.h"
 #include "globals.h"
+#include "TelnetSerialBridge.h"
+
+// Default: CAN Monitor JSON telemetry is DISABLED (reduce WebSocket payload)
+// Enable via platformio.ini: -D METASENSE_CAN_MONITOR_JSON_ENABLED=1
+#ifndef METASENSE_CAN_MONITOR_JSON_ENABLED
+#define METASENSE_CAN_MONITOR_JSON_ENABLED 0
+#endif
 
 namespace MetaSense::WebSocketServer {
 
@@ -399,6 +407,8 @@ static bool s_leafTxGapTestActive = false;
 static bool s_leafTxGapTestLoggedStart = false;
 static bool s_leafTxGapTestLoggedEnd = false;
 static volatile float s_leafUiTorqueDemandNm = 0.0f;
+static volatile bool s_leafManualTorqueMode = false;  // true=manual, false=auto (PI controller)
+static const char* s_lastHardwareState = nullptr;     // Track state for INIT entry detection
 static volatile bool s_leafTxPacerEnabled = false;
 static volatile float s_leafTxPacerTorqueNm = 0.0f;
 static uint8_t s_torqueNibbleCounter = 1U;
@@ -633,7 +643,7 @@ constexpr float TORQUE_MIN = -200.0f;
 constexpr float TORQUE_MAX =  200.0f;
 constexpr float RPM_SETPOINT_MAX = RPM_MAX_LIMIT;
 #ifndef METASENSE_WS_FAST_PERIOD_MS
-#define METASENSE_WS_FAST_PERIOD_MS 25
+#define METASENSE_WS_FAST_PERIOD_MS 30  // 33 Hz - faster responsive updates
 #endif
 #ifndef METASENSE_WS_SLOW_PERIOD_MS
 #define METASENSE_WS_SLOW_PERIOD_MS 500
@@ -3038,17 +3048,17 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
     // Check if we have WebSocket clients connected
     const uint32_t clientCount = MetaSense::WebSocketServer::socket().count();
     
-    // Throttle telemetry when multiple clients or system under load
-    // This prevents network task starvation during OTA uploads
-    const uint32_t dashboardCadenceMs = (clientCount > 0) ? 100U : 25U;  // Reduce dashboard cadence when browser connected
-    const uint32_t canCadenceMs = (clientCount > 0) ? 250U : 100U;       // Reduce CAN monitor cadence
+    // Dashboard updates at 50ms (20 Hz) when browser is connected for smooth display without WiFi overload
+    // Reduces to 100ms when idle (no clients) to save power
+    const uint32_t dashboardCadenceMs = (clientCount > 0) ? 50U : 100U;    // 50ms for stable updates
+    const uint32_t canCadenceMs = (clientCount > 0) ? 250U : 100U;        // CAN monitor still runs at 250ms
 
     // === LIGHTWEIGHT DATA: Essential telemetry ===
     // Browser expects "data" message type with ALL these fields
     if (now - lastDashboardMs >= dashboardCadenceMs) {
         lastDashboardMs = now;
         String dataJson;
-        dataJson.reserve(1200);
+        dataJson.reserve(1200);  // 1200 bytes for ~50 telemetry fields at 25 Hz
         dataJson = "{\"type\":\"data\",";
         dataJson += "\"rpm\":" + String(data.rpm, 1) + ",";
         dataJson += "\"rpm_error\":0,";
@@ -3092,34 +3102,37 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         dataJson += "\"leaf_rpm\":" + String(data.leaf_rpm, 1) + ",";
         dataJson += "\"leaf_torque\":" + String(data.leaf_torqueNm, 2) + ",";
         dataJson += "\"leaf_torque_demand\":" + String(data.leaf_torqueDemandNm, 2) + ",";
-        dataJson += "\"leaf_1da_input_v\":0,";
-        dataJson += "\"leaf_1da_torque_nm\":" + String(data.leaf_torqueNm, 2) + ",";
-        dataJson += "\"leaf_1da_rpm\":" + String(data.leaf_rpm, 1) + ",";
-        dataJson += "\"leaf_1da_clock\":0,";
-        dataJson += "\"leaf_1da_err\":0,";
-        dataJson += "\"leaf_1da_crc\":0,";
-        dataJson += "\"leaf_1da_crc_calc\":0,";
-        dataJson += "\"leaf_1da_crc_ok\":0,";
-        dataJson += "\"leaf_1da_crc_wire_ok\":0,";
-        dataJson += "\"leaf_1da_crc_wire_trusted\":0,";
-        dataJson += "\"leaf_1da_crc_wire_calc\":0,";
-        dataJson += "\"leaf_1da_crc_wire_ok_frames\":0,";
-        dataJson += "\"leaf_1da_crc_wire_bad_frames\":0,";
-        dataJson += "\"leaf_1da_inv_fault_map\":0,";
-        dataJson += "\"leaf_1da_inv_blinky\":0,";
-        // Add HW status flags for DYNO section
-        dataJson += "\"leaf_ready\":" + String(MetaSense::CANBus::feedback().ready ? 1 : 0) + ",";
+        dataJson += "\"leaf_torque_demand_manual\":" + String(MetaSense::Input::getLeafUiTorqueDemandNm(), 2) + ",";
+        dataJson += "\"leaf_torque_mode\":\"" + String(MetaSense::Input::getLeafManualTorqueMode() ? "manual" : "auto") + "\",";
+        
+        // Add 0x1DA inverter data to main telemetry
+        const auto& leafFb = MetaSense::CANBus::feedback();
+        dataJson += "\"leaf_1da_input_v\":" + String(leafFb.input_voltage, 1) + ",";
+        dataJson += "\"leaf_1da_torque_nm\":" + String(leafFb.torque_nm, 2) + ",";
+        dataJson += "\"leaf_1da_inv_temp\":" + String(data.leaf_invTempC, 1) + ",";
+        dataJson += "\"leaf_1da_stator_temp\":" + String(data.leaf_statorTempC, 1) + ",";
+        dataJson += "\"leaf_coolant_temp\":" + String(data.leaf_coolantTempC, 1) + ",";
+        
+        // 0x1DA Inverter Status Fields from DBC
+        dataJson += "\"leaf_1da_inv_fault_map\":" + String(static_cast<unsigned long>(leafFb.inv_fault_map)) + ",";
+        dataJson += "\"leaf_1da_inv_status_bit\":" + String(static_cast<unsigned long>(leafFb.inv_status_bit)) + ",";
+        
+        // Hardware status
+        dataJson += "\"leaf_ready\":" + String(leafFb.ready ? 1 : 0) + ",";
         dataJson += "\"hw_precharge\":" + String(MetaSense::HardwareOutputStateMachine::isPrechargeActive() ? 1 : 0) + ",";
-        dataJson += "\"vcu_precharge\":" + String(MetaSense::HardwareOutputStateMachine::isPrechargeActive() ? 1 : 0) + ",";
-        dataJson += "\"hw_rbplus\":" + String(MetaSense::HardwareOutputStateMachine::isRbPlusActive() ? 1 : 0) + ",";
-        dataJson += "\"hw_rbminus\":" + String(MetaSense::HardwareOutputStateMachine::isRbMinusActive() ? 1 : 0) + ",";
-        dataJson += "\"hw_ssr\":" + String(MetaSense::HardwareOutputStateMachine::isSsrActive() ? 1 : 0) + ",";
-        dataJson += "\"vcu_sim\":" + String(data.vcuSimMode ? 1 : 0) + ",";
+        dataJson += "\"hw_ssr\":" + String(MetaSense::HardwareOutputStateMachine::isSsrActive() ? 1 : 0);
         dataJson += "}";
         wsock.textAll(dataJson);
     }
 
     // === CAN MONITOR: Full monitor data (includes IP + RSSI + all 47 fields) ===
+    // This section remains but CAN Monitor JSON is DISABLED by default to reduce WebSocket payload
+    // All CAN data (0x1DA/0x55A/0x11A/0x1D4) is still captured internally in CANBus::stats()
+    // To enable CAN Monitor JSON transmission:
+    //   1. Add build flag: -D METASENSE_CAN_MONITOR_JSON_ENABLED=1
+    //   2. Or uncomment the wsock.textAll(canJson) line below
+    // Related define: METASENSE_CAN_MONITOR_JSON_ENABLED (line ~30)
+    
     if (now - lastCanTelemetryMs >= canCadenceMs) {
         lastCanTelemetryMs = now;
         
@@ -3131,121 +3144,34 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             cachedRSSI = WiFi.RSSI();
         }
         
-        String canJson;
-        canJson.reserve(1500);  // Increased from 850 to fit all 24 raw byte fields
-        canJson = "{\"type\":\"canmonitor\",";
-        canJson += "\"ip\":\"" + cachedIP + "\",";
-        canJson += "\"rssi\":" + String(cachedRSSI) + ",";
-        canJson += "\"rpm\":" + String(data.rpm, 1) + ",";
-        canJson += "\"leaf_rpm\":" + String(data.leaf_rpm, 1) + ",";
-        canJson += "\"leaf_inv_temp\":" + String(data.leaf_invTempC, 1) + ",";
-        canJson += "\"leaf_stator_temp\":" + String(data.leaf_statorTempC, 1) + ",";
-        canJson += "\"leaf_coolant_temp\":" + String(data.leaf_coolantTempC, 1) + ",";
-        // Diagnostic fields - use decoded LeafInvFeedback & CAN stats
-        const auto& canStats = MetaSense::CANBus::stats();
-        const auto& leafFb = MetaSense::CANBus::feedback();
-        const uint32_t ageSince1da = (canStats.last1daMs > 0 && now > canStats.last1daMs) ? (now - canStats.last1daMs) : 0;
-        const uint32_t ageSince11a = (canStats.last11aMs > 0 && now > canStats.last11aMs) ? (now - canStats.last11aMs) : 0;
-        const uint32_t ageSince1d4Tx = (canStats.last1d4TxMs > 0 && now > canStats.last1d4TxMs) ? (now - canStats.last1d4TxMs) : 0;
-        
-        canJson += "\"leaf_1da_input_v\":" + String(leafFb.input_voltage, 1) + ",";
-        canJson += "\"leaf_1da_torque_nm\":" + String(leafFb.torque_nm, 2) + ",";
-        canJson += "\"leaf_1da_rpm\":" + String(leafFb.rpm, 1) + ",";
-        canJson += "\"leaf_1da_clock\":" + String(leafFb.mg_clock) + ",";
-        canJson += "\"leaf_1da_err\":" + String(leafFb.mg_error_codes) + ",";
-        canJson += "\"leaf_1da_crc\":" + String(leafFb.crc_1da) + ",";
-        canJson += "\"leaf_1da_crc_calc\":" + String(canStats.last1daWireCrcCalc) + ",";
-        canJson += "\"leaf_1da_crc_ok\":" + String((canStats.last1daWireCrcOk == 1) ? 1 : 0) + ",";
-        canJson += "\"leaf_1da_inv_fault_map\":" + String(leafFb.inv_fault_map) + ",";
-        canJson += "\"leaf_1da_inv_blinky\":" + String(leafFb.inv_blinky) + ",";
-        canJson += "\"leaf_1da_inv_fault_can_timeout\":" + String(leafFb.inv_fault_can_timeout_maybe) + ",";
-        canJson += "\"leaf_1da_crc_ok_frames\":" + String(canStats.rx1daCrcOkFrames) + ",";
-        canJson += "\"leaf_1da_crc_bad_frames\":" + String(canStats.rx1daCrcBadFrames) + ",";
-        // DEBUG: Send raw 0x1DA frame bytes to browser for inspection
-        canJson += "\"leaf_1da_raw_b0b7\":\"";
-        for (uint8_t i = 0; i < 8; ++i) {
-            char hex[3];
-            snprintf(hex, sizeof(hex), "%02X", canStats.last1daData[i]);
-            canJson += hex;
-            if (i < 7) canJson += " ";
-        }
-        canJson += "\",";
-        canJson += "\"leaf_120_cmd_nm\":" + String(data.leaf_torqueDemandNm, 2) + ",";
-        canJson += "\"vcu_torque_demand\":" + String(data.leaf_torqueDemandNm, 2) + ",";
-        canJson += "\"vcu_sim\":" + String(data.vcuSimMode ? "1" : "0") + ",";
-        canJson += "\"leaf_id11a_source\":\"CAN\",";
-        canJson += "\"leaf_id11a_frames\":" + String(canStats.rx11aFrames) + ",";
-        canJson += "\"leaf_id11a_age_ms\":" + String(ageSince11a) + ",";
-        canJson += "\"leaf_id11a_tx_frames\":" + String(canStats.tx11aFrames) + ",";
-        canJson += "\"leaf_id11a_tx_age_ms\":" + String(ageSince1d4Tx) + ",";
-        canJson += "\"leaf_11a_gear\":" + String((canStats.last11aData[0] >> 4) & 0x0F) + ",";
-        canJson += "\"leaf_11a_car_onoff\":" + String((canStats.last11aData[1] >> 5) & 0x07) + ",";
-        canJson += "\"leaf_11a_eco\":" + String((canStats.last11aData[1] >> 4) & 0x01) + ",";
-        canJson += "\"leaf_11a_button\":" + String(canStats.last11aData[2]) + ",";
-        canJson += "\"leaf_11a_heartbeat\":" + String(canStats.last11aData[3]) + ",";
-        canJson += "\"leaf_11a_mux\":" + String(canStats.last11aData[6]) + ",";
-        // 0x11A RX raw bytes
-        canJson += "\"leaf_11a_b0\":" + String(canStats.last11aData[0]) + ",";
-        canJson += "\"leaf_11a_b1\":" + String(canStats.last11aData[1]) + ",";
-        canJson += "\"leaf_11a_b2\":" + String(canStats.last11aData[2]) + ",";
-        canJson += "\"leaf_11a_b3\":" + String(canStats.last11aData[3]) + ",";
-        canJson += "\"leaf_11a_b4\":" + String(canStats.last11aData[4]) + ",";
-        canJson += "\"leaf_11a_b5\":" + String(canStats.last11aData[5]) + ",";
-        canJson += "\"leaf_11a_b6\":" + String(canStats.last11aData[6]) + ",";
-        canJson += "\"leaf_11a_b7\":" + String(canStats.last11aData[7]) + ",";
-        canJson += "\"leaf_1d4_tx_frames\":" + String(canStats.tx1d4Frames) + ",";
-        canJson += "\"leaf_1d4_tx_age_ms\":" + String(ageSince1d4Tx) + ",";
-        canJson += "\"leaf_1d4_tx_torque_nm\":" + String(data.leaf_torqueDemandNm, 2) + ",";
-        canJson += "\"leaf_1d4_tx_torque_raw\":" + String(canStats.last1d4TxData[0]) + ",";
-        canJson += "\"leaf_1d4_tx_target_nm\":" + String(data.leaf_torqueDemandNm, 2) + ",";
-        canJson += "\"leaf_1d4_tx_hv_status\":" + String((canStats.last1d4TxData[1] >> 4) & 0x01) + ",";
-        canJson += "\"leaf_1d4_tx_relay_plus\":" + String((canStats.last1d4TxData[1] >> 5) & 0x01) + ",";
-        canJson += "\"leaf_1d4_tx_charge_status\":" + String((canStats.last1d4TxData[1] >> 6) & 0x01) + ",";
-        canJson += "\"leaf_1d4_tx_clock\":" + String((canStats.last1d4TxData[1]) & 0x0F) + ",";
-        canJson += "\"leaf_1d4_tx_crc\":0,";
-        canJson += "\"leaf_1d4_tx_crc_calc\":0,";
-        canJson += "\"leaf_1d4_tx_crc_ok\":0,";
-        canJson += "\"leaf_1d4_ring_count\":0,";
-        canJson += "\"leaf_1d4_ring_newest_valid\":0,";
-        canJson += "\"leaf_1d4_ring_newest_len\":0,";
-        canJson += "\"leaf_1d4_tx_source_mode\":0,";
-        canJson += "\"leaf_1d4_tx_ring_base_used\":0,";
-        canJson += "\"leaf_1d4_tx_ring_base_len\":0,";
-        canJson += "\"leaf_1d4_tx_ring_source_age\":0,";
-        canJson += "\"leaf_1d4_tx_ring_fallback_total\":0,";
-        canJson += "\"leaf_1d4_tx_eq_sniff\":-1,";
-        canJson += "\"leaf_1d4_tx_diff_mask_vs_sniff\":0,";
-        // 0x11A TX raw bytes
-        canJson += "\"leaf_11a_tx_b0\":" + String(canStats.last11aTxData[0]) + ",";
-        canJson += "\"leaf_11a_tx_b1\":" + String(canStats.last11aTxData[1]) + ",";
-        canJson += "\"leaf_11a_tx_b2\":" + String(canStats.last11aTxData[2]) + ",";
-        canJson += "\"leaf_11a_tx_b3\":" + String(canStats.last11aTxData[3]) + ",";
-        canJson += "\"leaf_11a_tx_b4\":" + String(canStats.last11aTxData[4]) + ",";
-        canJson += "\"leaf_11a_tx_b5\":" + String(canStats.last11aTxData[5]) + ",";
-        canJson += "\"leaf_11a_tx_b6\":" + String(canStats.last11aTxData[6]) + ",";
-        canJson += "\"leaf_11a_tx_b7\":" + String(canStats.last11aTxData[7]) + ",";
-        // 0x1D4 TX raw bytes
-        canJson += "\"leaf_1d4_tx_b0\":" + String(canStats.last1d4TxData[0]) + ",";
-        canJson += "\"leaf_1d4_tx_b1\":" + String(canStats.last1d4TxData[1]) + ",";
-        canJson += "\"leaf_1d4_tx_b2\":" + String(canStats.last1d4TxData[2]) + ",";
-        canJson += "\"leaf_1d4_tx_b3\":" + String(canStats.last1d4TxData[3]) + ",";
-        canJson += "\"leaf_1d4_tx_b4\":" + String(canStats.last1d4TxData[4]) + ",";
-        canJson += "\"leaf_1d4_tx_b5\":" + String(canStats.last1d4TxData[5]) + ",";
-        canJson += "\"leaf_1d4_tx_b6\":" + String(canStats.last1d4TxData[6]) + ",";
-        canJson += "\"leaf_1d4_tx_b7\":" + String(canStats.last1d4TxData[7]) + ",";
-        
-        // Add state machine status
-        const char* hwState = MetaSense::HardwareOutputStateMachine::stateName();
-        canJson += "\"dyno_state\":\"" + String(hwState != nullptr ? hwState : "UNKNOWN") + "\",";
-        canJson += "\"fw_state\":\"" + String(hwState != nullptr ? hwState : "UNKNOWN") + "\",";
-        canJson += "\"hw_start_gate\":\"" + String(hwState != nullptr ? hwState : "UNKNOWN") + "\"";
-        canJson += "}";
-        wsock.textAll(canJson);
+        // CAN Monitor JSON transmission disabled - use serial logging for exceptions instead
+        // To enable: set METASENSE_CAN_MONITOR_JSON_ENABLED=1 in platformio.ini
     }
 
-    // === EXCEPTIONS ONLY: Send alerts for errors/faults ===
-    // Only emit when conditions change to reduce traffic further
-    // TODO: Add exception handling here (CAN faults, temperature warnings, etc.)
+    // === EXCEPTIONS ONLY: Send alerts for errors/faults via serial ===
+    // Log warnings when conditions change
+    static uint32_t lastExceptionCheckMs = 0;
+    if ((now - lastExceptionCheckMs) > 5000) {  // Check every 5 seconds
+        lastExceptionCheckMs = now;
+        const auto& leafFb = MetaSense::CANBus::feedback();
+        
+        // Log fault conditions
+        if (leafFb.inv_fault_map != 0) {
+            Serial.printf("[WARNING] Inverter fault detected: 0x%02X\n", leafFb.inv_fault_map);
+        }
+        if (leafFb.mg_error_codes != 0) {
+            Serial.printf("[WARNING] MG error codes: 0x%02X\n", leafFb.mg_error_codes);
+        }
+        if (data.leaf_invTempC > 80.0f) {
+            Serial.printf("[WARNING] Inverter temperature high: %.1f°C\n", data.leaf_invTempC);
+        }
+        if (data.leaf_statorTempC > 150.0f) {
+            Serial.printf("[WARNING] Stator temperature high: %.1f°C\n", data.leaf_statorTempC);
+        }
+        if (data.leaf_coolantTempC > 95.0f) {
+            Serial.printf("[WARNING] Coolant temperature high: %.1f°C\n", data.leaf_coolantTempC);
+        }
+    }
 }
 
 void publishTelemetry()
@@ -3253,14 +3179,14 @@ void publishTelemetry()
     static uint32_t lastPublishedMs = 0;
 
     const uint32_t now = millis();
-    // Send telemetry on a fixed 100ms cadence (heartbeat at 25ms in notifyClients)
+    // Send telemetry on a fixed 50ms cadence (20 Hz for stable smooth updates)
     if (now - lastPublishedMs < kWebSocketPublishPeriodMs) {
         return;
     }
 
     lastPublishedMs = now;
     const MetaSense::Telemetry telemetry = MetaSense::RunStorage::latest();
-    // Telemetry sending: always send on cadence (heartbeat + telemetry in notifyClients)
+    // Telemetry sending: smooth display without overwhelming WebSocket queue
     notifyClients(telemetry, MetaSense::DynoStateMachine::isRecording());
 }
 
@@ -3457,6 +3383,16 @@ void setLeafUiTorqueDemandNm(float torqueNm)
 float getLeafUiTorqueDemandNm()
 {
     return getLeafUiTorqueDemandNmInternal();
+}
+
+void setLeafManualTorqueMode(bool manualMode)
+{
+    s_leafManualTorqueMode = manualMode;
+}
+
+bool getLeafManualTorqueMode()
+{
+    return s_leafManualTorqueMode;
 }
 
 uint16_t getLoadCellSampleRateSps()
@@ -7577,18 +7513,35 @@ void loop()
     // Startup mode still uses the runtime UI torque target for explicit control.
         torqueToSend = uiTorqueDemandNm;
 #else
-        const bool manualCommandActive = s_leafCanPartnerSeen && !s_leafSimFeedbackActive &&
-                                        (fabsf(uiTorqueDemandNm) > 0.001f);
-        const bool torqueCommandUnlocked = safetyOk &&
-                                           (s_leafVcmState == LeafVcmBringupState::Ready) &&
-                                           id1daFreshForTorque &&
-                                           id1daStatusClearForTorque &&
-                                           s_leafCanPartnerSeen &&
-                                           !s_leafSimFeedbackActive;
-        if (manualCommandActive || torqueCommandUnlocked) {
-            torqueToSend = uiTorqueDemandNm;
-        } else if (fabsf(torqueToSend) > 0.0f) {
+        // Check hardware state: INIT always sends 0 Nm, IDLE/MOTOR can send manual/auto value
+        const char* hwState = MetaSense::HardwareOutputStateMachine::stateName();
+        const bool isInitState = (hwState != nullptr) && (strcmp(hwState, "INIT") == 0);
+        
+        // Safety: Auto-reset manual torque when entering INIT state
+        if (isInitState && s_lastHardwareState != hwState) {
+            setLeafUiTorqueDemandNmInternal(0.0f);
+            Serial.println("[SAFETY] Manual torque reset to 0.0 Nm - entering INIT state");
+        }
+        s_lastHardwareState = hwState;
+        
+        if (isInitState) {
+            // INIT state: force torque demand to 0 Nm during startup (safety critical)
             torqueToSend = 0.0f;
+        } else {
+            // IDLE/MOTOR states: apply manual/auto torque selection
+            const bool manualCommandActive = s_leafCanPartnerSeen && !s_leafSimFeedbackActive &&
+                                            (fabsf(uiTorqueDemandNm) > 0.001f);
+            const bool torqueCommandUnlocked = safetyOk &&
+                                               (s_leafVcmState == LeafVcmBringupState::Ready) &&
+                                               id1daFreshForTorque &&
+                                               id1daStatusClearForTorque &&
+                                               s_leafCanPartnerSeen &&
+                                               !s_leafSimFeedbackActive;
+            if (manualCommandActive || torqueCommandUnlocked) {
+                torqueToSend = uiTorqueDemandNm;
+            } else if (fabsf(torqueToSend) > 0.0f) {
+                torqueToSend = 0.0f;
+            }
         }
 #endif
 
@@ -7744,6 +7697,7 @@ void loop()
                 tx11aChangeMask = static_cast<uint8_t>((tx11aLen >= 8U) ? 0xFFU : ((1U << tx11aLen) - 1U));
             }
 
+            // Log CAN-EVENT to USB for diagnostics (always), but to telnet only on errors
             Serial.printf("[CAN-EVENT] ready=%d state=%u tx_total=%lu tx_1d4=%lu tx_11a=%lu tx1d4_chg=0x%02X tx11a_chg=0x%02X tx1d4_b6=0x%02X tx1d4_b7=0x%02X tx11a_b6=0x%02X tx11a_b7=0x%02X tx_fail=%lu tx_not_ready=%lu recov=%lu bus_off=%lu status_q_fail=%lu twai(rxq=%lu txq=%lu rx_miss=%lu rx_ovr=%lu arb_lost=%lu bus_err=%lu tec=%lu rec=%lu)\n",
                           canStats.ready ? 1 : 0,
                           static_cast<unsigned>(canStats.lastTwaiState),
@@ -7769,31 +7723,46 @@ void loop()
                           static_cast<unsigned long>(canStats.twaiBusError),
                           static_cast<unsigned long>(canStats.twaiTxErrorCounter),
                           static_cast<unsigned long>(canStats.twaiRxErrorCounter));
-            Serial0.printf("[CAN-EVENT] ready=%d state=%u tx_total=%lu tx_1d4=%lu tx_11a=%lu tx1d4_chg=0x%02X tx11a_chg=0x%02X tx1d4_b6=0x%02X tx1d4_b7=0x%02X tx11a_b6=0x%02X tx11a_b7=0x%02X tx_fail=%lu tx_not_ready=%lu recov=%lu bus_off=%lu status_q_fail=%lu twai(rxq=%lu txq=%lu rx_miss=%lu rx_ovr=%lu arb_lost=%lu bus_err=%lu tec=%lu rec=%lu)\n",
-                           canStats.ready ? 1 : 0,
-                           static_cast<unsigned>(canStats.lastTwaiState),
-                           static_cast<unsigned long>(canStats.txFrames),
-                           static_cast<unsigned long>(canStats.tx1d4Frames),
-                           static_cast<unsigned long>(canStats.tx11aFrames),
-                           static_cast<unsigned>(tx1d4ChangeMask),
-                           static_cast<unsigned>(tx11aChangeMask),
-                           static_cast<unsigned>(canStats.last1d4TxLen > 6U ? canStats.last1d4TxData[6] : 0U),
-                           static_cast<unsigned>(canStats.last1d4TxLen > 7U ? canStats.last1d4TxData[7] : 0U),
-                           static_cast<unsigned>(canStats.last11aTxLen > 6U ? canStats.last11aTxData[6] : 0U),
-                           static_cast<unsigned>(canStats.last11aTxLen > 7U ? canStats.last11aTxData[7] : 0U),
-                           static_cast<unsigned long>(canStats.txFailures),
-                           static_cast<unsigned long>(canStats.txWhileNotReady),
-                           static_cast<unsigned long>(canStats.recoveries),
-                           static_cast<unsigned long>(canStats.busOffEvents),
-                           static_cast<unsigned long>(canStats.statusQueryFailures),
-                           static_cast<unsigned long>(canStats.twaiRxQueued),
-                           static_cast<unsigned long>(canStats.twaiTxQueued),
-                           static_cast<unsigned long>(canStats.twaiRxMissed),
-                           static_cast<unsigned long>(canStats.twaiRxOverrun),
-                           static_cast<unsigned long>(canStats.twaiArbLost),
-                           static_cast<unsigned long>(canStats.twaiBusError),
-                           static_cast<unsigned long>(canStats.twaiTxErrorCounter),
-                           static_cast<unsigned long>(canStats.twaiRxErrorCounter));
+            
+            // Forward to telnet and Serial0 ONLY if there's an error condition
+            if (canStats.txFailures > 0 || canStats.txWhileNotReady > 0 || canStats.recoveries > 0 ||
+                canStats.busOffEvents > 0 || canStats.statusQueryFailures > 0 || canStats.twaiBusError > 0 ||
+                canStats.twaiTxErrorCounter > 0 || canStats.twaiRxErrorCounter > 0) {
+                MetaSense::TelnetSerialBridge::telnetBridgePrintf("[CAN-EVENT-ERROR] ready=%d state=%u tx_total=%lu tx_1d4=%lu tx_11a=%lu tx_fail=%lu tx_not_ready=%lu recov=%lu bus_off=%lu status_q_fail=%lu twai(rx_miss=%lu rx_ovr=%lu arb_lost=%lu bus_err=%lu tec=%lu rec=%lu)\n",
+                          canStats.ready ? 1 : 0,
+                          static_cast<unsigned>(canStats.lastTwaiState),
+                          static_cast<unsigned long>(canStats.txFrames),
+                          static_cast<unsigned long>(canStats.tx1d4Frames),
+                          static_cast<unsigned long>(canStats.tx11aFrames),
+                          static_cast<unsigned long>(canStats.txFailures),
+                          static_cast<unsigned long>(canStats.txWhileNotReady),
+                          static_cast<unsigned long>(canStats.recoveries),
+                          static_cast<unsigned long>(canStats.busOffEvents),
+                          static_cast<unsigned long>(canStats.statusQueryFailures),
+                          static_cast<unsigned long>(canStats.twaiRxMissed),
+                          static_cast<unsigned long>(canStats.twaiRxOverrun),
+                          static_cast<unsigned long>(canStats.twaiArbLost),
+                          static_cast<unsigned long>(canStats.twaiBusError),
+                          static_cast<unsigned long>(canStats.twaiTxErrorCounter),
+                          static_cast<unsigned long>(canStats.twaiRxErrorCounter));
+                Serial0.printf("[CAN-EVENT-ERROR] ready=%d state=%u tx_total=%lu tx_1d4=%lu tx_11a=%lu tx_fail=%lu tx_not_ready=%lu recov=%lu bus_off=%lu status_q_fail=%lu twai(rx_miss=%lu rx_ovr=%lu arb_lost=%lu bus_err=%lu tec=%lu rec=%lu)\n",
+                          canStats.ready ? 1 : 0,
+                          static_cast<unsigned>(canStats.lastTwaiState),
+                          static_cast<unsigned long>(canStats.txFrames),
+                          static_cast<unsigned long>(canStats.tx1d4Frames),
+                          static_cast<unsigned long>(canStats.tx11aFrames),
+                          static_cast<unsigned long>(canStats.txFailures),
+                          static_cast<unsigned long>(canStats.txWhileNotReady),
+                          static_cast<unsigned long>(canStats.recoveries),
+                          static_cast<unsigned long>(canStats.busOffEvents),
+                          static_cast<unsigned long>(canStats.statusQueryFailures),
+                          static_cast<unsigned long>(canStats.twaiRxMissed),
+                          static_cast<unsigned long>(canStats.twaiRxOverrun),
+                          static_cast<unsigned long>(canStats.twaiArbLost),
+                          static_cast<unsigned long>(canStats.twaiBusError),
+                          static_cast<unsigned long>(canStats.twaiTxErrorCounter),
+                          static_cast<unsigned long>(canStats.twaiRxErrorCounter));
+            }
             lastCanEventLogMs = now;
         }
 
@@ -7943,13 +7912,20 @@ void loop()
     // Yield to allow network/WiFi task to run
     taskYIELD();
     
-    // Serial heartbeat (1Hz) for diagnostics
+    // Serial heartbeat (0.2Hz = every 5s) for diagnostics
     static uint32_t lastHeartbeatMs = 0;
     const uint32_t nowMs = millis();
-    if (nowMs - lastHeartbeatMs >= 1000U) {
+    if (nowMs - lastHeartbeatMs >= 5000U) {
         lastHeartbeatMs = nowMs;
-        Serial.printf("[HEARTBEAT] RPM=%.0f Leaf_RPM=%.0f Temps: Inv=%.1f Stator=%.1f Coolant=%.1f ms=%lu\n",
-                      tele.rpm, tele.leaf_rpm, tele.leaf_invTempC, tele.leaf_statorTempC, tele.leaf_coolantTempC, nowMs);
+        IPAddress ip = WiFi.localIP();
+        int32_t rssi = WiFi.RSSI();
+        Serial.printf("[HEARTBEAT] RPM=%.0f Leaf_RPM=%.0f Temps: Inv=%.1f Stator=%.1f Coolant=%.1f IP=%d.%d.%d.%d RSSI=%ld dBm ms=%lu\n",
+                      tele.rpm, tele.leaf_rpm, tele.leaf_invTempC, tele.leaf_statorTempC, tele.leaf_coolantTempC,
+                      ip[0], ip[1], ip[2], ip[3], rssi, nowMs);
+        // Forward to telnet clients
+        MetaSense::TelnetSerialBridge::telnetBridgePrintf("[HEARTBEAT] RPM=%.0f Leaf_RPM=%.0f Temps: Inv=%.1f Stator=%.1f Coolant=%.1f IP=%d.%d.%d.%d RSSI=%ld dBm ms=%lu\n",
+                      tele.rpm, tele.leaf_rpm, tele.leaf_invTempC, tele.leaf_statorTempC, tele.leaf_coolantTempC,
+                      ip[0], ip[1], ip[2], ip[3], rssi, nowMs);
     }
 }
 
