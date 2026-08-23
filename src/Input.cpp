@@ -150,6 +150,7 @@ static uint8_t s_leaf1d4ReplayIndex = 0U;
 static uint8_t s_leafLast1d4TxData[8] = {0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U};
 static uint8_t s_leafLast1d4TxLen = 0U;
 static uint32_t s_leafLast1d4TxMs = 0;
+static uint32_t s_leaf1d4TorquePayloadUpdateMs = 0;  // Track last torque payload update time
 static float s_leaf1d4PayloadTorqueNm = 0.0f;
 static int16_t s_leaf1d4PayloadTorqueRaw = 0;
 static bool s_leaf1d4PayloadHvStatus = false;
@@ -222,6 +223,7 @@ static bool  activeRpmFromCan      = false;
 static const float RPM_DELTA_LIMIT = 100.0f;
 static const uint32_t CAN_TEMP_TIMEOUT_MS = 1000;
 static const uint32_t CAN_TX_PERIOD_MS = 10;
+static const uint32_t LEAF_1D4_TORQUE_PAYLOAD_UPDATE_PERIOD_MS = 100;  // Update torque payload every 100ms, send frame every 10ms
 static const uint32_t LEAF_1D4_MONITOR_SAMPLE_PERIOD_MS = 100;
 static const uint32_t CAN_RX_CHECK_PERIOD_MS = 20;
 static const uint32_t CAN_RX_TARGET_MAX_AGE_MS = 250;
@@ -4268,6 +4270,7 @@ float computeTorqueStepSequence(uint32_t nowMs, bool torqueGateArmed, bool inver
 void leafTxPacerTask(void* /*param*/)
 {
     constexpr uint32_t kLeafTxPacerTickMs = CAN_TX_PERIOD_MS;
+    constexpr uint32_t kLeaf1d4PayloadUpdatePeriodMs = LEAF_1D4_MONITOR_SAMPLE_PERIOD_MS;  // 100ms
     TickType_t lastWake = xTaskGetTickCount();
     for (;;) {
         vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(kLeafTxPacerTickMs));
@@ -4288,6 +4291,15 @@ void leafTxPacerTask(void* /*param*/)
             continue;
         }
 
+        // Check if it's time to update the torque payload (every 100ms)
+        const bool shouldUpdate1d4Payload = (nowMs - s_leaf1d4TorquePayloadUpdateMs) >= kLeaf1d4PayloadUpdatePeriodMs;
+
+        if (shouldUpdate1d4Payload) {
+            s_leaf1d4TorquePayloadUpdateMs = nowMs;
+        }
+
+        // Send 0x1D4 + 0x11A frames every 10ms
+        // Torque payload uses current pacer values (which only update every 100ms internally)
         const float torqueToSend = s_leafTxPacerTorqueNm;
         const bool readyBit = s_leafTxPacerReadyBit;
         const bool hvOkBit = s_leafTxPacerHvOkBit;
@@ -4301,13 +4313,17 @@ void leafTxPacerTask(void* /*param*/)
             gearDriveBit,
             nowMs,
             true);
-        logLeaf1d4ShadowFrame(nowMs,
-                              torqueToSend,
-                              readyBit,
-                              hvOkBit,
-                              brakeBit,
-                              gearDriveBit,
-                              txSent);
+
+        // Log only when payload actually updates (every 100ms)
+        if (shouldUpdate1d4Payload) {
+            logLeaf1d4ShadowFrame(nowMs,
+                                  torqueToSend,
+                                  readyBit,
+                                  hvOkBit,
+                                  brakeBit,
+                                  gearDriveBit,
+                                  txSent);
+        }
     }
 }
 
@@ -4354,6 +4370,7 @@ void begin()
 #endif
     s_leaf1d4RollingCounter = 0U;
     s_leaf1d4ReplayIndex = 0U;
+    s_leaf1d4TorquePayloadUpdateMs = 0;
     memset(s_leafLast1d4TxData, 0, sizeof(s_leafLast1d4TxData));
     s_leafLast1d4TxLen = 0U;
     s_leafLast1d4TxMs = 0;
