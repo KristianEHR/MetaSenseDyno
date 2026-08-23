@@ -643,7 +643,7 @@ constexpr float TORQUE_MIN = -200.0f;
 constexpr float TORQUE_MAX =  200.0f;
 constexpr float RPM_SETPOINT_MAX = RPM_MAX_LIMIT;
 #ifndef METASENSE_WS_FAST_PERIOD_MS
-#define METASENSE_WS_FAST_PERIOD_MS 25  // 40 Hz - maximum responsive updates
+#define METASENSE_WS_FAST_PERIOD_MS 20  // 50 Hz - ultra responsive updates
 #endif
 #ifndef METASENSE_WS_SLOW_PERIOD_MS
 #define METASENSE_WS_SLOW_PERIOD_MS 500
