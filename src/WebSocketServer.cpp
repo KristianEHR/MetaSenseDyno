@@ -5,8 +5,8 @@
 
 namespace {
 
-// Limit queued messages per client to 8 (reduced for minimal latency).
-// At 50ms cadence (20 Hz), 8 messages provides ~400ms buffer before dropping.
+// Limit queued messages per client to 4 (minimal queue for fresh data priority).
+// At 30ms cadence, 4 messages provides ~120ms buffer before dropping.
 // Smaller queue prioritizes fresh data over buffering.
 AsyncWebSocket ws("/ws");
 std::map<uint32_t, String> rxBuffers;
