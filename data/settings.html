@@ -785,6 +785,28 @@
 
     connectWS();
 
+    // Prevent number inputs from intercepting page scroll wheel events
+    // Number inputs consume wheel events by default for increment/decrement
+    // We block this so the page can scroll normally without interference
+    document.querySelectorAll('input[type="number"]').forEach(input => {
+      input.addEventListener('wheel', (e) => {
+        e.preventDefault();  // Stop number increment/decrement
+        e.stopPropagation(); // Allow page scroll to proceed
+      }, { passive: false });  // passive:false required to use preventDefault()
+    });
+
+    // Suppress telemetry updates during active scrolling to eliminate drag lag
+    // When user drags scrollbar, we pause telemetry to prevent UI blocking
+    let isScrolling = false;
+    let scrollTimeout;
+    window.addEventListener('scroll', () => {
+      isScrolling = true;
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => {
+        isScrolling = false;
+      }, 300);  // Stop suppressing 300ms after last scroll event
+    }, { passive: true });
+
     const tare = function() {
       if (!ws || ws.readyState !== WebSocket.OPEN) {
         showToast("Not connected. Cannot tare now.");

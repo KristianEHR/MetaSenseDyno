@@ -3796,6 +3796,38 @@ else if (msg.type === "info" || msg.type === "status") {
       
       restorePanelVisibility();
       connectWS();
+      
+      // Prevent mouse wheel from modifying number input values
+      // Mouse wheel should only scroll the page, not increment/decrement fields
+      document.querySelectorAll('input[type="number"]').forEach(input => {
+        input.addEventListener('wheel', (e) => {
+          e.preventDefault();  // Stop number increment/decrement
+          e.stopPropagation(); // Prevent event bubbling
+        }, { passive: false });  // passive:false required to use preventDefault()
+      });
+      
+      // Optimize CAN monitor scrolling - detect scroll activity for telemetry throttling
+      let isCanMonitorScrolling = false;
+      let canMonitorScrollTimeout;
+      const canMonitor = document.getElementById("canMonitor");
+      if (canMonitor) {
+        canMonitor.addEventListener('scroll', () => {
+          isCanMonitorScrolling = true;
+          clearTimeout(canMonitorScrollTimeout);
+          canMonitorScrollTimeout = setTimeout(() => {
+            isCanMonitorScrolling = false;
+          }, 200);  // Resume after 200ms idle
+        }, { passive: true });
+        
+        // Attach scroll flag to window for telemetry checks (shared with other scroll contexts)
+        canMonitor.addEventListener('wheel', () => {
+          isCanMonitorScrolling = true;
+          clearTimeout(canMonitorScrollTimeout);
+          canMonitorScrollTimeout = setTimeout(() => {
+            isCanMonitorScrolling = false;
+          }, 200);
+        }, { passive: true });
+      }
     }
     
     document.getElementById("tareButton").onclick = function() {
