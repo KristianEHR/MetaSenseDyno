@@ -150,8 +150,10 @@ static uint8_t s_leaf1d4ReplayIndex = 0U;
 static uint8_t s_leafLast1d4TxData[8] = {0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U};
 static uint8_t s_leafLast1d4TxLen = 0U;
 static uint32_t s_leafLast1d4TxMs = 0;
-static uint32_t s_leaf1d4TorquePayloadUpdateMs = 0;  // Track last torque payload update time
-static float s_leaf1d4PayloadTorqueNm = 0.0f;
+// 0x1D4 Payload State Machine (independent of 10ms TX cadence)
+static uint32_t s_leaf1d4PayloadStateLastUpdateMs = 0;  // Track last payload state machine update (100ms)
+static uint8_t s_leaf1d4PayloadCachedFrameData[8] = {0U};  // Cached frame ready to transmit every 10ms
+static float s_leaf1d4PayloadTorqueNm = 0.0f;  // Current cached torque
 static int16_t s_leaf1d4PayloadTorqueRaw = 0;
 static bool s_leaf1d4PayloadHvStatus = false;
 static bool s_leaf1d4PayloadRelayPlus = false;
@@ -161,6 +163,8 @@ static uint8_t s_leaf1d4PayloadCrc = 0U;
 static uint8_t s_leaf1d4PayloadCrcCalc = 0U;
 static int8_t s_leaf1d4PayloadCrcOk = -1;
 static uint32_t s_leaf1d4PayloadMs = 0;
+// Torque source selection: true = automatic (PI control), false = manual (user command)
+static bool s_leaf1d4TorqueSourceAutomatic = true;
 static bool s_leaf1d4TxUsedRingBase = false;
 static uint8_t s_leaf1d4TxRingBaseLen = 0U;
 static uint8_t s_leaf1d4TxRingSourceAge = 0xFFU;
@@ -4266,12 +4270,115 @@ float computeTorqueStepSequence(uint32_t nowMs, bool torqueGateArmed, bool inver
 #endif
 }
 
+// ============================================================================
+// 0x1D4 Payload State Machine (100ms update cadence, independent of TX rate)
+// ============================================================================
+// Generates 0x1D4 frame payload from template + selected torque source
+// This runs every 100ms and caches the complete frame for 10ms TX loop to send
+static void updateLeaf1d4PayloadStateMachine(uint32_t nowMs)
+{
+    // Update only every 100ms
+    if ((nowMs - s_leaf1d4PayloadStateLastUpdateMs) < LEAF_1D4_TORQUE_PAYLOAD_UPDATE_PERIOD_MS) {
+        return;  // Not time yet
+    }
+    s_leaf1d4PayloadStateLastUpdateMs = nowMs;
+
+    // Select torque source: automatic (PI control) or manual (user command)
+    const float selectedTorqueNm = s_leaf1d4TorqueSourceAutomatic
+        ? s_leafTxPacerTorqueNm      // Automatic: from PI control
+        : getLeafUiTorqueDemandNmInternal();  // Manual: from UI/user input
+    
+    const float torqueClamped = constrain(selectedTorqueNm, -512.0f, 511.75f);
+
+    // Increment rolling counter for frame sequence tracking
+    const uint8_t hcmClock = static_cast<uint8_t>(s_leaf1d4RollingCounter & 0x03U);
+
+    // Build frame from template base (initialized during CAN setup)
+    uint8_t data[8] = {
+        METASENSE_LEAF_1D4_TEMPLATE_B0,
+        METASENSE_LEAF_1D4_TEMPLATE_B1,
+        METASENSE_LEAF_1D4_TEMPLATE_B2,
+        METASENSE_LEAF_1D4_TEMPLATE_B3,
+        METASENSE_LEAF_1D4_TEMPLATE_B4,
+        METASENSE_LEAF_1D4_TEMPLATE_B5,
+        METASENSE_LEAF_1D4_TEMPLATE_B6,
+        METASENSE_LEAF_1D4_TEMPLATE_B7
+    };
+
+    // Prefer live sniffed 0x1D4 frame as base to maintain inverter alignment
+    uint8_t ringBaseData[8] = {0U};
+    uint8_t ringBaseLen = 0U;
+    bool usedRingBase = false;
+    if (MetaSense::CANBus::get1d4RingFrame(0U, ringBaseData, &ringBaseLen) && ringBaseLen >= 8U) {
+        memcpy(data, ringBaseData, 8U);
+        usedRingBase = true;
+    }
+
+    // Encode selected torque value into frame
+    const int16_t torqueRaw = encodeLeaf1d4TorqueRaw(torqueClamped);
+    patchLeaf1d4TorqueFieldMotorola23_12(data, torqueRaw);
+    
+    // Update HV status bit (bit 34)
+    const bool hvOkBit = s_leafTxPacerHvOkBit;
+    setIntelUnsigned(data, 8U, 34U, 1U, hvOkBit ? 1U : 0U);
+    
+    // Update RB+ relay bit (bit 46)
+    const bool rbPlusActive = vcuDebugRPlus || MetaSense::HardwareOutputStateMachine::isRbPlusCommandedActive();
+    setIntelUnsigned(data, 8U, 46U, 1U, rbPlusActive ? 1U : 0U);
+    
+    // Update clock bits (bits 38-39)
+    setIntelUnsigned(data, 8U, 38U, 2U, static_cast<uint32_t>(hcmClock & 0x03U));
+    
+    // Keep template header bytes only if not using live sniffed frame
+    if (!usedRingBase) {
+        data[0] = METASENSE_LEAF_1D4_TEMPLATE_B0;
+        data[1] = METASENSE_LEAF_1D4_TEMPLATE_B1;
+    }
+
+    // Compute and set CRC
+    data[7] = computeLeaf1d4CrcConformant(data);
+
+    // Cache the complete frame for 10ms TX loop
+    memcpy(s_leaf1d4PayloadCachedFrameData, data, sizeof(s_leaf1d4PayloadCachedFrameData));
+    
+    // Update payload metadata for telemetry/logging
+    s_leaf1d4PayloadTorqueNm = torqueClamped;
+    s_leaf1d4PayloadTorqueRaw = torqueRaw;
+    s_leaf1d4PayloadHvStatus = hvOkBit;
+    s_leaf1d4PayloadRelayPlus = rbPlusActive;
+    s_leaf1d4PayloadChargeStatus = data[6];
+    s_leaf1d4PayloadClock = hcmClock;
+    s_leaf1d4PayloadCrc = data[7];
+    s_leaf1d4PayloadCrcCalc = computeLeaf1d4CrcConformant(data);
+    s_leaf1d4PayloadCrcOk = (s_leaf1d4PayloadCrc == s_leaf1d4PayloadCrcCalc) ? 1 : 0;
+    s_leaf1d4PayloadMs = nowMs;
+
+    // Advance rolling counter for next 100ms cycle
+    s_leaf1d4RollingCounter = static_cast<uint8_t>((s_leaf1d4RollingCounter + 1U) & 0x03U);
+
+#if METASENSE_LEAF_CRC_DEEP_LOGS
+    static uint32_t s_leaf1d4PayloadUpdateLogMs = 0U;
+    if (s_leaf1d4PayloadUpdateLogMs == 0U || (nowMs - s_leaf1d4PayloadUpdateLogMs) >= 250U) {
+        Serial.printf("[1D4-PAYLOAD-UPDATE] src=%s tq=%.2f raw=%d clk=%u hv=%u rbplus=%u crc=0x%02X data=%02X %02X %02X %02X %02X %02X %02X %02X\n",
+                      usedRingBase ? "ring" : "tmpl",
+                      static_cast<double>(torqueClamped),
+                      static_cast<int>(torqueRaw),
+                      static_cast<unsigned>(hcmClock),
+                      static_cast<unsigned>(hvOkBit ? 1 : 0),
+                      static_cast<unsigned>(rbPlusActive ? 1 : 0),
+                      static_cast<unsigned>(data[7]),
+                      data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7]);
+        s_leaf1d4PayloadUpdateLogMs = nowMs;
+    }
+#endif
+}
+
 
 void leafTxPacerTask(void* /*param*/)
 {
-    constexpr uint32_t kLeafTxPacerTickMs = CAN_TX_PERIOD_MS;
-    constexpr uint32_t kLeaf1d4PayloadUpdatePeriodMs = LEAF_1D4_MONITOR_SAMPLE_PERIOD_MS;  // 100ms
+    constexpr uint32_t kLeafTxPacerTickMs = CAN_TX_PERIOD_MS;  // 10ms
     TickType_t lastWake = xTaskGetTickCount();
+    
     for (;;) {
         vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(kLeafTxPacerTickMs));
 
@@ -4291,41 +4398,42 @@ void leafTxPacerTask(void* /*param*/)
             continue;
         }
 
-        // Check if it's time to update the torque payload (every 100ms)
-        const bool shouldUpdate1d4Payload = (nowMs - s_leaf1d4TorquePayloadUpdateMs) >= kLeaf1d4PayloadUpdatePeriodMs;
+        // Update 0x1D4 payload state machine (runs every 100ms internally, check is cheap)
+        // This generates and caches the complete frame every 100ms
+        updateLeaf1d4PayloadStateMachine(nowMs);
 
-        if (shouldUpdate1d4Payload) {
-            s_leaf1d4TorquePayloadUpdateMs = nowMs;
+        // Send cached 0x1D4 frame every 10ms (maintains CAN bus presence)
+        const bool sent1d4 = MetaSense::CANBus::send(0x1D4U, 
+                                                      s_leaf1d4PayloadCachedFrameData, 
+                                                      sizeof(s_leaf1d4PayloadCachedFrameData));
+        
+        // Update TX tracking
+        if (sent1d4) {
+            s_leafLast1d4TxMs = nowMs;
+            s_leafLastSentTorqueNm = s_leaf1d4PayloadTorqueNm;
+            s_leafLastSentTorqueMs = nowMs;
         }
 
-        // Send 0x1D4 + 0x11A frames every 10ms
-        // Torque payload uses current pacer values (which only update every 100ms internally)
-        const float torqueToSend = s_leafTxPacerTorqueNm;
-        const bool readyBit = s_leafTxPacerReadyBit;
-        const bool hvOkBit = s_leafTxPacerHvOkBit;
-        const bool brakeBit = s_leafTxPacerBrakeBit;
-        const bool gearDriveBit = s_leafTxPacerGearDriveBit;
-        const bool txSent = MetaSense::Input::sendLeafTorqueCommand1d4AndKeepAlive11a(
-            torqueToSend,
-            readyBit,
-            hvOkBit,
-            brakeBit,
-            gearDriveBit,
-            nowMs,
-            true);
+        // Send 0x11A keep-alive frame every 10ms
+        const bool sent11a = sendLeafKeepAlive11a(nowMs, true, 
+                                                   static_cast<uint8_t>(s_leaf1d4PayloadClock & 0x03U));
 
-        // Log only when payload actually updates (every 100ms)
-        if (shouldUpdate1d4Payload) {
+        // Log only when payload state machine updates (every 100ms)
+        // Check if this is a logging frame by comparing update time with a logged time
+        static uint32_t s_leafTxPacerLastLoggedMs = 0;
+        if ((nowMs - s_leafTxPacerLastLoggedMs) >= LEAF_1D4_TORQUE_PAYLOAD_UPDATE_PERIOD_MS) {
+            s_leafTxPacerLastLoggedMs = nowMs;
             logLeaf1d4ShadowFrame(nowMs,
-                                  torqueToSend,
-                                  readyBit,
-                                  hvOkBit,
-                                  brakeBit,
-                                  gearDriveBit,
-                                  txSent);
+                                  s_leaf1d4PayloadTorqueNm,
+                                  s_leafTxPacerReadyBit,
+                                  s_leafTxPacerHvOkBit,
+                                  s_leafTxPacerBrakeBit,
+                                  s_leafTxPacerGearDriveBit,
+                                  sent1d4);
         }
     }
 }
+
 
 void begin()
 {
@@ -4370,7 +4478,17 @@ void begin()
 #endif
     s_leaf1d4RollingCounter = 0U;
     s_leaf1d4ReplayIndex = 0U;
-    s_leaf1d4TorquePayloadUpdateMs = 0;
+    s_leaf1d4PayloadStateLastUpdateMs = 0;
+    memset(s_leaf1d4PayloadCachedFrameData, 0, sizeof(s_leaf1d4PayloadCachedFrameData));
+    // Initialize cached frame with template
+    s_leaf1d4PayloadCachedFrameData[0] = METASENSE_LEAF_1D4_TEMPLATE_B0;
+    s_leaf1d4PayloadCachedFrameData[1] = METASENSE_LEAF_1D4_TEMPLATE_B1;
+    s_leaf1d4PayloadCachedFrameData[2] = METASENSE_LEAF_1D4_TEMPLATE_B2;
+    s_leaf1d4PayloadCachedFrameData[3] = METASENSE_LEAF_1D4_TEMPLATE_B3;
+    s_leaf1d4PayloadCachedFrameData[4] = METASENSE_LEAF_1D4_TEMPLATE_B4;
+    s_leaf1d4PayloadCachedFrameData[5] = METASENSE_LEAF_1D4_TEMPLATE_B5;
+    s_leaf1d4PayloadCachedFrameData[6] = METASENSE_LEAF_1D4_TEMPLATE_B6;
+    s_leaf1d4PayloadCachedFrameData[7] = METASENSE_LEAF_1D4_TEMPLATE_B7;
     memset(s_leafLast1d4TxData, 0, sizeof(s_leafLast1d4TxData));
     s_leafLast1d4TxLen = 0U;
     s_leafLast1d4TxMs = 0;
