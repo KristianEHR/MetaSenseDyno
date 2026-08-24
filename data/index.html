@@ -1136,15 +1136,6 @@
       <span class="can-monitor-label can-sec-1d4tx">CRC TX / Calc / OK</span>
       <span id="canMon1d4TxCrc" class="can-monitor-value can-sec-1d4tx">---</span>
 
-      <span class="can-monitor-label can-sec-1d4tx">TX==Sniff / diff</span>
-      <span id="canMon1d4Compare" class="can-monitor-value can-sec-1d4tx">---</span>
-
-      <span class="can-monitor-label can-sec-1d4tx">TX Target / Mode</span>
-      <span id="canMon1d4TxMeta" class="can-monitor-value can-sec-1d4tx">---</span>
-
-      <span class="can-monitor-label can-sec-1d4tx">Ring cnt/valid/fb</span>
-      <span id="canMon1d4Ring" class="can-monitor-value can-sec-1d4tx">---</span>
-
       <span class="can-monitor-label can-sec-1d4tx">TX Raw B0..B7</span>
       <span id="canMon1d4TxRaw" class="can-monitor-value can-monitor-value-raw can-sec-1d4tx">---</span>
 
@@ -1739,101 +1730,48 @@
     function updateCanMonitor(telemetry) {
       if (!telemetry) return;
 
-      const engineRpm = Number(telemetry.rpm);
-      const inv = Number(telemetry.leaf_inv_temp);
-      const stat = Number(telemetry.leaf_stator_temp);
+      // Extract fields that match the inverter status window
+      const inv = Number(telemetry.leaf_1da_inv_temp);
+      const stat = Number(telemetry.leaf_1da_stator_temp);
       const cool = Number(telemetry.leaf_coolant_temp);
       const id1daInputV = Number(telemetry.leaf_1da_input_v);
       const id1daTorque = Number(telemetry.leaf_1da_torque_nm);
-      const id1daRpm = Number(telemetry.leaf_1da_rpm);
+      const id1daRpm = Number(telemetry.leaf_rpm);
       const id1daClock = Number(telemetry.leaf_1da_clock);
-      const id1daErr = Number(telemetry.leaf_1da_err);
+      const id1daFaultMap = Number(telemetry.leaf_1da_inv_fault_map);
+      const id1daStatusBit = Number(telemetry.leaf_1da_inv_status_bit);
+      const id1daRawB0B7 = String(telemetry.leaf_1da_raw_b0b7 || "-- -- -- -- -- -- -- --");
       const id1daCrcRx = Number(telemetry.leaf_1da_crc);
-      const id1daCrcCalcInterframe = Number(telemetry.leaf_1da_crc_calc);
-      const id1daCrcCalcWire = Number(telemetry.leaf_1da_crc_wire_calc);
-      const id1daCrcCalc = Number.isFinite(id1daCrcCalcInterframe)
-        ? id1daCrcCalcInterframe
-        : id1daCrcCalcWire;
-      const id1daCrcTrusted = Number(telemetry.leaf_1da_crc_wire_trusted);
-      const id1daCrcFrameOk = Number(telemetry.leaf_1da_crc_ok);
-      const id1daCrcWireOk = Number(telemetry.leaf_1da_crc_wire_ok);
-      const id1daCrcOk = Number.isFinite(id1daCrcFrameOk) && id1daCrcFrameOk >= 0
-        ? id1daCrcFrameOk
-        : (Number.isFinite(id1daCrcWireOk) ? id1daCrcWireOk : id1daCrcTrusted);
-      const id1daCrcOkFrames = Number(telemetry.leaf_1da_crc_ok_frames);
-      const id1daCrcBadFrames = Number(telemetry.leaf_1da_crc_bad_frames);
-      const id1daInvFaultMap = Number(telemetry.leaf_1da_inv_fault_map);
-      const id1daInvBlinky = Number(telemetry.leaf_1da_inv_blinky);
-      const id1daInvFaultCanTimeout = Number(telemetry.leaf_1da_inv_fault_can_timeout);
-      const vcuTorque120 = Number(telemetry.leaf_120_cmd_nm);
-      const vcuTorque = Number.isFinite(vcuTorque120) ? vcuTorque120 : Number(telemetry.vcu_torque_demand);
-      const id1daRawB0B7 = telemetry.leaf_1da_raw_b0b7 || "-- -- -- -- -- -- -- --";
-      const id11aSource = telemetry.leaf_id11a_source || "---";
-      const id11aFrames = Number(telemetry.leaf_id11a_frames);
-      const id11aAgeMs = Number(telemetry.leaf_id11a_age_ms);
-      const id11aTxFrames = Number(telemetry.leaf_id11a_tx_frames);
-      const id11aTxAgeMs = Number(telemetry.leaf_id11a_tx_age_ms);
-      const id11aGear = Number(telemetry.leaf_11a_gear);
-      const id11aCarOnOff = Number(telemetry.leaf_11a_car_onoff);
-      const id11aEco = Number(telemetry.leaf_11a_eco);
-      const id11aButton = Number(telemetry.leaf_11a_button);
-      const id11aHeartbeat = Number(telemetry.leaf_11a_heartbeat);
-      const id11aMux = Number(telemetry.leaf_11a_mux);
-      const id11aTxEqRx = Number(telemetry.leaf_11a_tx_eq_rx);
-      const id11aDiffMask = Number(telemetry.leaf_11a_tx_diff_mask_vs_rx);
-      const id11aRaw = [
-        Number(telemetry.leaf_11a_b0),
-        Number(telemetry.leaf_11a_b1),
-        Number(telemetry.leaf_11a_b2),
-        Number(telemetry.leaf_11a_b3),
-        Number(telemetry.leaf_11a_b4),
-        Number(telemetry.leaf_11a_b5),
-        Number(telemetry.leaf_11a_b6),
-        Number(telemetry.leaf_11a_b7)
-      ];
-      const id11aTxRaw = [
-        Number(telemetry.leaf_11a_tx_b0),
-        Number(telemetry.leaf_11a_tx_b1),
-        Number(telemetry.leaf_11a_tx_b2),
-        Number(telemetry.leaf_11a_tx_b3),
-        Number(telemetry.leaf_11a_tx_b4),
-        Number(telemetry.leaf_11a_tx_b5),
-        Number(telemetry.leaf_11a_tx_b6),
-        Number(telemetry.leaf_11a_tx_b7)
-      ];
+      const id1daCrcCalc = Number(telemetry.leaf_1da_crc_calc);
+      const id1daCrcOk = Number(telemetry.leaf_1da_crc_ok);
+
+      // Extract 0x1D4 TX fields
       const id1d4TxFrames = Number(telemetry.leaf_1d4_tx_frames);
       const id1d4TxAgeMs = Number(telemetry.leaf_1d4_tx_age_ms);
-      const id1d4TorqueTxNm = Number(telemetry.leaf_1d4_tx_torque_nm);
-      const id1d4TorqueTxRaw = Number(telemetry.leaf_1d4_tx_torque_raw);
-      const id1d4TxTargetNm = Number(telemetry.leaf_1d4_tx_target_nm);
-      const id1d4HvTx = Number(telemetry.leaf_1d4_tx_hv_status);
-      const id1d4RelayTx = Number(telemetry.leaf_1d4_tx_relay_plus);
+      const id1d4TxTorqueNm = Number(telemetry.leaf_1d4_tx_torque_nm);
+      const id1d4TxTorqueRaw = Number(telemetry.leaf_1d4_tx_torque_raw);
+      const id1d4HvStatus = Number(telemetry.leaf_1d4_tx_hv_status);
+      const id1d4RelayPlus = Number(telemetry.leaf_1d4_tx_relay_plus);
       const id1d4ChargeTx = Number(telemetry.leaf_1d4_tx_charge_status);
       const id1d4ClockTx = Number(telemetry.leaf_1d4_tx_clock);
-      const id1d4RingCount = Number(telemetry.leaf_1d4_ring_count);
-      const id1d4RingNewestValid = Number(telemetry.leaf_1d4_ring_newest_valid);
-      const id1d4RingNewestLen = Number(telemetry.leaf_1d4_ring_newest_len);
-      const id1d4TxSourceMode = Number(telemetry.leaf_1d4_tx_source_mode);
-      const id1d4TxRingBaseUsed = Number(telemetry.leaf_1d4_tx_ring_base_used);
-      const id1d4TxRingBaseLen = Number(telemetry.leaf_1d4_tx_ring_base_len);
-      const id1d4TxRingSourceAge = Number(telemetry.leaf_1d4_tx_ring_source_age);
-      const id1d4TxRingFallbackTotal = Number(telemetry.leaf_1d4_tx_ring_fallback_total);
       const id1d4TxCrcRx = Number(telemetry.leaf_1d4_tx_crc);
       const id1d4TxCrcCalc = Number(telemetry.leaf_1d4_tx_crc_calc);
       const id1d4TxCrcOk = Number(telemetry.leaf_1d4_tx_crc_ok);
-      const id1d4TxEqSniff = Number(telemetry.leaf_1d4_tx_eq_sniff);
-      const id1d4TxDiffMask = Number(telemetry.leaf_1d4_tx_diff_mask_vs_sniff);
-      const id1d4TxRaw = [
-        Number(telemetry.leaf_1d4_tx_b0),
-        Number(telemetry.leaf_1d4_tx_b1),
-        Number(telemetry.leaf_1d4_tx_b2),
-        Number(telemetry.leaf_1d4_tx_b3),
-        Number(telemetry.leaf_1d4_tx_b4),
-        Number(telemetry.leaf_1d4_tx_b5),
-        Number(telemetry.leaf_1d4_tx_b6),
-        Number(telemetry.leaf_1d4_tx_b7)
-      ];
-      const isSimMode = Number(telemetry.vcu_sim) === 1 || telemetry.vcu_sim === true;
+      const id1d4TxRaw = String(telemetry.leaf_1d4_tx_raw_b0b7 || "-- -- -- -- -- -- -- --");
+
+      // Extract 0x11A RX fields
+      const id11aFrames = Number(telemetry.leaf_11a_frames);
+      const id11aAgeMs = Number(telemetry.leaf_11a_age_ms);
+      const id11aTxFrames = Number(telemetry.leaf_11a_tx_frames);
+      const id11aTxAgeMs = Number(telemetry.leaf_11a_tx_age_ms);
+      const id11aGear = Number(telemetry.leaf_11a_gear);
+      const id11aCarOnOff = Number(telemetry.leaf_11a_car_onoff);
+      const id11aEco = Number(telemetry.leaf_11a_eco);
+      const id11aHeartbeat = Number(telemetry.leaf_11a_heartbeat);
+      const id11aMux = Number(telemetry.leaf_11a_mux);
+      const id11aButton = Number(telemetry.leaf_11a_button);
+      const id11aRaw = String(telemetry.leaf_11a_raw_b0b7 || "-- -- -- -- -- -- -- --");
+      const id11aTxRaw = String(telemetry.leaf_11a_tx_raw_b0b7 || "-- -- -- -- -- -- -- --");
 
       const setText = (id, text) => {
         const el = document.getElementById(id);
@@ -1846,7 +1784,6 @@
         const n = Math.max(0, Math.min(255, Math.round(v)));
         return n.toString(16).toUpperCase().padStart(2, "0");
       };
-      const fmtRaw8 = (values) => values.map(fmtHexByte).join(" ");
       const fmtBin6 = (v) => {
         if (!Number.isFinite(v)) return "---";
         const n = Math.max(0, Math.min(63, Math.round(v)));
@@ -1857,82 +1794,48 @@
         if (v === false || v === 0) return "OFF";
         return "---";
       };
-      const fmtTriState = (v) => {
-        if (v === 1) return "ON";
-        if (v === 0) return "OFF";
-        return "N/A";
-      };
 
+      // Update only the fields that exist in both inverter status and CAN monitor windows
       setText("canMon1daRpm", fmtInt(id1daRpm));
-  setText("canMonEngineRpm", fmtInt(engineRpm));
       setText("canMon1daInputV", fmt(id1daInputV, 1));
       setText("canMon1daTorque", fmt(id1daTorque, 2));
       setText("canMon1daClock", fmtInt(id1daClock));
-      setText("canMon1daErr", `${fmtInt(id1daErr)} (${fmtBin6(id1daErr)})`);
-      setText("canMon1daFaultMap", `${fmtInt(id1daInvFaultMap)} (0x${fmtHexByte(id1daInvFaultMap)} / ${fmtBin6(id1daInvFaultMap)})`);
-      setText("canMon1daBlinky", `${fmtInt(id1daInvBlinky)} (0b${Number.isFinite(id1daInvBlinky) ? Math.max(0, Math.min(3, Math.round(id1daInvBlinky))).toString(2).padStart(2, "0") : "--"})`);
-      setText("canMon1daCanTimeout", fmtYesNo(id1daInvFaultCanTimeout));
-      setText("canMon1daCrc", `${fmtHexByte(id1daCrcRx)} / ${fmtHexByte(id1daCrcCalc)} / ${fmtYesNo(id1daCrcOk)}`);
-      setText("canMon1daCrcStats", `${fmtInt(id1daCrcOkFrames)} / ${fmtInt(id1daCrcBadFrames)}`);
+      setText("canMon1daRaw", id1daRawB0B7);
+      setText("canMon1daFaultMap", `${fmtInt(id1daFaultMap)} (0x${fmtHexByte(id1daFaultMap)} / ${fmtBin6(id1daFaultMap)})`);
+      setText("canMon1daBlinky", fmtYesNo(id1daStatusBit));
+      setText("canMon1daCrc", `0x${fmtHexByte(id1daCrcRx)} / 0x${fmtHexByte(id1daCrcCalc)} / ${id1daCrcOk === 1 ? "OK" : "BAD"}`);
       setText("canMonInvTemp", fmt(inv, 1));
       setText("canMonStatorTemp", fmt(stat, 1));
       setText("canMonCoolantTemp", fmt(cool, 1));
-      setText("canMonVcuMode", isSimMode ? "SIM" : "RUN");
-      setText("canMonVcuTorque", fmt(vcuTorque, 2));
-      setText("canMon1daRaw", id1daRawB0B7);
-      setText("canMon11aSource", `${id11aSource} ${fmtInt(id11aFrames)} / ${fmtInt(id11aAgeMs)}`);
-      setText("canMon11aTx", `${fmtInt(id11aTxFrames)} / ${fmtInt(id11aTxAgeMs)}`);
-      setText("canMon11aDrive", `${fmtInt(id11aGear)} / ${fmtInt(id11aCarOnOff)} / ${fmtInt(id11aEco)}`);
-      setText("canMon11aSignals", `${fmtHexByte(id11aHeartbeat)} / ${fmtHexByte(id11aMux)} / ${fmtHexByte(id11aButton)}`);
-      setText("canMon11aCompare", `${fmtTriState(id11aTxEqRx)} / 0x${fmtHexByte(id11aDiffMask)}`);
-      setText("canMon11aRaw", fmtRaw8(id11aRaw));
-      setText("canMon11aTxRaw", fmtRaw8(id11aTxRaw));
+
+      // Display 0x1D4 TX fields
+      const fmtRaw8 = (bytes) => {
+        if (!bytes || typeof bytes !== 'string') return "-- -- -- -- -- -- -- --";
+        return bytes;
+      };
+      const fmtTriState = (v) => {
+        if (v === 1 || v === true) return "OK";
+        if (v === 0 || v === false) return "BAD";
+        return "---";
+      };
+      
       setText("canMon1d4Tx", `${fmtInt(id1d4TxFrames)} / ${fmtInt(id1d4TxAgeMs)}`);
-      setText("canMon1d4TxTorque", fmt(id1d4TorqueTxNm, 2));
-      setText("canMon1d4TxTorqueRaw", fmtInt(id1d4TorqueTxRaw));
-      setText("canMon1d4TxHv", fmtYesNo(id1d4HvTx));
-      setText("canMon1d4TxRelay", fmtYesNo(id1d4RelayTx));
+      setText("canMon1d4TxTorque", fmt(id1d4TxTorqueNm, 2));
+      setText("canMon1d4TxTorqueRaw", fmtInt(id1d4TxTorqueRaw));
+      setText("canMon1d4TxHv", fmtYesNo(id1d4HvStatus));
+      setText("canMon1d4TxRelay", fmtYesNo(id1d4RelayPlus));
       setText("canMon1d4TxCharge", `0x${fmtHexByte(id1d4ChargeTx)}`);
       setText("canMon1d4TxClock", fmtInt(id1d4ClockTx));
-      setText("canMon1d4TxCrc", `${fmtHexByte(id1d4TxCrcRx)} / ${fmtHexByte(id1d4TxCrcCalc)} / ${fmtTriState(id1d4TxCrcOk)}`);
-      setText("canMon1d4Compare", `${fmtTriState(id1d4TxEqSniff)} / 0x${fmtHexByte(id1d4TxDiffMask)}`);
-      setText("canMon1d4TxMeta", `${fmt(id1d4TxTargetNm, 2)} / M${fmtInt(id1d4TxSourceMode)} A${fmtInt(id1d4TxRingSourceAge)}`);
-      setText("canMon1d4Ring", `${fmtInt(id1d4RingCount)} / ${fmtInt(id1d4RingNewestValid)} / ${fmtInt(id1d4TxRingFallbackTotal)}`);
+      setText("canMon1d4TxCrc", `0x${fmtHexByte(id1d4TxCrcRx)} / 0x${fmtHexByte(id1d4TxCrcCalc)} / ${fmtTriState(id1d4TxCrcOk)}`);
       setText("canMon1d4TxRaw", fmtRaw8(id1d4TxRaw));
-      setText("canMonFwState", telemetry.fw_state || "---");
-      setText("canMonStartGate", telemetry.hw_start_gate || "---");
 
-      if (Number.isFinite(id1d4TxTargetNm)) {
-        leaf1d4ControlState.targetNm = Math.max(leaf1d4TorqueMinNm, Math.min(leaf1d4TorqueMaxNm, id1d4TxTargetNm));
-      }
-      // Only update mode if it's defined and has a valid value
-      if (typeof id1d4Mode !== "undefined" && (id1d4Mode === "auto" || id1d4Mode === "manual")) {
-        leaf1d4ControlState.mode = id1d4Mode;
-      }
-      refreshLeaf1d4ControlUi();
-
-      const setFlag = (id, isOn, mode = "normal") => {
-        const el = document.getElementById(id);
-        if (!el) return;
-        el.classList.remove("on", "warn", "fault");
-        if (isOn) {
-          if (mode === "warn") el.classList.add("warn");
-          else if (mode === "fault") el.classList.add("fault");
-          else el.classList.add("on");
-        }
-      };
-
-      setFlag("canFlagReady", Number(telemetry.leaf_ready) === 1 || telemetry.leaf_ready === true, "normal");
-      setFlag("canFlagHwRbplus", Number(telemetry.hw_rbplus) === 1 || telemetry.hw_rbplus === true, "normal");
-      setFlag(
-        "canFlagHwPrecharge",
-        isSimMode
-          ? (Number(telemetry.vcu_precharge) === 1 || telemetry.vcu_precharge === true)
-          : (Number(telemetry.hw_precharge) === 1 || telemetry.hw_precharge === true),
-        "warn"
-      );
-      setFlag("canFlagHwRbminus", Number(telemetry.hw_rbminus) === 1 || telemetry.hw_rbminus === true, "normal");
-      setFlag("canFlagHwSsr", Number(telemetry.hw_ssr) === 1 || telemetry.hw_ssr === true, "normal");
+      // Update 0x11A display fields
+      setText("canMon11aSource", `rx ${fmtInt(id11aFrames)} / ${fmtInt(id11aAgeMs)}`);
+      setText("canMon11aTx", `${fmtInt(id11aTxFrames)} / ${fmtInt(id11aTxAgeMs)}`);
+      setText("canMon11aDrive", `G${fmtInt(id11aGear)} / CO${fmtInt(id11aCarOnOff)} / E${fmtInt(id11aEco)}`);
+      setText("canMon11aSignals", `HB:0x${fmtHexByte(id11aHeartbeat)} MUX:0x${fmtHexByte(id11aMux)} BTN:0x${fmtHexByte(id11aButton)}`);
+      setText("canMon11aRaw", id11aRaw);
+      setText("canMon11aTxRaw", id11aTxRaw);
     }
 
     function wsIsOpen() {
@@ -3482,10 +3385,10 @@
               }
             }
             
-            if (telemetry.leaf_1da_inv_blinky !== undefined) {
+            if (telemetry.leaf_1da_inv_status_bit !== undefined) {
               const statusEl = document.getElementById("inverterStatusValue");
               if (statusEl) {
-                const statusValue = Number(telemetry.leaf_1da_inv_blinky);
+                const statusValue = Number(telemetry.leaf_1da_inv_status_bit);
                 statusEl.textContent = statusValue === 0 ? "OK (0)" : "ACTIVE (1)";
                 statusEl.style.color = statusValue === 0 ? "#88ff88" : "#ffaa44";
               }

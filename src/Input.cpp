@@ -563,16 +563,16 @@ constexpr uint32_t kLeafHandshakeAttemptPeriodMs = 20;
 #define METASENSE_LEAF_1D4_TEMPLATE_B3 0x00U
 #endif
 #ifndef METASENSE_LEAF_1D4_TEMPLATE_B4
-#define METASENSE_LEAF_1D4_TEMPLATE_B4 0xC7U
+#define METASENSE_LEAF_1D4_TEMPLATE_B4 0x04U
 #endif
 #ifndef METASENSE_LEAF_1D4_TEMPLATE_B5
-#define METASENSE_LEAF_1D4_TEMPLATE_B5 0x44U
+#define METASENSE_LEAF_1D4_TEMPLATE_B5 0x40U
 #endif
 #ifndef METASENSE_LEAF_1D4_TEMPLATE_B6
-#define METASENSE_LEAF_1D4_TEMPLATE_B6 0x30U
+#define METASENSE_LEAF_1D4_TEMPLATE_B6 0x1EU
 #endif
 #ifndef METASENSE_LEAF_1D4_TEMPLATE_B7
-#define METASENSE_LEAF_1D4_TEMPLATE_B7 0xE4U
+#define METASENSE_LEAF_1D4_TEMPLATE_B7 0x00U
 #endif
 #ifndef METASENSE_LEAF_CAN_TX_PIN
 #define METASENSE_LEAF_CAN_TX_PIN 4
@@ -3045,7 +3045,6 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
     }
 
     static uint32_t lastDashboardMs = 0;
-    static uint32_t lastCanTelemetryMs = 0;
     static uint32_t lastIPCacheMs = 0;
     static String cachedIP = "0.0.0.0";
     static int cachedRSSI = 0;
@@ -3057,103 +3056,229 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
     // Dashboard updates at 50ms (20 Hz) when browser is connected for smooth display without WiFi overload
     // Reduces to 100ms when idle (no clients) to save power
     const uint32_t dashboardCadenceMs = (clientCount > 0) ? 50U : 100U;    // 50ms for stable updates
-    const uint32_t canCadenceMs = (clientCount > 0) ? 250U : 100U;        // CAN monitor still runs at 250ms
 
     // === LIGHTWEIGHT DATA: Essential telemetry ===
     // Browser expects "data" message type with ALL these fields
     if (now - lastDashboardMs >= dashboardCadenceMs) {
         lastDashboardMs = now;
-        String dataJson;
-        dataJson.reserve(1200);  // 1200 bytes for ~50 telemetry fields at 25 Hz
-        dataJson = "{\"type\":\"data\",";
-        dataJson += "\"rpm\":" + String(data.rpm, 1) + ",";
-        dataJson += "\"rpm_error\":0,";
-        dataJson += "\"drum_rpm\":" + String(data.drumRpm, 1) + ",";
-        dataJson += "\"kw\":" + String(data.kw, 2) + ",";
-        dataJson += "\"peakKW\":" + String(data.peakKW, 2) + ",";
-        dataJson += "\"peakKW_RPM\":" + String(data.peakKW_RPM, 1) + ",";
-        dataJson += "\"torque\":" + String(data.torqueNm, 2) + ",";
-        dataJson += "\"brakeTorque\":" + String(data.brakeTorqueNm, 2) + ",";
-        dataJson += "\"torque_measured\":" + String(data.torqueNm, 2) + ",";
-        dataJson += "\"load_kg\":" + String(data.loadKg, 2) + ",";
-        dataJson += "\"throttle_pct\":" + String(data.throttlePercent, 1) + ",";
-        dataJson += "\"peakTorque\":" + String(data.peakTorque, 2) + ",";
-        dataJson += "\"peakTorque_RPM\":" + String(data.peakTorque_RPM, 1) + ",";
-        dataJson += "\"e_torque\":" + String(data.eTorque, 2) + ",";
-        dataJson += "\"energy\":" + String(data.energyMJ, 3) + ",";
-        dataJson += "\"energy_active\":" + String(isRecording ? 1 : 0) + ",";
-        dataJson += "\"rel_humidity\":" + String(data.humidity, 1) + ",";
-        dataJson += "\"ratio_confidence\":0,";
-        dataJson += "\"rpm_target\":" + String(data.rpmTarget, 1) + ",";
-        dataJson += "\"can_fallback\":0,";
-        dataJson += "\"rpm_source_active\":\"leafrpm\",";
-        dataJson += "\"kp_source\":\"firmware\",";
-        dataJson += "\"kp_live\":0,";
-        dataJson += "\"ki_live\":0,";
-        dataJson += "\"egt_hot\":" + String(data.egtHotC, 1) + ",";
-        dataJson += "\"egt_status\":" + String(data.egtStatus) + ",";
-        dataJson += "\"egt_ready\":" + String(data.egtReady ? 1 : 0) + ",";
-        dataJson += "\"pressure\":" + String(data.pressureHpa, 1) + ",";
-        dataJson += "\"ambient_temp\":" + String(data.ambientC, 1) + ",";
-        dataJson += "\"air_density\":" + String(data.airDensity, 3) + ",";
-        dataJson += "\"climate_cf\":" + String(data.climateCF, 3) + ",";
-        dataJson += "\"dyno_mode\":\"" + String(MetaSense::toString(data.mode)) + "\",";
-        dataJson += "\"inv_ready\":" + String(data.leaf_invReady ? 1 : 0) + ",";
-        dataJson += "\"sw_active\":" + String(data.swActive ? 1 : 0) + ",";
-        dataJson += "\"load_raw\":0,";
-        dataJson += "\"nau_ready\":0,";
-        dataJson += "\"recording\":" + String(isRecording ? 1 : 0) + ",";
-        dataJson += "\"lambda\":" + String(data.lambdaValue, 2) + ",";
-        dataJson += "\"massflow_m3h\":" + String(data.massflowM3h, 2) + ",";
-        dataJson += "\"leaf_rpm\":" + String(data.leaf_rpm, 1) + ",";
-        dataJson += "\"leaf_torque\":" + String(data.leaf_torqueNm, 2) + ",";
-        dataJson += "\"leaf_torque_demand\":" + String(data.leaf_torqueDemandNm, 2) + ",";
-        dataJson += "\"leaf_torque_demand_manual\":" + String(MetaSense::Input::getLeafUiTorqueDemandNm(), 2) + ",";
-        dataJson += "\"leaf_torque_mode\":\"" + String(MetaSense::Input::getLeafManualTorqueMode() ? "manual" : "auto") + "\",";
         
-        // Add 0x1DA inverter data to main telemetry
+        // Use static buffer for JSON to avoid String() float conversion issues
+        static char jsonBuffer[2600];  // Increased to 2600 for 0x11A fields
+        int pos = 0;
         const auto& leafFb = MetaSense::CANBus::feedback();
-        dataJson += "\"leaf_1da_input_v\":" + String(leafFb.input_voltage, 1) + ",";
-        dataJson += "\"leaf_1da_torque_nm\":" + String(leafFb.torque_nm, 2) + ",";
-        dataJson += "\"leaf_1da_inv_temp\":" + String(data.leaf_invTempC, 1) + ",";
-        dataJson += "\"leaf_1da_stator_temp\":" + String(data.leaf_statorTempC, 1) + ",";
-        dataJson += "\"leaf_coolant_temp\":" + String(data.leaf_coolantTempC, 1) + ",";
         
-        // 0x1DA Inverter Status Fields from DBC
-        dataJson += "\"leaf_1da_inv_fault_map\":" + String(static_cast<unsigned long>(leafFb.inv_fault_map)) + ",";
-        dataJson += "\"leaf_1da_inv_status_bit\":" + String(static_cast<unsigned long>(leafFb.inv_status_bit)) + ",";
+        // Build JSON using snprintf for robust numeric formatting
+        pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos,
+            "{\"type\":\"data\","
+            "\"rpm\":%.1f,"
+            "\"rpm_error\":0,"
+            "\"drum_rpm\":%.1f,"
+            "\"kw\":%.2f,"
+            "\"peakKW\":%.2f,"
+            "\"peakKW_RPM\":%.0f,"
+            "\"torque\":%.2f,"
+            "\"brakeTorque\":%.2f,"
+            "\"torque_measured\":%.2f,"
+            "\"load_kg\":%.2f,"
+            "\"throttle_pct\":%.1f,"
+            "\"peakTorque\":%.2f,"
+            "\"peakTorque_RPM\":%.0f,"
+            "\"e_torque\":%.2f,"
+            "\"energy\":%.2f,"
+            "\"energy_active\":%d,"
+            "\"rel_humidity\":%.1f,"
+            "\"ratio_confidence\":0,"
+            "\"rpm_target\":%.0f,"
+            "\"can_fallback\":0,"
+            "\"rpm_source_active\":\"leafrpm\","
+            "\"kp_source\":\"firmware\","
+            "\"kp_live\":0,"
+            "\"ki_live\":0,"
+            "\"egt_hot\":%.1f,"
+            "\"egt_status\":%d,"
+            "\"egt_ready\":%d,"
+            "\"pressure\":%.1f,"
+            "\"ambient_temp\":%.1f,"
+            "\"air_density\":%.3f,"
+            "\"climate_cf\":%.3f,"
+            "\"dyno_mode\":\"%s\","
+            "\"inv_ready\":%d,"
+            "\"sw_active\":%d,"
+            "\"load_raw\":0,"
+            "\"nau_ready\":0,"
+            "\"recording\":%d,"
+            "\"lambda\":%.2f,"
+            "\"massflow_m3h\":%.2f,"
+            "\"leaf_rpm\":%.0f,"
+            "\"leaf_torque\":%.2f,"
+            "\"leaf_torque_demand\":%.2f,"
+            "\"leaf_torque_demand_manual\":%.2f,"
+            "\"leaf_torque_mode\":\"%s\","
+            "\"leaf_1da_input_v\":%.1f,"
+            "\"leaf_1da_torque_nm\":%.2f,"
+            "\"leaf_1da_rpm\":%.0f,"
+            "\"leaf_1da_clock\":%d,"
+            "\"leaf_1da_err\":0,"
+            "\"leaf_1da_inv_fault_map\":%d,"
+            "\"leaf_1da_inv_blinky\":0,"
+            "\"leaf_1da_inv_fault_can_timeout\":0,"
+            "\"leaf_1da_crc\":%d,"
+            "\"leaf_1da_crc_calc\":%d,"
+            "\"leaf_1da_crc_wire_calc\":0,"
+            "\"leaf_1da_crc_ok\":%d,"
+            "\"leaf_1da_crc_wire_ok\":1,"
+            "\"leaf_1da_crc_wire_trusted\":1,"
+            "\"leaf_1da_crc_ok_frames\":0,"
+            "\"leaf_1da_crc_bad_frames\":0,"
+            "\"leaf_1da_raw_b0b7\":\"%02X %02X %02X %02X %02X %02X %02X %02X\","
+            "\"leaf_1da_inv_temp\":%.1f,"
+            "\"leaf_1da_stator_temp\":%.1f,"
+            "\"leaf_coolant_temp\":%.1f,"
+            "\"leaf_1da_inv_status_bit\":%d,"
+            "\"leaf_ready\":%d,"
+            "\"hw_precharge\":%d,"
+            "\"hw_rb_plus\":%d,"
+            "\"hw_rb_minus\":%d,"
+            "\"hw_ssr\":%d,"
+            "\"leaf_1d4_tx_frames\":%d,"
+            "\"leaf_1d4_tx_age_ms\":%lu,"
+            "\"leaf_1d4_tx_torque_nm\":%.2f,"
+            "\"leaf_1d4_tx_torque_raw\":%d,"
+            "\"leaf_1d4_tx_hv_status\":%d,"
+            "\"leaf_1d4_tx_relay_plus\":%d,"
+            "\"leaf_1d4_tx_charge_status\":%d,"
+            "\"leaf_1d4_tx_clock\":%d,"
+            "\"leaf_1d4_tx_crc\":%d,"
+            "\"leaf_1d4_tx_crc_calc\":%d,"
+            "\"leaf_1d4_tx_crc_ok\":%d,"
+            "\"leaf_1d4_tx_ring_source_age\":%d,"
+            "\"leaf_1d4_tx_ring_fallback_total\":%lu,"
+            "\"leaf_1d4_tx_raw_b0b7\":\"%02X %02X %02X %02X %02X %02X %02X %02X\","
+            "\"leaf_11a_frames\":%d,"
+            "\"leaf_11a_age_ms\":%lu,"
+            "\"leaf_11a_tx_frames\":%d,"
+            "\"leaf_11a_tx_age_ms\":%lu,"
+            "\"leaf_11a_gear\":%d,"
+            "\"leaf_11a_car_onoff\":%d,"
+            "\"leaf_11a_eco\":%d,"
+            "\"leaf_11a_heartbeat\":%d,"
+            "\"leaf_11a_mux\":%d,"
+            "\"leaf_11a_button\":%d,"
+            "\"leaf_11a_raw_b0b7\":\"%02X %02X %02X %02X %02X %02X %02X %02X\","
+            "\"leaf_11a_tx_raw_b0b7\":\"%02X %02X %02X %02X %02X %02X %02X %02X\""
+            "}",
+            data.rpm,
+            data.drumRpm,
+            data.kw,
+            data.peakKW,
+            data.peakKW_RPM,
+            data.torqueNm,
+            data.brakeTorqueNm,
+            data.torqueNm,
+            data.loadKg,
+            data.throttlePercent,
+            data.peakTorque,
+            data.peakTorque_RPM,
+            data.eTorque,
+            data.energyMJ,
+            isRecording ? 1 : 0,
+            data.humidity,
+            data.rpmTarget,
+            data.egtHotC,
+            (int)data.egtStatus,
+            data.egtReady ? 1 : 0,
+            data.pressureHpa,
+            data.ambientC,
+            data.airDensity,
+            data.climateCF,
+            MetaSense::toString(data.mode),
+            data.leaf_invReady ? 1 : 0,
+            data.swActive ? 1 : 0,
+            isRecording ? 1 : 0,
+            data.lambdaValue,
+            data.massflowM3h,
+            data.leaf_rpm,
+            data.leaf_torqueNm,
+            data.leaf_torqueDemandNm,
+            MetaSense::Input::getLeafUiTorqueDemandNm(),
+            MetaSense::Input::getLeafManualTorqueMode() ? "manual" : "auto",
+            leafFb.input_voltage,
+            leafFb.torque_nm,
+            data.leaf_rpm,  // leaf_1da_rpm
+            (int)leafFb.mg_clock,  // leaf_1da_clock
+            (int)leafFb.inv_fault_map,  // leaf_1da_inv_fault_map
+            (int)leafFb.crc_1da,  // leaf_1da_crc (CRC RX)
+            (int)MetaSense::CANBus::stats().last1daWireCrcCalc,  // leaf_1da_crc_calc
+            (MetaSense::CANBus::stats().last1daWireCrcOk > 0) ? 1 : 0,  // leaf_1da_crc_ok
+            leafFb.id1da_raw[0],
+            leafFb.id1da_raw[1],
+            leafFb.id1da_raw[2],
+            leafFb.id1da_raw[3],
+            leafFb.id1da_raw[4],
+            leafFb.id1da_raw[5],
+            leafFb.id1da_raw[6],
+            leafFb.id1da_raw[7],
+            data.leaf_invTempC,  // leaf_inv_temp
+            data.leaf_statorTempC,  // leaf_stator_temp
+            data.leaf_coolantTempC,  // leaf_coolant_temp
+            (int)leafFb.inv_status_bit,  // leaf_1da_inv_status_bit
+            leafFb.ready ? 1 : 0,  // leaf_ready
+            MetaSense::HardwareOutputStateMachine::isPrechargeActive() ? 1 : 0,
+            MetaSense::HardwareOutputStateMachine::isRbPlusActive() ? 1 : 0,
+            MetaSense::HardwareOutputStateMachine::isRbMinusActive() ? 1 : 0,
+            MetaSense::HardwareOutputStateMachine::isSsrActive() ? 1 : 0,
+            (int)MetaSense::CANBus::stats().tx1d4Frames,  // leaf_1d4_tx_frames
+            now - MetaSense::CANBus::stats().last1d4TxMs,  // leaf_1d4_tx_age_ms
+            s_leaf1d4PayloadTorqueNm,  // leaf_1d4_tx_torque_nm
+            (int)s_leaf1d4PayloadTorqueRaw,  // leaf_1d4_tx_torque_raw
+            s_leaf1d4PayloadHvStatus ? 1 : 0,  // leaf_1d4_tx_hv_status
+            s_leaf1d4PayloadRelayPlus ? 1 : 0,  // leaf_1d4_tx_relay_plus
+            (int)s_leaf1d4PayloadChargeStatus,  // leaf_1d4_tx_charge_status
+            (int)s_leaf1d4PayloadClock,  // leaf_1d4_tx_clock
+            (int)s_leaf1d4PayloadCrc,  // leaf_1d4_tx_crc (CRC RX)
+            (int)s_leaf1d4PayloadCrcCalc,  // leaf_1d4_tx_crc_calc
+            (s_leaf1d4PayloadCrcOk > 0) ? 1 : 0,  // leaf_1d4_tx_crc_ok
+            (int)s_leaf1d4TxRingSourceAge,  // leaf_1d4_tx_ring_source_age
+            s_leaf1d4TxRingFallbackCount,  // leaf_1d4_tx_ring_fallback_total
+            s_leaf1d4PayloadCachedFrameData[0],  // leaf_1d4_tx_raw_b0
+            s_leaf1d4PayloadCachedFrameData[1],  // leaf_1d4_tx_raw_b1
+            s_leaf1d4PayloadCachedFrameData[2],  // leaf_1d4_tx_raw_b2
+            s_leaf1d4PayloadCachedFrameData[3],  // leaf_1d4_tx_raw_b3
+            s_leaf1d4PayloadCachedFrameData[4],  // leaf_1d4_tx_raw_b4
+            s_leaf1d4PayloadCachedFrameData[5],  // leaf_1d4_tx_raw_b5
+            s_leaf1d4PayloadCachedFrameData[6],  // leaf_1d4_tx_raw_b6
+            s_leaf1d4PayloadCachedFrameData[7],  // leaf_1d4_tx_raw_b7
+            // 0x11A RX frame data
+            (int)MetaSense::CANBus::stats().rx11aFrames,  // leaf_11a_frames
+            now - MetaSense::CANBus::stats().last11aMs,  // leaf_11a_age_ms
+            (int)MetaSense::CANBus::stats().tx11aFrames,  // leaf_11a_tx_frames
+            now - MetaSense::CANBus::stats().last11aTxMs,  // leaf_11a_tx_age_ms
+            (int)((MetaSense::CANBus::stats().last11aData[0] >> 4U) & 0x0FU),  // leaf_11a_gear
+            (int)((MetaSense::CANBus::stats().last11aData[1] >> 5U) & 0x07U),  // leaf_11a_car_onoff
+            (int)((MetaSense::CANBus::stats().last11aData[1] >> 4U) & 0x01U),  // leaf_11a_eco
+            (int)MetaSense::CANBus::stats().last11aData[3],  // leaf_11a_heartbeat
+            (int)MetaSense::CANBus::stats().last11aData[6],  // leaf_11a_mux
+            (int)MetaSense::CANBus::stats().last11aData[2],  // leaf_11a_button
+            MetaSense::CANBus::stats().last11aData[0],  // leaf_11a_raw_b0
+            MetaSense::CANBus::stats().last11aData[1],  // leaf_11a_raw_b1
+            MetaSense::CANBus::stats().last11aData[2],  // leaf_11a_raw_b2
+            MetaSense::CANBus::stats().last11aData[3],  // leaf_11a_raw_b3
+            MetaSense::CANBus::stats().last11aData[4],  // leaf_11a_raw_b4
+            MetaSense::CANBus::stats().last11aData[5],  // leaf_11a_raw_b5
+            MetaSense::CANBus::stats().last11aData[6],  // leaf_11a_raw_b6
+            MetaSense::CANBus::stats().last11aData[7],  // leaf_11a_raw_b7
+            MetaSense::CANBus::stats().last11aTxData[0],  // leaf_11a_tx_raw_b0
+            MetaSense::CANBus::stats().last11aTxData[1],  // leaf_11a_tx_raw_b1
+            MetaSense::CANBus::stats().last11aTxData[2],  // leaf_11a_tx_raw_b2
+            MetaSense::CANBus::stats().last11aTxData[3],  // leaf_11a_tx_raw_b3
+            MetaSense::CANBus::stats().last11aTxData[4],  // leaf_11a_tx_raw_b4
+            MetaSense::CANBus::stats().last11aTxData[5],  // leaf_11a_tx_raw_b5
+            MetaSense::CANBus::stats().last11aTxData[6],  // leaf_11a_tx_raw_b6
+            MetaSense::CANBus::stats().last11aTxData[7]   // leaf_11a_tx_raw_b7
+        );
         
-        // Hardware status - HV relay states
-        dataJson += "\"leaf_ready\":" + String(leafFb.ready ? 1 : 0) + ",";
-        dataJson += "\"hw_precharge\":" + String(MetaSense::HardwareOutputStateMachine::isPrechargeActive() ? 1 : 0) + ",";
-        dataJson += "\"hw_rb_plus\":" + String(MetaSense::HardwareOutputStateMachine::isRbPlusActive() ? 1 : 0) + ",";
-        dataJson += "\"hw_rb_minus\":" + String(MetaSense::HardwareOutputStateMachine::isRbMinusActive() ? 1 : 0) + ",";
-        dataJson += "\"hw_ssr\":" + String(MetaSense::HardwareOutputStateMachine::isSsrActive() ? 1 : 0);
-        dataJson += "}";
-        wsock.textAll(dataJson);
-    }
-
-    // === CAN MONITOR: Full monitor data (includes IP + RSSI + all 47 fields) ===
-    // This section remains but CAN Monitor JSON is DISABLED by default to reduce WebSocket payload
-    // All CAN data (0x1DA/0x55A/0x11A/0x1D4) is still captured internally in CANBus::stats()
-    // To enable CAN Monitor JSON transmission:
-    //   1. Add build flag: -D METASENSE_CAN_MONITOR_JSON_ENABLED=1
-    //   2. Or uncomment the wsock.textAll(canJson) line below
-    // Related define: METASENSE_CAN_MONITOR_JSON_ENABLED (line ~30)
-    
-    if (now - lastCanTelemetryMs >= canCadenceMs) {
-        lastCanTelemetryMs = now;
-        
-        // Update cached IP/RSSI only every 60 seconds to avoid blocking WiFi API calls
-        // These calls can take >50ms and starve the WebSocket loop
-        if (now - lastIPCacheMs >= 60000U) {
-            lastIPCacheMs = now;
-            cachedIP = WiFi.localIP().toString();
-            cachedRSSI = WiFi.RSSI();
-        }
-        
-        // CAN Monitor JSON transmission disabled - use serial logging for exceptions instead
-        // To enable: set METASENSE_CAN_MONITOR_JSON_ENABLED=1 in platformio.ini
+        wsock.textAll(jsonBuffer);
+        // Note: All CAN monitor fields (leaf_1da_*) already included in dashboard JSON above
     }
 
     // === EXCEPTIONS ONLY: Send alerts for errors/faults via serial ===
@@ -4326,8 +4451,8 @@ static void updateLeaf1d4PayloadStateMachine(uint32_t nowMs)
     const bool rbPlusActive = vcuDebugRPlus || MetaSense::HardwareOutputStateMachine::isRbPlusCommandedActive();
     setIntelUnsigned(data, 8U, 46U, 1U, rbPlusActive ? 1U : 0U);
     
-    // Update clock bits (bits 38-39)
-    setIntelUnsigned(data, 8U, 38U, 2U, static_cast<uint32_t>(hcmClock & 0x03U));
+    // Note: Clock bits (38-39) and CRC will be updated by the 10ms TX task before sending
+    // This ensures CRC and clock are fresh for EVERY transmission, not just every 100ms
     
     // Keep template header bytes only if not using live sniffed frame
     if (!usedRingBase) {
@@ -4335,10 +4460,7 @@ static void updateLeaf1d4PayloadStateMachine(uint32_t nowMs)
         data[1] = METASENSE_LEAF_1D4_TEMPLATE_B1;
     }
 
-    // Compute and set CRC
-    data[7] = computeLeaf1d4CrcConformant(data);
-
-    // Cache the complete frame for 10ms TX loop
+    // Cache the complete frame for 10ms TX loop (CRC/clock will be updated there)
     memcpy(s_leaf1d4PayloadCachedFrameData, data, sizeof(s_leaf1d4PayloadCachedFrameData));
     
     // Update payload metadata for telemetry/logging
@@ -4352,9 +4474,6 @@ static void updateLeaf1d4PayloadStateMachine(uint32_t nowMs)
     s_leaf1d4PayloadCrcCalc = computeLeaf1d4CrcConformant(data);
     s_leaf1d4PayloadCrcOk = (s_leaf1d4PayloadCrc == s_leaf1d4PayloadCrcCalc) ? 1 : 0;
     s_leaf1d4PayloadMs = nowMs;
-
-    // Advance rolling counter for next 100ms cycle
-    s_leaf1d4RollingCounter = static_cast<uint8_t>((s_leaf1d4RollingCounter + 1U) & 0x03U);
 
 #if METASENSE_LEAF_CRC_DEEP_LOGS
     static uint32_t s_leaf1d4PayloadUpdateLogMs = 0U;
@@ -4373,11 +4492,14 @@ static void updateLeaf1d4PayloadStateMachine(uint32_t nowMs)
 #endif
 }
 
+// Global counter for core-0 Serial output (tracks 0x1D4 frame transmissions)
+static volatile uint32_t s_leaf1d4TxFrameCount = 0U;  // Incremented every 10ms frame transmission
 
 void leafTxPacerTask(void* /*param*/)
 {
     constexpr uint32_t kLeafTxPacerTickMs = CAN_TX_PERIOD_MS;  // 10ms
     TickType_t lastWake = xTaskGetTickCount();
+    bool firstRun = true;  // Force state machine to run immediately on first TX
     
     for (;;) {
         vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(kLeafTxPacerTickMs));
@@ -4398,11 +4520,35 @@ void leafTxPacerTask(void* /*param*/)
             continue;
         }
 
+        // Force state machine to run on very first iteration to ensure proper frame initialization
+        if (firstRun) {
+            firstRun = false;
+            s_leaf1d4PayloadStateLastUpdateMs = 0;  // Force immediate execution
+        }
+
         // Update 0x1D4 payload state machine (runs every 100ms internally, check is cheap)
         // This generates and caches the complete frame every 100ms
         updateLeaf1d4PayloadStateMachine(nowMs);
 
-        // Send cached 0x1D4 frame every 10ms (maintains CAN bus presence)
+        // Advance rolling counter BEFORE updating frame (0-3 cycle, changes every 10ms transmission)
+        s_leaf1d4RollingCounter = static_cast<uint8_t>((s_leaf1d4RollingCounter + 1U) & 0x03U);
+
+        // Update template directly with fresh counter and CRC before each 10ms transmission
+        // Counter and CRC are transient fields that change every frame
+        // Payload data (torque, HV status, relay, charge status) only changes every 100ms
+        const uint8_t hcmClock = static_cast<uint8_t>(s_leaf1d4RollingCounter & 0x03U);
+        setIntelUnsigned(s_leaf1d4PayloadCachedFrameData, 8U, 38U, 2U, static_cast<uint32_t>(hcmClock));
+        
+        // Clear CRC field before recalculating (CRC always calculated with checksum = 0)
+        s_leaf1d4PayloadCachedFrameData[7] = 0U;
+        
+        // Recalculate CRC after updating counter (fresh CRC every 10ms transmission)
+        s_leaf1d4PayloadCachedFrameData[7] = computeLeaf1d4CrcConformant(s_leaf1d4PayloadCachedFrameData);
+
+        // Increment global counter for HEARTBEAT Serial output
+        s_leaf1d4TxFrameCount++;
+
+        // Send 0x1D4 frame with fresh CRC and clock every 10ms (maintains CAN bus presence)
         const bool sent1d4 = MetaSense::CANBus::send(0x1D4U, 
                                                       s_leaf1d4PayloadCachedFrameData, 
                                                       sizeof(s_leaf1d4PayloadCachedFrameData));
@@ -4415,8 +4561,7 @@ void leafTxPacerTask(void* /*param*/)
         }
 
         // Send 0x11A keep-alive frame every 10ms
-        const bool sent11a = sendLeafKeepAlive11a(nowMs, true, 
-                                                   static_cast<uint8_t>(s_leaf1d4PayloadClock & 0x03U));
+        const bool sent11a = sendLeafKeepAlive11a(nowMs, true, hcmClock);
 
         // Log only when payload state machine updates (every 100ms)
         // Check if this is a logging frame by comparing update time with a logged time
@@ -4457,7 +4602,7 @@ void begin()
     s_leafHandshakeLastAttemptMs = 0;
     s_leafHandshakePromotedLogPrinted = false;
     setLeafUiTorqueDemandNmInternal(0.0f);
-    s_leafTxPacerEnabled = false;
+    s_leafTxPacerEnabled = true;  // DEBUG: Enable for testing
     s_leafTxPacerTorqueNm = 0.0f;
     s_leafTxPacerReadyBit = false;
     s_leafTxPacerHvOkBit = false;
@@ -4716,12 +4861,29 @@ void begin()
     }
 
     if (leafTxPacerTaskHandle == nullptr) {
+        // Prime the cached frame with a valid initial state before TX task starts
+        uint8_t initData[8] = {
+            METASENSE_LEAF_1D4_TEMPLATE_B0,
+            METASENSE_LEAF_1D4_TEMPLATE_B1,
+            METASENSE_LEAF_1D4_TEMPLATE_B2,
+            METASENSE_LEAF_1D4_TEMPLATE_B3,
+            METASENSE_LEAF_1D4_TEMPLATE_B4,
+            METASENSE_LEAF_1D4_TEMPLATE_B5,
+            METASENSE_LEAF_1D4_TEMPLATE_B6,
+            METASENSE_LEAF_1D4_TEMPLATE_B7
+        };
+        // Initialize clock to 0, CRC will be computed fresh on first TX
+        setIntelUnsigned(initData, 8U, 38U, 2U, 0U);
+        initData[7] = computeLeaf1d4CrcConformant(initData);
+        memcpy(s_leaf1d4PayloadCachedFrameData, initData, sizeof(s_leaf1d4PayloadCachedFrameData));
+        s_leaf1d4RollingCounter = 0U;
+        
         BaseType_t txTaskCreated = xTaskCreatePinnedToCore(
             leafTxPacerTask,
             "leafTxPacer",
             4096,
             nullptr,
-            2,
+            7,
             &leafTxPacerTaskHandle,
             1);
         if (txTaskCreated != pdPASS) {
@@ -8063,6 +8225,28 @@ void loop()
         MetaSense::TelnetSerialBridge::telnetBridgePrintf("[HEARTBEAT] RPM=%.0f Leaf_RPM=%.0f Temps: Inv=%.1f Stator=%.1f Coolant=%.1f IP=%d.%d.%d.%d RSSI=%ld dBm ms=%lu\n",
                       tele.rpm, tele.leaf_rpm, tele.leaf_invTempC, tele.leaf_statorTempC, tele.leaf_coolantTempC,
                       ip[0], ip[1], ip[2], ip[3], rssi, nowMs);
+        
+        // Print 1D4 frame debug info (read directly from cached frame - simple Serial.print approach)
+        static uint32_t lastPrintedTxCount = 0xFFFFFFFFUL;
+        // Print every 10 frames to avoid sync issues with core-1 counter updates
+        if ((s_leaf1d4TxFrameCount / 10U) != (lastPrintedTxCount / 10U)) {
+            lastPrintedTxCount = s_leaf1d4TxFrameCount;
+            // Extract HCM_CLOCK from bits 38-39 (byte 4, bits 6-7)
+            const uint8_t hcmClock = (s_leaf1d4PayloadCachedFrameData[4] >> 6) & 0x03U;
+            Serial.print("[1D4-");
+            Serial.print(s_leaf1d4TxFrameCount);
+            Serial.print("] C=");
+            Serial.print(hcmClock);
+            Serial.print(" CRC=");
+            Serial.print(s_leaf1d4PayloadCachedFrameData[7], HEX);
+            Serial.print(" Data:");
+            for (int i = 0; i < 8; i++) {
+                Serial.print(" ");
+                if (s_leaf1d4PayloadCachedFrameData[i] < 0x10) Serial.print("0");
+                Serial.print(s_leaf1d4PayloadCachedFrameData[i], HEX);
+            }
+            Serial.println();
+        }
     }
 }
 
