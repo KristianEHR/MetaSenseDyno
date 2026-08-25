@@ -5218,15 +5218,6 @@ void loop()
         tele.leaf_torqueDemandNm = torqueCmd;
     }
 
-#if METASENSE_TEST_TORQUE_OVERRIDE_ENABLED
-    // Bench/test override: force fixed command whenever primary safety checks pass.
-    if (safe) {
-        torqueCmd = constrain(METASENSE_TEST_TORQUE_OVERRIDE_NM, -300.0f, 300.0f);
-    } else {
-        torqueCmd = 0.0f;
-    }
-#endif
-
 #if METASENSE_TORQUE_STEP_SEQUENCER_ENABLED
     if (torqueArmed && safe && canStatusClearForTorque) {
         torqueCmd = computeTorqueStepSequence(now, true, true);
