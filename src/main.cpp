@@ -257,18 +257,14 @@ void scanI2cBus()
             const uint8_t err = Wire.endTransmission();
             if (err == 0) {
                 ++found;
-                Serial.printf("[BOOT] I2C device found @ 0x%02X\n", addr);
-                Serial0.printf("[BOOT] I2C device found @ 0x%02X\n", addr);
             }
         }
         MetaSense::I2cBus::give();
     }
 
     if (found == 0) {
-        Serial.println("[BOOT] I2C scan: no devices found");
         Serial0.println("[BOOT] I2C scan: no devices found");
     } else {
-        Serial.printf("[BOOT] I2C scan complete: %u device(s)\n", found);
         Serial0.printf("[BOOT] I2C scan complete: %u device(s)\n", found);
     }
 }
@@ -301,18 +297,14 @@ void logLine(const char* message)
 
 void logWifiConnecting(const char* targetSsid)
 {
-    Serial.printf("[BOOT] WiFi connecting to SSID '%s'\n", targetSsid);
     Serial0.printf("[BOOT] WiFi connecting to SSID '%s'\n", targetSsid);
 }
 
 void logWifiConnected()
 {
     const String ip = WiFi.localIP().toString();
-    Serial.printf("[BOOT] WiFi connected, IP: %s\n", ip.c_str());
     Serial0.printf("[BOOT] WiFi connected, IP: %s\n", ip.c_str());
-    Serial.printf("[BOOT] WiFi MAC: %s\n", WiFi.macAddress().c_str());
     Serial0.printf("[BOOT] WiFi MAC: %s\n", WiFi.macAddress().c_str());
-    Serial.println("[BOOT] Web UI: http://dyno-controller.local/");
     Serial0.println("[BOOT] Web UI: http://dyno-controller.local/");
 }
 
