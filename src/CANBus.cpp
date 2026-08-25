@@ -471,7 +471,6 @@ void poll(uint32_t nowMs)
     static uint32_t lastRxUnknownFrames = 0;
     static uint32_t lastRxStdFrames = 0;
     static uint32_t lastRxExtFrames = 0;
-    static uint32_t last11aChangeLogMs = 0;
     const uint32_t DIAG_PERIOD_MS = 5000;
     const uint32_t RATE_PERIOD_MS = 2000;
 
@@ -731,23 +730,6 @@ void poll(uint32_t nowMs)
                         ++s_stats.byteChg11a[b];
                     }
                 }
-#if METASENSE_CAN_LOG_11A_CHANGES
-                if (deltaMask != 0U && (last11aChangeLogMs == 0U || (nowMs - last11aChangeLogMs) >= 100U)) {
-                    Serial.printf("[CAN-11A-CHG] n=%lu chg=%lu mask=0x%02X data=%02X %02X %02X %02X %02X %02X %02X %02X\n",
-                                  static_cast<unsigned long>(s_stats.rx11aFrames + 1U),
-                                  static_cast<unsigned long>(s_stats.rx11aChanges),
-                                  static_cast<unsigned>(deltaMask),
-                                  static_cast<unsigned>(data[0]),
-                                  static_cast<unsigned>(data[1]),
-                                  static_cast<unsigned>(data[2]),
-                                  static_cast<unsigned>(data[3]),
-                                  static_cast<unsigned>(data[4]),
-                                  static_cast<unsigned>(data[5]),
-                                  static_cast<unsigned>(data[6]),
-                                  static_cast<unsigned>(data[7]));
-                    last11aChangeLogMs = nowMs;
-                }
-#endif
                 ++s_stats.rx11aFrames;
                 s_stats.last11aMs = nowMs;
                 s_stats.last11aLen = len;
