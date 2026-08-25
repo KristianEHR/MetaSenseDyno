@@ -659,9 +659,10 @@ void update(float engineThrottlePercent,
         startSetpointWaitStartMs = 0;
     }
 
-    // CAN activity is treated as inverter readiness during INIT so the startup
-    // gate can advance once the bus is alive and producing traffic.
-    const bool hardwareReady = inverterStatusReady || canTelemetryReady;
+    // Hardware readiness determined by actual inverter status bit from 0x1DA frame.
+    // inverterStatusReady reflects inv_status_bit = 1 (inverter is ready),
+    // which is passed from Input.cpp and provides the definitive INIT criterion.
+    const bool hardwareReady = inverterStatusReady;
     // Telemetry is useful for the UI, but it should not keep the controller
     // stuck in INIT/white LED during boot when the core hardware and sensors
     // are already healthy. Poor or intermittent telemetry should not block the

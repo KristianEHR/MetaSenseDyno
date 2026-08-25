@@ -484,7 +484,7 @@ constexpr uint32_t kLeafHandshakeAttemptPeriodMs = 20;
 #define METASENSE_LEAF_11A_TEMPLATE_B0 0x4EU
 #endif
 #ifndef METASENSE_LEAF_11A_TEMPLATE_B1
-#define METASENSE_LEAF_11A_TEMPLATE_B1 0x40U
+#define METASENSE_LEAF_11A_TEMPLATE_B1 0xA0U
 #endif
 #ifndef METASENSE_LEAF_11A_TEMPLATE_B2
 #define METASENSE_LEAF_11A_TEMPLATE_B2 0x00U
@@ -551,28 +551,28 @@ constexpr uint32_t kLeafHandshakeAttemptPeriodMs = 20;
 #define METASENSE_LEAF_1D4_TORQUE_LSB_NM 0.0625f
 #endif
 #ifndef METASENSE_LEAF_1D4_TEMPLATE_B0
-#define METASENSE_LEAF_1D4_TEMPLATE_B0 0x6EU  // Static per Thunderstruck reference
+#define METASENSE_LEAF_1D4_TEMPLATE_B0 0xF7U
 #endif
 #ifndef METASENSE_LEAF_1D4_TEMPLATE_B1
-#define METASENSE_LEAF_1D4_TEMPLATE_B1 0x6EU  // Static per Thunderstruck reference
+#define METASENSE_LEAF_1D4_TEMPLATE_B1 0x07U
 #endif
 #ifndef METASENSE_LEAF_1D4_TEMPLATE_B2
-#define METASENSE_LEAF_1D4_TEMPLATE_B2 0x00U  // Torque MSB
+#define METASENSE_LEAF_1D4_TEMPLATE_B2 0x00U
 #endif
 #ifndef METASENSE_LEAF_1D4_TEMPLATE_B3
-#define METASENSE_LEAF_1D4_TEMPLATE_B3 0x00U  // Torque LSB
+#define METASENSE_LEAF_1D4_TEMPLATE_B3 0x00U
 #endif
 #ifndef METASENSE_LEAF_1D4_TEMPLATE_B4
-#define METASENSE_LEAF_1D4_TEMPLATE_B4 0x87U  // Rolling counter (high nibble), fixed 0x7 (low nibble)
+#define METASENSE_LEAF_1D4_TEMPLATE_B4 0x04U
 #endif
 #ifndef METASENSE_LEAF_1D4_TEMPLATE_B5
-#define METASENSE_LEAF_1D4_TEMPLATE_B5 0x44U  // Static charge status per Thunderstruck reference
+#define METASENSE_LEAF_1D4_TEMPLATE_B5 0x04U
 #endif
 #ifndef METASENSE_LEAF_1D4_TEMPLATE_B6
-#define METASENSE_LEAF_1D4_TEMPLATE_B6 0x01U  // Static field per Thunderstruck reference
+#define METASENSE_LEAF_1D4_TEMPLATE_B6 0x1EU
 #endif
 #ifndef METASENSE_LEAF_1D4_TEMPLATE_B7
-#define METASENSE_LEAF_1D4_TEMPLATE_B7 0x00U  // CRC placeholder (will be overwritten)
+#define METASENSE_LEAF_1D4_TEMPLATE_B7 0x00U
 #endif
 #ifndef METASENSE_LEAF_CAN_TX_PIN
 #define METASENSE_LEAF_CAN_TX_PIN 4
@@ -1016,11 +1016,11 @@ uint8_t computeApprovedLeafFrameCrc(uint8_t idLo, const uint8_t* payload8)
         return MetaSense::LeafCRC::computeExact1daWireCrc(idLo, payload8);
     }
     if (idLo == 0xD4U) {
-        // For 0x1D4, use the correct wire CRC with polynomial 0x1D29
+        // For 0x1D4, use the same wire CRC algorithm as 0x1DA
         // The counter in byte 5 upper nibble is included in the calculation
-        return MetaSense::LeafCRC::computeExact1d4LikeCrc(idLo, payload8);
+        return MetaSense::LeafCRC::computeExact1daWireCrc(idLo, payload8);
     }
-    return MetaSense::LeafCRC::computeExact1d4LikeCrc(idLo, payload8);
+    return MetaSense::LeafCRC::computeExact1daWireCrc(idLo, payload8);
 }
 
 uint8_t computeLeaf1d4CrcConformant(const uint8_t* payload7)
@@ -3246,7 +3246,7 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             data.leaf_invTempC,  // leaf_inv_temp
             data.leaf_statorTempC,  // leaf_stator_temp
             data.leaf_coolantTempC,  // leaf_coolant_temp
-            (int)leafFb.inv_status_bit,  // leaf_1da_inv_status_bit (Inv_StatusBit: 1=ready, 0=not ready)
+            (int)leafFb.inv_status_bit,  // leaf_1da_inv_status_bit
             leafFb.ready ? 1 : 0,  // leaf_ready
             MetaSense::HardwareOutputStateMachine::isPrechargeActive() ? 1 : 0,
             MetaSense::HardwareOutputStateMachine::isRbPlusActive() ? 1 : 0,
@@ -4485,11 +4485,6 @@ static void updateLeaf1d4PayloadStateMachine(uint32_t nowMs)
         data[1] = METASENSE_LEAF_1D4_TEMPLATE_B1;
     }
 
-    // Force bytes 5 and 6 to always use template values (static fields)
-    // Byte 4 (counter) is updated dynamically every frame in leafTxPacerTask
-    data[5] = METASENSE_LEAF_1D4_TEMPLATE_B5;  // 0x44 (charge status)
-    data[6] = METASENSE_LEAF_1D4_TEMPLATE_B6;  // 0x01 (unknown field)
-
     // Cache the complete frame for 10ms TX loop (CRC/clock will be updated there)
     memcpy(s_leaf1d4PayloadCachedFrameData, data, sizeof(s_leaf1d4PayloadCachedFrameData));
     
@@ -4563,11 +4558,15 @@ void leafTxPacerTask(void* /*param*/)
         // Advance rolling counter BEFORE updating frame (0-3 cycle, changes every 10ms transmission)
         s_leaf1d4RollingCounter = static_cast<uint8_t>((s_leaf1d4RollingCounter + 1U) & 0x03U);
 
-        // Update byte 4 with rolling counter - lookup table based on DBC HCM_CLOCK signal
-        // Counter values 0,1,2,3 → upper nibbles 8,C,0,4 → byte values 0x87, 0xC7, 0x07, 0x47
+        // Update template directly with fresh counter and CRC before each 10ms transmission
+        // Counter and CRC are transient fields that change every frame
+        // Payload data (torque, HV status, relay, charge status) only changes every 100ms
         const uint8_t hcmClock = static_cast<uint8_t>(s_leaf1d4RollingCounter & 0x03U);
-        static const uint8_t COUNTER_NIBBLE_MAP[] = {0x8U, 0xCU, 0x0U, 0x4U};
-        s_leaf1d4PayloadCachedFrameData[4] = static_cast<uint8_t>((COUNTER_NIBBLE_MAP[hcmClock] << 4) | 0x7U);
+        setIntelUnsigned(s_leaf1d4PayloadCachedFrameData, 8U, 38U, 2U, static_cast<uint32_t>(hcmClock));
+        
+        // Update byte 5 with rolling counter in upper nibble and fixed 0x4 in lower nibble
+        // Byte 5 format: (counter << 4) | 0x4, where counter cycles 0-1-2-3-0...
+        s_leaf1d4PayloadCachedFrameData[5] = static_cast<uint8_t>((hcmClock << 4) | 0x4U);
         
         // Clear CRC field before recalculating (CRC always calculated with checksum = 0)
         s_leaf1d4PayloadCachedFrameData[7] = 0U;
@@ -5341,14 +5340,7 @@ void loop()
 
     const MetaSense::CANBus::Stats& canStatsForStart = MetaSense::CANBus::stats();
     const bool canTelemetryReadyForStart = evaluateCanStartReadiness(now, canStatsForStart);
-    
-    // INIT state completion criterion: Use the actual inverter status bit from 0x1DA frame
-    // This is more direct and concrete than synthetic CAN readiness flags.
-    // inv_status_bit = 1 means inverter is ready; this is the real state from hardware.
-    const LeafInvFeedback& leafFb = MetaSense::CANBus::feedback();
-    const bool inverterStatusFromFrame = (leafFb.inv_status_bit == 1);
-    
-    const bool canActivityReady = inverterStatusFromFrame || canTelemetryReadyForStart;
+    const bool canActivityReady = canInvReady || canTelemetryReadyForStart;
     const bool relayInverterStatusReady = canActivityReady || tele.vcuReady;
     const bool relayInverterReady = canActivityReady || tele.vcuReady;
     const bool relayInverterFault = tele.leaf_invFault ||
