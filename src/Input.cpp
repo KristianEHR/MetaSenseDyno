@@ -234,10 +234,6 @@ static const uint32_t CAN_RX_TARGET_MAX_AGE_MS = 250;
 static const uint32_t CAN_RX_MISSING_LOG_PERIOD_MS = 5000;
 static const uint32_t CAN_EVENT_LOG_MIN_PERIOD_MS = 5000;
 static const uint32_t CAN_1DA_CRC_BAD_STREAK_LIMIT = 10;
-#if defined(METASENSE_LEAF_VCM_DIAGNOSTICS) && (METASENSE_LEAF_VCM_DIAGNOSTICS != 0)
-static const uint32_t CAN_ALT_DIAG_LOG_PERIOD_MS = 2000;
-static const uint32_t CAN_PRE_DIAG_LOG_PERIOD_MS = 2000;
-#endif
 
 #ifndef METASENSE_LEAF_VCM_CHECKLIST_MODE
 #define METASENSE_LEAF_VCM_CHECKLIST_MODE 1
@@ -402,9 +398,6 @@ static uint8_t s_leafHandshakeAttemptCount = 0;
 static uint32_t s_leafHandshakeStartMs = 0;
 static uint32_t s_leafHandshakeLastAttemptMs = 0;
 static bool s_leafHandshakePromotedLogPrinted = false;
-#if defined(METASENSE_LEAF_VCM_DIAGNOSTICS) && (METASENSE_LEAF_VCM_DIAGNOSTICS != 0)
-static uint32_t s_leafPreStatusLastMs = 0;
-#endif
 static uint32_t s_leafRxDiagLastMs = 0;
 static uint32_t s_leafRxWarnLastMs = 0;
 static uint32_t s_leafRxAwaitPartnerLastMs = 0;
@@ -2795,10 +2788,6 @@ void pollLeafCanFrames(uint32_t nowMs)
             s_leafHandshakeAttemptCount = 0;
             s_leafHandshakeStartMs = nowMs;
             s_leafHandshakeLastAttemptMs = 0;
-#if defined(METASENSE_LEAF_VCM_DIAGNOSTICS) && (METASENSE_LEAF_VCM_DIAGNOSTICS != 0)
-            Serial.println("[VCM-HS] First 0x1DA observed, starting extended 0x1D4 handshake campaign");
-            Serial0.println("[VCM-HS] First 0x1DA observed, starting extended 0x1D4 handshake campaign");
-#endif
         }
     }
     if (leafFb.torque_update_ms != 0U && leafFb.torque_update_ms != lastCanTorqueFrameMs) {
@@ -4691,55 +4680,6 @@ void begin()
     s_leafTxGapTestActive = false;
     s_leafTxGapTestLoggedStart = false;
     s_leafTxGapTestLoggedEnd = false;
-#if defined(METASENSE_LEAF_VCM_DIAGNOSTICS) && (METASENSE_LEAF_VCM_DIAGNOSTICS != 0)
-    lastCanAltDiagMs = 0;
-    lastCanAlt120FramesLogged = 0;
-    lastCanAlt55aFramesLogged = 0;
-    memset(leaf120B2PosCounts, 0, sizeof(leaf120B2PosCounts));
-    memset(leaf120B2NegCounts, 0, sizeof(leaf120B2NegCounts));
-    memset(leaf120B2ZeroCounts, 0, sizeof(leaf120B2ZeroCounts));
-    memset(leaf120B2BrakeCounts, 0, sizeof(leaf120B2BrakeCounts));
-    leaf120B2PosSamples = 0;
-    leaf120B2NegSamples = 0;
-    leaf120B2ZeroSamples = 0;
-    leaf120B2BrakeSamples = 0;
-    memset(leaf120CrcCandidateMatches, 0, sizeof(leaf120CrcCandidateMatches));
-    leaf120CrcSamples = 0;
-    memset(leaf120CrcBrakeSamples, 0, sizeof(leaf120CrcBrakeSamples));
-    memset(leaf120Ref00StateCorrectedMatchesByBrake, 0, sizeof(leaf120Ref00StateCorrectedMatchesByBrake));
-    memset(leaf120Ref00Fixed8MatchesByBrake, 0, sizeof(leaf120Ref00Fixed8MatchesByBrake));
-    memset(leaf120CrcRefIdLoMatchesByBrake, 0, sizeof(leaf120CrcRefIdLoMatchesByBrake));
-    memset(leaf120CrcCmdStateSamples, 0, sizeof(leaf120CrcCmdStateSamples));
-    memset(leaf120Ref00StateCorrectedMatchesByCmdState, 0, sizeof(leaf120Ref00StateCorrectedMatchesByCmdState));
-    memset(leaf120Ref00Fixed8MatchesByCmdState, 0, sizeof(leaf120Ref00Fixed8MatchesByCmdState));
-    memset(leaf120CrcRefIdLoMatchesByCmdState, 0, sizeof(leaf120CrcRefIdLoMatchesByCmdState));
-    memset(leaf120CrcMotorHiNibSamples, 0, sizeof(leaf120CrcMotorHiNibSamples));
-    memset(leaf120Ref00StateCorrectedMatchesByMotorHiNib, 0, sizeof(leaf120Ref00StateCorrectedMatchesByMotorHiNib));
-    memset(leaf120Ref00Fixed8MatchesByMotorHiNib, 0, sizeof(leaf120Ref00Fixed8MatchesByMotorHiNib));
-    memset(leaf120CrcRefIdLoMatchesByMotorHiNib, 0, sizeof(leaf120CrcRefIdLoMatchesByMotorHiNib));
-    memset(leaf120MotorScopeSamples, 0, sizeof(leaf120MotorScopeSamples));
-    memset(leaf120MotorScopeDirectMatches, 0, sizeof(leaf120MotorScopeDirectMatches));
-    memset(leaf120MotorScopeStateFixMatches, 0, sizeof(leaf120MotorScopeStateFixMatches));
-    memset(leaf120MotorScopeResidueByState, 0, sizeof(leaf120MotorScopeResidueByState));
-    memset(leaf120MotorScopeTopResidueByState, 0, sizeof(leaf120MotorScopeTopResidueByState));
-    memset(leaf120MotorScopeTopResidueCountByState, 0, sizeof(leaf120MotorScopeTopResidueCountByState));
-    memset(leaf120CrcNibbleSamples, 0, sizeof(leaf120CrcNibbleSamples));
-    memset(leaf120Ref00StateCorrectedMatchesByNibble, 0, sizeof(leaf120Ref00StateCorrectedMatchesByNibble));
-    memset(leaf120Ref00Fixed8MatchesByNibble, 0, sizeof(leaf120Ref00Fixed8MatchesByNibble));
-    memset(leaf120CrcRefIdLoMatchesByNibble, 0, sizeof(leaf120CrcRefIdLoMatchesByNibble));
-    leaf120TxExpSamples = 0U;
-    leaf120TxExpExactCrcMatches = 0U;
-    leaf120TxExpHiCtrCrcMatches = 0U;
-    leaf120TxExpLoCtrCrcMatches = 0U;
-    leaf120TxExpHiCtrB2Matches = 0U;
-    leaf120TxExpLoCtrB2Matches = 0U;
-    memset(leaf1d4CrcCandidateMatches, 0, sizeof(leaf1d4CrcCandidateMatches));
-    leaf1d4CrcSamples = 0U;
-    memset(leaf1d4IdLoResidueByClock, 0, sizeof(leaf1d4IdLoResidueByClock));
-    memset(leaf1d4IdLoTopResidueByClock, 0, sizeof(leaf1d4IdLoTopResidueByClock));
-    memset(leaf1d4IdLoTopResidueCountByClock, 0, sizeof(leaf1d4IdLoTopResidueCountByClock));
-    leaf1d4IdLoClockCorrectedMatches = 0U;
-#endif
     lastCanBusOffSeen = 0;
     lastCanStatusQueryFailuresSeen = 0;
     lastCanRpmFrameMs = 0;
@@ -7660,16 +7600,6 @@ void loop()
                 (s_leafHandshakeSentCount >= kLeafHandshakeTargetSends ||
                  s_leafHandshakeAttemptCount >= kLeafHandshakeMaxAttempts ||
                  !withinWindow)) {
-#if defined(METASENSE_LEAF_VCM_DIAGNOSTICS) && (METASENSE_LEAF_VCM_DIAGNOSTICS != 0)
-                Serial.printf("[VCM-HS] Handshake campaign complete: sent=%u attempts=%u window_ms=%lu\n",
-                              static_cast<unsigned>(s_leafHandshakeSentCount),
-                              static_cast<unsigned>(s_leafHandshakeAttemptCount),
-                              static_cast<unsigned long>(now - s_leafHandshakeStartMs));
-                Serial0.printf("[VCM-HS] Handshake campaign complete: sent=%u attempts=%u window_ms=%lu\n",
-                               static_cast<unsigned>(s_leafHandshakeSentCount),
-                               static_cast<unsigned>(s_leafHandshakeAttemptCount),
-                               static_cast<unsigned long>(now - s_leafHandshakeStartMs));
-#endif
                 s_leafHandshakeArmed = false;
                 s_leafHandshakeSent = (s_leafHandshakeSentCount > 0U);
             }
