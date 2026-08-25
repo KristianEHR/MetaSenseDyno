@@ -617,8 +617,6 @@ constexpr bool kLeafCanTxActive = (METASENSE_LEAF_CAN_TX_ENABLED != 0) &&
 constexpr bool kLeaf11aTxEnabled = (METASENSE_LEAF_11A_TX_ENABLED != 0) &&
                                    (METASENSE_LEAF_CAN_LISTEN_ONLY == 0) &&
                                    (METASENSE_LEAF_CAN_TX_ENABLED != 0);
-constexpr bool kLeafTxSuppressedForSniff = (METASENSE_STARTUP_SNIFF_CAPTURE_ENABLE != 0) ||
-                                           (METASENSE_LEAF_CAN_LISTEN_ONLY != 0);
 constexpr uint32_t kLeaf11aTxPeriodMs = METASENSE_LEAF_11A_TX_PERIOD_MS;
 
 const MetaSense::CANBus::Config kLeafCanConfig = []() {
@@ -3841,9 +3839,6 @@ void encodeLeaf11aFrame(const Leaf11aFrameFields& fields, uint8_t (&out)[8], con
 
 bool sendLeafKeepAlive11a(uint32_t nowMs, bool forceImmediate = false, uint8_t muxOverride = 0xFFU)
 {
-    if (kLeafTxSuppressedForSniff) {
-        return false;
-    }
     if (!kLeaf11aTxEnabled) {
         return false;
     }
@@ -3937,10 +3932,6 @@ bool sendLeafTorqueCommand1d4(float torqueDemandNm,
                               bool brakeBit,
                               bool gearDriveBit)
 {
-    if (kLeafTxSuppressedForSniff) {
-        return false;
-    }
-
     (void)readyBit;
     (void)brakeBit;
     (void)gearDriveBit;
@@ -4448,10 +4439,6 @@ void leafTxPacerTask(void* /*param*/)
     
     for (;;) {
         vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(kLeafTxPacerTickMs));
-
-        if (kLeafTxSuppressedForSniff) {
-            continue;
-        }
 
         const uint32_t nowMs = millis();
         const bool leafTxChecklistActive = MetaSense::CANBus::isReady() &&
@@ -5402,43 +5389,6 @@ void loop()
         const Leaf1d4CommandDecode id1d4Cmd = decodeLeaf1d4Command(canStatsDiag.last1d4CmdData,
                                                                     canStatsDiag.last1d4CmdLen);
     #if METASENSE_LEAF_1D4_SNIFF_RX_ENABLED
-        #if METASENSE_LEAF_1D4_RAW_SNIFF_ONLY
-        if (canStatsDiag.last1d4SniffLen >= 8U) {
-            Serial.printf("[VCM-1D4-SNIFF-RAW] n=%lu age=%lu len=%u data=%02X %02X %02X %02X %02X %02X %02X %02X\n",
-                          static_cast<unsigned long>(canStatsDiag.rx1d4SniffFrames),
-                          static_cast<unsigned long>(elapsedMsSafe(now, canStatsDiag.last1d4SniffMs)),
-                          static_cast<unsigned>(canStatsDiag.last1d4SniffLen),
-                          static_cast<unsigned>(canStatsDiag.last1d4SniffData[0]),
-                          static_cast<unsigned>(canStatsDiag.last1d4SniffData[1]),
-                          static_cast<unsigned>(canStatsDiag.last1d4SniffData[2]),
-                          static_cast<unsigned>(canStatsDiag.last1d4SniffData[3]),
-                          static_cast<unsigned>(canStatsDiag.last1d4SniffData[4]),
-                          static_cast<unsigned>(canStatsDiag.last1d4SniffData[5]),
-                          static_cast<unsigned>(canStatsDiag.last1d4SniffData[6]),
-                          static_cast<unsigned>(canStatsDiag.last1d4SniffData[7]));
-            Serial0.printf("[VCM-1D4-SNIFF-RAW] n=%lu age=%lu len=%u data=%02X %02X %02X %02X %02X %02X %02X %02X\n",
-                           static_cast<unsigned long>(canStatsDiag.rx1d4SniffFrames),
-                           static_cast<unsigned long>(elapsedMsSafe(now, canStatsDiag.last1d4SniffMs)),
-                           static_cast<unsigned>(canStatsDiag.last1d4SniffLen),
-                           static_cast<unsigned>(canStatsDiag.last1d4SniffData[0]),
-                           static_cast<unsigned>(canStatsDiag.last1d4SniffData[1]),
-                           static_cast<unsigned>(canStatsDiag.last1d4SniffData[2]),
-                           static_cast<unsigned>(canStatsDiag.last1d4SniffData[3]),
-                           static_cast<unsigned>(canStatsDiag.last1d4SniffData[4]),
-                           static_cast<unsigned>(canStatsDiag.last1d4SniffData[5]),
-                           static_cast<unsigned>(canStatsDiag.last1d4SniffData[6]),
-                           static_cast<unsigned>(canStatsDiag.last1d4SniffData[7]));
-        } else {
-            Serial.printf("[VCM-1D4-SNIFF-RAW] n=%lu age=%lu len=%u (waiting for full 8-byte frame)\n",
-                          static_cast<unsigned long>(canStatsDiag.rx1d4SniffFrames),
-                          static_cast<unsigned long>(elapsedMsSafe(now, canStatsDiag.last1d4SniffMs)),
-                          static_cast<unsigned>(canStatsDiag.last1d4SniffLen));
-            Serial0.printf("[VCM-1D4-SNIFF-RAW] n=%lu age=%lu len=%u (waiting for full 8-byte frame)\n",
-                           static_cast<unsigned long>(canStatsDiag.rx1d4SniffFrames),
-                           static_cast<unsigned long>(elapsedMsSafe(now, canStatsDiag.last1d4SniffMs)),
-                           static_cast<unsigned>(canStatsDiag.last1d4SniffLen));
-        }
-        #else
         const Leaf1d4CommandDecode id1d4Sniff = decodeLeaf1d4Command(canStatsDiag.last1d4SniffData,
                                                                       canStatsDiag.last1d4SniffLen);
         if (id1d4Sniff.valid) {
@@ -5486,7 +5436,6 @@ void loop()
                            static_cast<unsigned long>(elapsedMsSafe(now, canStatsDiag.last1d4SniffMs)),
                            static_cast<unsigned>(canStatsDiag.last1d4SniffLen));
         }
-        #endif
 #endif
         const int16_t id120Sbe01ForCmd = id120Decoded.torqueDemandSignedBe;
         const float beCorrNow = corrValue(s_corr120Be01Torque);
@@ -6487,65 +6436,6 @@ void loop()
                                id1dbAgeMs,
                                raw120AgeMs);
     #endif
-#if METASENSE_LEAF_120_NOISE_LOGS
-                const uint32_t tqTotal = s_vcmTqFreshCount + s_vcmTqStaleCount;
-                const uint32_t cmd120Total = s_vcm120FreshCount + s_vcm120StaleCount;
-                const float tqFreshPct = (tqTotal > 0U)
-                    ? (100.0f * static_cast<float>(s_vcmTqFreshCount) / static_cast<float>(tqTotal))
-                    : 0.0f;
-                const float cmd120FreshPct = (cmd120Total > 0U)
-                    ? (100.0f * static_cast<float>(s_vcm120FreshCount) / static_cast<float>(cmd120Total))
-                    : 0.0f;
-                const float cmdAdjMinOut = s_vcmAdjNoiseInit ? s_vcmCmdAdjMinNm : 0.0f;
-                const float cmdAdjMaxOut = s_vcmAdjNoiseInit ? s_vcmCmdAdjMaxNm : 0.0f;
-                const float cmdAdjEmaOut = s_vcmAdjNoiseInit ? s_vcmCmdAdjEmaNm : 0.0f;
-                Serial.printf("[VCM-120-NOISE] cmdRaw(min=%.2f max=%.2f ema=%.2f)"
-                              " cmdAdj(min=%.2f max=%.2f ema=%.2f pos=%lu neg=%lu zero=%lu flips=%lu out=%lu clip=%.2f db=%.2f)"
-                              " eff(ema=%.2f) fresh(tq=%lu/%lu %.1f%%,120=%lu/%lu %.1f%%)\n",
-                              s_vcmCmdRawMinNm,
-                              s_vcmCmdRawMaxNm,
-                              s_vcmCmdRawEmaNm,
-                              cmdAdjMinOut,
-                              cmdAdjMaxOut,
-                              cmdAdjEmaOut,
-                              static_cast<unsigned long>(s_vcmCmdPosCount),
-                              static_cast<unsigned long>(s_vcmCmdNegCount),
-                              static_cast<unsigned long>(s_vcmCmdZeroCount),
-                              static_cast<unsigned long>(s_vcmCmdFlipCount),
-                              static_cast<unsigned long>(s_vcmCmdOutlierCount),
-                              noiseOutlierAbsNm,
-                              noiseDbNm,
-                              s_vcmEffEmaNm,
-                              static_cast<unsigned long>(s_vcmTqFreshCount),
-                              static_cast<unsigned long>(tqTotal),
-                              tqFreshPct,
-                              static_cast<unsigned long>(s_vcm120FreshCount),
-                              static_cast<unsigned long>(cmd120Total),
-                              cmd120FreshPct);
-                Serial0.printf("[VCM-120-NOISE] cmdRaw(min=%.2f max=%.2f ema=%.2f)"
-                               " cmdAdj(min=%.2f max=%.2f ema=%.2f pos=%lu neg=%lu zero=%lu flips=%lu out=%lu clip=%.2f db=%.2f)"
-                               " eff(ema=%.2f) fresh(tq=%lu/%lu %.1f%%,120=%lu/%lu %.1f%%)\n",
-                               s_vcmCmdRawMinNm,
-                               s_vcmCmdRawMaxNm,
-                               s_vcmCmdRawEmaNm,
-                               cmdAdjMinOut,
-                               cmdAdjMaxOut,
-                               cmdAdjEmaOut,
-                               static_cast<unsigned long>(s_vcmCmdPosCount),
-                               static_cast<unsigned long>(s_vcmCmdNegCount),
-                               static_cast<unsigned long>(s_vcmCmdZeroCount),
-                               static_cast<unsigned long>(s_vcmCmdFlipCount),
-                               static_cast<unsigned long>(s_vcmCmdOutlierCount),
-                               noiseOutlierAbsNm,
-                               noiseDbNm,
-                               s_vcmEffEmaNm,
-                               static_cast<unsigned long>(s_vcmTqFreshCount),
-                               static_cast<unsigned long>(tqTotal),
-                               tqFreshPct,
-                               static_cast<unsigned long>(s_vcm120FreshCount),
-                               static_cast<unsigned long>(cmd120Total),
-                               cmd120FreshPct);
-#endif
         s_leafPreStatusLastMs = now;
     }
 #endif

@@ -336,19 +336,8 @@ bool ensureReady(uint32_t nowMs)
     s_stats.lastInitAttemptMs = nowMs;
     s_stats.ready = s_canHal.begin(s_config.txPin, s_config.rxPin);
     if (s_stats.ready) {
-#if METASENSE_CAN_SNIFF_ONLY
-        Serial.printf("[CAN-SNIFF] passive-listen active (tx=%d rx=%d)\n",
-                  s_config.txPin,
-                  s_config.rxPin);
-#else
         LeafCan::reset(s_feedback);
-#endif
         } else {
-    #if METASENSE_CAN_SNIFF_ONLY
-        Serial.printf("[CAN-SNIFF-ERR] init failed (tx=%d rx=%d)\n",
-                  s_config.txPin,
-                  s_config.rxPin);
-    #endif
     }
     return s_stats.ready;
 }
