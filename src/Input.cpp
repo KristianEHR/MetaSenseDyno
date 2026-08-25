@@ -3158,6 +3158,7 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             "\"hw_rb_plus\":%d,"
             "\"hw_rb_minus\":%d,"
             "\"hw_ssr\":%d,"
+            "\"hw_state\":\"%s\","
             "\"leaf_1d4_tx_frames\":%d,"
             "\"leaf_1d4_tx_age_ms\":%lu,"
             "\"leaf_1d4_tx_torque_nm\":%.2f,"
@@ -3252,6 +3253,7 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             MetaSense::HardwareOutputStateMachine::isRbPlusActive() ? 1 : 0,
             MetaSense::HardwareOutputStateMachine::isRbMinusActive() ? 1 : 0,
             MetaSense::HardwareOutputStateMachine::isSsrActive() ? 1 : 0,
+            MetaSense::HardwareOutputStateMachine::stateName(),  // hw_state (INIT/START/IDLE/MOTOR/DYNO)
             (int)MetaSense::CANBus::stats().tx1d4Frames,  // leaf_1d4_tx_frames
             now - MetaSense::CANBus::stats().last1d4TxMs,  // leaf_1d4_tx_age_ms
             s_leaf1d4PayloadTorqueNm,  // leaf_1d4_tx_torque_nm

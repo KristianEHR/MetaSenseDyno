@@ -1350,6 +1350,7 @@
         <div class="title" style="color: #ff8844;">🔌 INVERTER READY</div>
         <div class="reading" style="color: #ffddaa;">Inverter Fault (6b): <span id="inverterFaultValue" style="font-weight: bold; color: #ff6644;">---</span></div>
         <div class="reading" style="color: #ffddaa;">Inverter Ready: <span id="inverterStatusValue" style="font-weight: bold; color: #88ff88;">---</span></div>
+        <div class="reading" style="color: #ffddaa;">DYNO State: <span id="dynoStateValue" style="font-weight: bold; color: #88ffff;">---</span></div>
         <hr style="border: none; border-top: 1px solid #666; margin: 8px 0;"/>
         <div class="reading" style="color: #ffddaa;">Inverter HV: <span id="inverterHVValue" style="font-weight: bold; color: #88ccff;">---</span> V</div>
         <div class="reading" style="color: #ffddaa;">Inv. Temp: <span id="inverterTempValue" style="font-weight: bold; color: #ffaa88;">---</span> °C</div>
@@ -3412,6 +3413,35 @@
                   statusEl.style.color = "#88ff88";
                 } else {
                   statusEl.style.color = "#ff6644";
+                }
+              }
+            }
+
+            // Update DYNO State (INIT/START/IDLE/MOTOR/DYNO) from hw_state
+            if (telemetry.hw_state !== undefined) {
+              const dynoStateEl = document.getElementById("dynoStateValue");
+              if (dynoStateEl) {
+                const state = String(telemetry.hw_state).toUpperCase();
+                dynoStateEl.textContent = state;
+                // Color coding for states
+                switch (state) {
+                  case "INIT":
+                    dynoStateEl.style.color = "#ffffff";  // White: initializing
+                    break;
+                  case "START":
+                    dynoStateEl.style.color = "#ffff88";  // Yellow: starting
+                    break;
+                  case "IDLE":
+                    dynoStateEl.style.color = "#88ff88";  // Green: idle/ready
+                    break;
+                  case "MOTOR":
+                    dynoStateEl.style.color = "#88ffff";  // Cyan: motor running
+                    break;
+                  case "DYNO":
+                    dynoStateEl.style.color = "#ff88ff";  // Magenta: dyno active
+                    break;
+                  default:
+                    dynoStateEl.style.color = "#aaaaaa";  // Gray: unknown
                 }
               }
             }
