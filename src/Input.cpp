@@ -3246,7 +3246,7 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             data.leaf_invTempC,  // leaf_inv_temp
             data.leaf_statorTempC,  // leaf_stator_temp
             data.leaf_coolantTempC,  // leaf_coolant_temp
-            (int)leafFb.inv_status_bit,  // leaf_1da_inv_status_bit
+            (int)leafFb.invStatusBit,  // leaf_1da_inv_status_bit (Inv_StatusBit: 1=ready, 0=not ready)
             leafFb.ready ? 1 : 0,  // leaf_ready
             MetaSense::HardwareOutputStateMachine::isPrechargeActive() ? 1 : 0,
             MetaSense::HardwareOutputStateMachine::isRbPlusActive() ? 1 : 0,
