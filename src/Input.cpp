@@ -2263,17 +2263,6 @@ bool applyLoadCellNauProfile(NAU7802_Gain gain, NAU7802_SampleRate rate, const c
     loadCellCurrentRateSps = targetSps;
     loadCellCurrentGainValue = targetGain;
 
-    Serial.printf("[Input] NAU gain x%u rate %u SPS (%s), ctrl1_ok=%d ctrl2_ok=%d discard=%u/%u settle=%lums entry=%d\n",
-                  static_cast<unsigned>(targetGain),
-                  static_cast<unsigned>(targetSps),
-                  reason != nullptr ? reason : "n/a",
-                  gainBitsOk ? 1 : 0,
-                  rateBitsOk ? 1 : 0,
-                  static_cast<unsigned>(discarded),
-                  static_cast<unsigned>(targetDiscardSamples),
-                  static_cast<unsigned long>(settleMs),
-                  profile != nullptr ? 1 : 0);
-
     return gainBitsOk && rateBitsOk;
 }
 
@@ -2489,14 +2478,10 @@ void tryInitLoadCellNau()
             Serial.println("[Input] Warning: NAU internal AFE calibration failed");
         }
 
-        Serial.printf("[Input] Load-cell ADC source ready (NAU7802 @ 0x2A, ldo=%d, cal=%d)\n",
-                      ldoConfigured ? 1 : 0,
-                      internalCalOk ? 1 : 0);
         Serial0.printf("[Input] Load-cell ADC source ready (NAU7802 @ 0x2A, ldo=%d, cal=%d)\n",
                        ldoConfigured ? 1 : 0,
                        internalCalOk ? 1 : 0);
     } else {
-        Serial.println("[Input] Load-cell ADC source unavailable (NAU7802), using GPIO32 ADC fallback");
         Serial0.println("[Input] Load-cell ADC source unavailable (NAU7802), using GPIO32 ADC fallback");
     }
 }
@@ -4819,7 +4804,6 @@ void begin()
     if (kEgtOnlyI2cInitMode || kNauOnlyI2cInitMode) {
         ambientBmeReady = false;
         ambientBmeReadPending = false;
-        Serial.println("[Input] NAU-only I2C mode: skipping BME680 initialization");
         Serial0.println("[Input] NAU-only I2C mode: skipping BME680 initialization");
     } else {
         ambientBmeReady = ambientBme.begin(0x76) || ambientBme.begin(0x77);
@@ -4859,7 +4843,6 @@ void begin()
         }
     } else {
         egtDigitalReady = false;
-        Serial.println("[Input] NAU-only I2C mode: skipping MCP9600 initialization");
         Serial0.println("[Input] NAU-only I2C mode: skipping MCP9600 initialization");
     }
 
