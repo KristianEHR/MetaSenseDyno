@@ -4480,22 +4480,6 @@ static void updateLeaf1d4PayloadStateMachine(uint32_t nowMs)
     s_leaf1d4PayloadCrcCalc = computeLeaf1d4CrcConformant(data);
     s_leaf1d4PayloadCrcOk = (s_leaf1d4PayloadCrc == s_leaf1d4PayloadCrcCalc) ? 1 : 0;
     s_leaf1d4PayloadMs = nowMs;
-
-#if METASENSE_LEAF_CRC_DEEP_LOGS
-    static uint32_t s_leaf1d4PayloadUpdateLogMs = 0U;
-    if (s_leaf1d4PayloadUpdateLogMs == 0U || (nowMs - s_leaf1d4PayloadUpdateLogMs) >= 250U) {
-        Serial.printf("[1D4-PAYLOAD-UPDATE] src=%s tq=%.2f raw=%d clk=%u hv=%u rbplus=%u crc=0x%02X data=%02X %02X %02X %02X %02X %02X %02X %02X\n",
-                      usedRingBase ? "ring" : "tmpl",
-                      static_cast<double>(torqueClamped),
-                      static_cast<int>(torqueRaw),
-                      static_cast<unsigned>(hcmClock),
-                      static_cast<unsigned>(hvOkBit ? 1 : 0),
-                      static_cast<unsigned>(rbPlusActive ? 1 : 0),
-                      static_cast<unsigned>(data[7]),
-                      data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7]);
-        s_leaf1d4PayloadUpdateLogMs = nowMs;
-    }
-#endif
 }
 
 // Global counter for core-0 Serial output (tracks 0x1D4 frame transmissions)
