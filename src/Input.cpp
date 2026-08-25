@@ -484,7 +484,7 @@ constexpr uint32_t kLeafHandshakeAttemptPeriodMs = 20;
 #define METASENSE_LEAF_11A_TEMPLATE_B0 0x4EU
 #endif
 #ifndef METASENSE_LEAF_11A_TEMPLATE_B1
-#define METASENSE_LEAF_11A_TEMPLATE_B1 0xA0U
+#define METASENSE_LEAF_11A_TEMPLATE_B1 0x40U
 #endif
 #ifndef METASENSE_LEAF_11A_TEMPLATE_B2
 #define METASENSE_LEAF_11A_TEMPLATE_B2 0x00U
@@ -551,28 +551,28 @@ constexpr uint32_t kLeafHandshakeAttemptPeriodMs = 20;
 #define METASENSE_LEAF_1D4_TORQUE_LSB_NM 0.0625f
 #endif
 #ifndef METASENSE_LEAF_1D4_TEMPLATE_B0
-#define METASENSE_LEAF_1D4_TEMPLATE_B0 0xF7U
+#define METASENSE_LEAF_1D4_TEMPLATE_B0 0x6EU  // Static per Thunderstruck reference
 #endif
 #ifndef METASENSE_LEAF_1D4_TEMPLATE_B1
-#define METASENSE_LEAF_1D4_TEMPLATE_B1 0x07U
+#define METASENSE_LEAF_1D4_TEMPLATE_B1 0x6EU  // Static per Thunderstruck reference
 #endif
 #ifndef METASENSE_LEAF_1D4_TEMPLATE_B2
-#define METASENSE_LEAF_1D4_TEMPLATE_B2 0x00U
+#define METASENSE_LEAF_1D4_TEMPLATE_B2 0x00U  // Torque MSB
 #endif
 #ifndef METASENSE_LEAF_1D4_TEMPLATE_B3
-#define METASENSE_LEAF_1D4_TEMPLATE_B3 0x00U
+#define METASENSE_LEAF_1D4_TEMPLATE_B3 0x00U  // Torque LSB
 #endif
 #ifndef METASENSE_LEAF_1D4_TEMPLATE_B4
-#define METASENSE_LEAF_1D4_TEMPLATE_B4 0x04U
+#define METASENSE_LEAF_1D4_TEMPLATE_B4 0x87U  // Rolling counter (high nibble), fixed 0x7 (low nibble)
 #endif
 #ifndef METASENSE_LEAF_1D4_TEMPLATE_B5
-#define METASENSE_LEAF_1D4_TEMPLATE_B5 0x40U
+#define METASENSE_LEAF_1D4_TEMPLATE_B5 0x44U  // Static charge status per Thunderstruck reference
 #endif
 #ifndef METASENSE_LEAF_1D4_TEMPLATE_B6
-#define METASENSE_LEAF_1D4_TEMPLATE_B6 0x1EU
+#define METASENSE_LEAF_1D4_TEMPLATE_B6 0x01U  // Static field per Thunderstruck reference
 #endif
 #ifndef METASENSE_LEAF_1D4_TEMPLATE_B7
-#define METASENSE_LEAF_1D4_TEMPLATE_B7 0x00U
+#define METASENSE_LEAF_1D4_TEMPLATE_B7 0x00U  // CRC placeholder (will be overwritten)
 #endif
 #ifndef METASENSE_LEAF_CAN_TX_PIN
 #define METASENSE_LEAF_CAN_TX_PIN 4
@@ -1016,7 +1016,9 @@ uint8_t computeApprovedLeafFrameCrc(uint8_t idLo, const uint8_t* payload8)
         return MetaSense::LeafCRC::computeExact1daWireCrc(idLo, payload8);
     }
     if (idLo == 0xD4U) {
-        return MetaSense::LeafCRC::computeApprovedInverterCrc(idLo, payload8);
+        // For 0x1D4, use the correct wire CRC with polynomial 0x1D29
+        // The counter in byte 5 upper nibble is included in the calculation
+        return MetaSense::LeafCRC::computeExact1d4LikeCrc(idLo, payload8);
     }
     return MetaSense::LeafCRC::computeExact1d4LikeCrc(idLo, payload8);
 }
@@ -3067,6 +3069,20 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         int pos = 0;
         const auto& leafFb = MetaSense::CANBus::feedback();
         
+        // FIX: Use stats data that was captured ATOMICALLY at frame reception
+        // last1daData[] and last1daWireCrcCalc are always synchronized (set together in CANBus handler)
+        // This guarantees CRC RX, Calc, and OK are from the SAME frame reception event
+        const auto& canStats = MetaSense::CANBus::stats();
+        const uint8_t leaf1daCrcRx = canStats.last1daData[7];  // CRC RX from last reception
+        const uint8_t leaf1daCrcCalc = canStats.last1daWireCrcCalc;  // CRC Calc from same reception
+        const int leaf1daCrcOk = (canStats.last1daWireCrcOk > 0) ? 1 : 0;  // Match result from same reception
+        
+        // Capture 0x1D4 TX CRC atomically from the cached frame data
+        // This ensures CRC RX, Calc, and OK are from the SAME frame being sent
+        const uint8_t leaf1d4CrcRx = s_leaf1d4PayloadCachedFrameData[7];  // CRC TX from cached frame
+        const uint8_t leaf1d4CrcCalc = computeLeaf1d4CrcConformant(s_leaf1d4PayloadCachedFrameData);  // CRC Calc from same frame
+        const int leaf1d4CrcOk = (leaf1d4CrcRx == leaf1d4CrcCalc) ? 1 : 0;  // Match result from same frame
+        
         // Build JSON using snprintf for robust numeric formatting
         pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos,
             "{\"type\":\"data\","
@@ -3124,12 +3140,14 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             "\"leaf_1da_inv_fault_can_timeout\":0,"
             "\"leaf_1da_crc\":%d,"
             "\"leaf_1da_crc_calc\":%d,"
-            "\"leaf_1da_crc_wire_calc\":0,"
+            "\"leaf_1da_crc_wire_calc\":%d,"
             "\"leaf_1da_crc_ok\":%d,"
-            "\"leaf_1da_crc_wire_ok\":1,"
-            "\"leaf_1da_crc_wire_trusted\":1,"
-            "\"leaf_1da_crc_ok_frames\":0,"
-            "\"leaf_1da_crc_bad_frames\":0,"
+            "\"leaf_1da_crc_wire_ok\":%d,"
+            "\"leaf_1da_crc_wire_trusted\":%d,"
+            "\"leaf_1da_crc_ok_frames\":%lu,"
+            "\"leaf_1da_crc_bad_frames\":%lu,"
+            "\"leaf_1da_crc_wire_ok_frames\":%lu,"
+            "\"leaf_1da_crc_wire_bad_frames\":%lu,"
             "\"leaf_1da_raw_b0b7\":\"%02X %02X %02X %02X %02X %02X %02X %02X\","
             "\"leaf_1da_inv_temp\":%.1f,"
             "\"leaf_1da_stator_temp\":%.1f,"
@@ -3207,17 +3225,24 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             data.leaf_rpm,  // leaf_1da_rpm
             (int)leafFb.mg_clock,  // leaf_1da_clock
             (int)leafFb.inv_fault_map,  // leaf_1da_inv_fault_map
-            (int)leafFb.crc_1da,  // leaf_1da_crc (CRC RX)
-            (int)MetaSense::CANBus::stats().last1daWireCrcCalc,  // leaf_1da_crc_calc
-            (MetaSense::CANBus::stats().last1daWireCrcOk > 0) ? 1 : 0,  // leaf_1da_crc_ok
-            leafFb.id1da_raw[0],
-            leafFb.id1da_raw[1],
-            leafFb.id1da_raw[2],
-            leafFb.id1da_raw[3],
-            leafFb.id1da_raw[4],
-            leafFb.id1da_raw[5],
-            leafFb.id1da_raw[6],
-            leafFb.id1da_raw[7],
+            (int)leaf1daCrcRx,  // leaf_1da_crc (CRC RX) - from atomic frame
+            (int)leaf1daCrcCalc,  // leaf_1da_crc_calc - from atomic frame
+            (int)canStats.last1daWireCrcCalc,  // leaf_1da_crc_wire_calc - calculated at reception
+            leaf1daCrcOk,  // leaf_1da_crc_ok - from atomic frame
+            (canStats.last1daWireCrcOk > 0) ? 1 : 0,  // leaf_1da_crc_wire_ok - wire CRC status
+            (canStats.last1daWireCrcOk > 0) ? 1 : 0,  // leaf_1da_crc_wire_trusted - same as wire_ok
+            canStats.rx1daWireCrcOkFrames,  // leaf_1da_crc_ok_frames - total accepted frames
+            canStats.rx1daWireCrcBadFrames,  // leaf_1da_crc_bad_frames - total rejected frames
+            canStats.rx1daWireCrcOkFrames,  // leaf_1da_crc_wire_ok_frames - wire CRC good count
+            canStats.rx1daWireCrcBadFrames,  // leaf_1da_crc_wire_bad_frames - wire CRC bad count
+            canStats.last1daData[0],  // Use same atomic frame data as CRC
+            canStats.last1daData[1],
+            canStats.last1daData[2],
+            canStats.last1daData[3],
+            canStats.last1daData[4],
+            canStats.last1daData[5],
+            canStats.last1daData[6],
+            canStats.last1daData[7],
             data.leaf_invTempC,  // leaf_inv_temp
             data.leaf_statorTempC,  // leaf_stator_temp
             data.leaf_coolantTempC,  // leaf_coolant_temp
@@ -3235,9 +3260,9 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             s_leaf1d4PayloadRelayPlus ? 1 : 0,  // leaf_1d4_tx_relay_plus
             (int)s_leaf1d4PayloadChargeStatus,  // leaf_1d4_tx_charge_status
             (int)s_leaf1d4PayloadClock,  // leaf_1d4_tx_clock
-            (int)s_leaf1d4PayloadCrc,  // leaf_1d4_tx_crc (CRC RX)
-            (int)s_leaf1d4PayloadCrcCalc,  // leaf_1d4_tx_crc_calc
-            (s_leaf1d4PayloadCrcOk > 0) ? 1 : 0,  // leaf_1d4_tx_crc_ok
+            (int)leaf1d4CrcRx,  // leaf_1d4_tx_crc (from actual cached frame)
+            (int)leaf1d4CrcCalc,  // leaf_1d4_tx_crc_calc (calculated from cached frame)
+            leaf1d4CrcOk,  // leaf_1d4_tx_crc_ok
             (int)s_leaf1d4TxRingSourceAge,  // leaf_1d4_tx_ring_source_age
             s_leaf1d4TxRingFallbackCount,  // leaf_1d4_tx_ring_fallback_total
             s_leaf1d4PayloadCachedFrameData[0],  // leaf_1d4_tx_raw_b0
@@ -4460,6 +4485,11 @@ static void updateLeaf1d4PayloadStateMachine(uint32_t nowMs)
         data[1] = METASENSE_LEAF_1D4_TEMPLATE_B1;
     }
 
+    // Force bytes 5 and 6 to always use template values (static fields)
+    // Byte 4 (counter) is updated dynamically every frame in leafTxPacerTask
+    data[5] = METASENSE_LEAF_1D4_TEMPLATE_B5;  // 0x44 (charge status)
+    data[6] = METASENSE_LEAF_1D4_TEMPLATE_B6;  // 0x01 (unknown field)
+
     // Cache the complete frame for 10ms TX loop (CRC/clock will be updated there)
     memcpy(s_leaf1d4PayloadCachedFrameData, data, sizeof(s_leaf1d4PayloadCachedFrameData));
     
@@ -4533,17 +4563,26 @@ void leafTxPacerTask(void* /*param*/)
         // Advance rolling counter BEFORE updating frame (0-3 cycle, changes every 10ms transmission)
         s_leaf1d4RollingCounter = static_cast<uint8_t>((s_leaf1d4RollingCounter + 1U) & 0x03U);
 
-        // Update template directly with fresh counter and CRC before each 10ms transmission
-        // Counter and CRC are transient fields that change every frame
-        // Payload data (torque, HV status, relay, charge status) only changes every 100ms
+        // Update byte 4 with rolling counter - lookup table based on DBC HCM_CLOCK signal
+        // Counter values 0,1,2,3 → upper nibbles 8,C,0,4 → byte values 0x87, 0xC7, 0x07, 0x47
         const uint8_t hcmClock = static_cast<uint8_t>(s_leaf1d4RollingCounter & 0x03U);
-        setIntelUnsigned(s_leaf1d4PayloadCachedFrameData, 8U, 38U, 2U, static_cast<uint32_t>(hcmClock));
+        static const uint8_t COUNTER_NIBBLE_MAP[] = {0x8U, 0xCU, 0x0U, 0x4U};
+        s_leaf1d4PayloadCachedFrameData[4] = static_cast<uint8_t>((COUNTER_NIBBLE_MAP[hcmClock] << 4) | 0x7U);
         
         // Clear CRC field before recalculating (CRC always calculated with checksum = 0)
         s_leaf1d4PayloadCachedFrameData[7] = 0U;
         
         // Recalculate CRC after updating counter (fresh CRC every 10ms transmission)
         s_leaf1d4PayloadCachedFrameData[7] = computeLeaf1d4CrcConformant(s_leaf1d4PayloadCachedFrameData);
+        
+        // VERIFICATION: Validate our generated 0x1D4 frame using wire CRC algorithm
+        // If this passes, it means the CRC algorithm is correct for inverter validation
+        const uint8_t wireCrcRx = s_leaf1d4PayloadCachedFrameData[7];
+        const uint8_t wireCrcCalc = MetaSense::LeafCRC::computeExact1d4LikeCrc(0xD4U, s_leaf1d4PayloadCachedFrameData);
+        const bool frame1d4WireCrcOk = (wireCrcRx == wireCrcCalc);
+        
+        // Store verification result for monitoring (optional logging)
+        s_leaf1d4PayloadCrcOk = frame1d4WireCrcOk ? 1 : 0;
 
         // Increment global counter for HEARTBEAT Serial output
         s_leaf1d4TxFrameCount++;

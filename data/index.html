@@ -1541,7 +1541,7 @@
     // Chart handle.
     let modalDynoChart = null;
     // Keep UI updates bounded so stale websocket frames do not create visible lag.
-    const kUiMinDataFrameMs = 16;
+    const kUiMinDataFrameMs = 50;  // Increased from 16ms for better stability
     const kUiSlowPanelMinFrameMs = 200;
     const kRunChartMinUpdateMs = 120;
     let lastUiDataFrameMs = 0;
@@ -1744,6 +1744,21 @@
       const id1daCrcRx = Number(telemetry.leaf_1da_crc);
       const id1daCrcCalc = Number(telemetry.leaf_1da_crc_calc);
       const id1daCrcOk = Number(telemetry.leaf_1da_crc_ok);
+      
+      // Wire CRC values from device stats
+      const id1daCrcCalcWire = Number(telemetry.leaf_1da_crc_wire_calc);
+      const id1daCrcRxWire = (Number.isFinite(id1daCrcRx) && id1daCrcRx !== 0)
+        ? id1daCrcRx
+        : id1daCrcCalcWire;
+      const id1daCrcTrusted = Number(telemetry.leaf_1da_crc_wire_trusted);
+      const id1daCrcWireOk = Number(telemetry.leaf_1da_crc_wire_ok);
+      const id1daCrcStatusWire = (Number.isFinite(id1daCrcWireOk) && id1daCrcWireOk !== -1)
+        ? id1daCrcWireOk
+        : (Number.isFinite(id1daCrcTrusted) ? id1daCrcTrusted : -1);
+      const id1daCrcOkFrames = Number(telemetry.leaf_1da_crc_ok_frames);
+      const id1daCrcBadFrames = Number(telemetry.leaf_1da_crc_bad_frames);
+      const id1daCrcWireOkFrames = Number(telemetry.leaf_1da_crc_wire_ok_frames);
+      const id1daCrcWireBadFrames = Number(telemetry.leaf_1da_crc_wire_bad_frames);
 
       // Extract 0x1D4 TX fields
       const id1d4TxFrames = Number(telemetry.leaf_1d4_tx_frames);
@@ -1804,6 +1819,7 @@
       setText("canMon1daFaultMap", `${fmtInt(id1daFaultMap)} (0x${fmtHexByte(id1daFaultMap)} / ${fmtBin6(id1daFaultMap)})`);
       setText("canMon1daBlinky", fmtYesNo(id1daStatusBit));
       setText("canMon1daCrc", `0x${fmtHexByte(id1daCrcRx)} / 0x${fmtHexByte(id1daCrcCalc)} / ${id1daCrcOk === 1 ? "OK" : "BAD"}`);
+      setText("canMon1daCrcStats", `${fmtInt(id1daCrcWireOkFrames)} / ${fmtInt(id1daCrcWireBadFrames)}`);
       setText("canMonInvTemp", fmt(inv, 1));
       setText("canMonStatorTemp", fmt(stat, 1));
       setText("canMonCoolantTemp", fmt(cool, 1));

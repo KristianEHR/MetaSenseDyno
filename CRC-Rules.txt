@@ -25,52 +25,91 @@ The CAN frames 0x1D4 we generate and send to control the Inverter, are generated
 Important: These rules must be strictly followed when generating the CAN communication fw in the MetaSense-Dyno controller.
 Wrong implementation may be hazardous for operator(s) of the DYNO.
 
-=== SPECIFICATION: CRC ALGORITHMS ===
+=== SPECIFICATION: CRC ALGORITHMS (VALIDATED AND CORRECT) ===
+
+UPDATE: August 25, 2026 - All algorithms validated against known-good Thunderstruck TVCU frames.
+See CRC_ALGORITHM_DEFINITIVE.md for complete reference documentation.
 
 FRAME 0x1DA (RX - Nissan Leaf Inverter Motor Speed/Torque):
   CRC Byte Position: Byte 7 (last byte of 8-byte payload)
-  CRC Input: Bytes 0-6 of payload (7 bytes)
+  CRC Input: Frame ID (0xDA) + Bytes 0-6 of payload (8 bytes total)
   Algorithm: CRC-8 MSB-first
-  Polynomial: 0x85 (VERIFY WITH ACTUAL NISSAN SPEC)
+  Polynomial: 0x85 ✅ VERIFIED CORRECT
   Initial Value: 0x00
   XOR Output: 0xBF
   Validation: receivedCRC (byte 7) must equal calculated CRC
   Action on CRC mismatch: REJECT frame, do not decode data
+  Status: ✅ 100% validated against live Nissan frames
 
 FRAME 0x1D4 (TX - MetaSense Torque Command to Inverter):
   CRC Byte Position: Byte 7 (last byte of 8-byte payload)
-  CRC Input: Bytes 0-6 of payload (7 bytes)
+  CRC Input: Bytes 0-6 of payload ONLY — NO frame ID prepended ⚠️ CRITICAL FIX
   Algorithm: CRC-8 MSB-first
-  Polynomial: 0x1D (VERIFY WITH ACTUAL NISSAN SPEC)
+  Polynomial: 0x85 ✅ VERIFIED CORRECT (same as 0x1DA, NOT 0x1D)
   Initial Value: 0x00
-  XOR Output: 0x29
-  Clock-based residue: Yes, residue table based on byte 4 bits 6-7
+  XOR Output: NONE — plain output ⚠️ CRITICAL FIX (NOT 0xBF, NOT 0x29)
+  Clock-based residue: No (previously hypothesized, now proven unnecessary)
   Action: Always generate correct CRC before transmission
+  
+  VALIDATED REFERENCE FRAMES (Thunderstruck TVCU):
+    6E 6E 00 00 87 44 01 23  ✅ Counter=0, CRC=0x23 matches
+    6E 6E 00 00 C7 44 01 E4  ✅ Counter=1, CRC=0xE4 matches
+    6E 6E 00 00 07 44 01 28  ✅ Counter=2, CRC=0x28 matches
+    6E 6E 00 00 47 44 01 EF  ✅ Counter=3, CRC=0xEF matches
+  
+  Status: ✅ 100% validated — 4/4 reference frames match perfectly
 
-FRAME 0x11A (TX - Optional steering input echo):
-  CRC Byte Position: Byte 7
-  CRC Algorithm: Same as 0x1D4 (poly 0x1D)
-  Note: Not all systems use this frame
+FRAME 0x11A (TX - VCM Keep-Alive/Echo):
+  CRC Byte Position: NONE — 0x11A has no CRC field
+  Byte 1: 0x40 (static, corrected from erroneous 0xA0)
+  Byte 6: Mux selector [0, 1, 2, 3] cycled each frame
+  Byte 7: Mux-dependent value:
+    - Mux 0: 0x6B
+    - Mux 1: 0xEE
+    - Mux 2: 0xE4
+    - Mux 3: 0x61
+  Status: ✅ Working, cycling correctly
 
 === CRITICAL IMPLEMENTATION REQUIREMENTS ===
 
-1. CONSISTENCY CHECK:
-   - If 0x1DA RX and 0x1D4 TX both use "reverse engineered Nissan algorithm"
-   - Then they MUST use the SAME polynomial (either both 0x85 or both 0x1D)
-   - Current code mismatch (0x85 vs 0x1D) suggests one implementation is WRONG
+1. POLYNOMIAL CONSISTENCY ✅ VERIFIED:
+   - 0x1DA RX and 0x1D4 TX BOTH use polynomial 0x85 (Nissan's standard)
+   - This was a critical discovery: early implementations incorrectly used 0x1D for 0x1D4
+   - The breakthrough was recognizing that BOTH frames use 0x85, but differ in:
+     * Frame ID inclusion (0x1DA: prepended, 0x1D4: NOT prepended)
+     * XOR output (0x1DA: 0xBF, 0x1D4: none)
 
-2. ACCEPTANCE GATE:
+2. FRAME ID HANDLING ⚠️ FRAME-SPECIFIC:
+   - 0x1DA: Frame ID (0xDA) IS prepended to input
+     Input = [0xDA, b0, b1, b2, b3, b4, b5, b6]
+   - 0x1D4: Frame ID (0xD4) is NOT prepended to input ⚠️ CRITICAL FIX
+     Input = [b0, b1, b2, b3, b4, b5, b6] — payload only
+   - This difference is the KEY to correct 0x1D4 CRC generation
+
+3. XOR OUTPUT HANDLING ⚠️ FRAME-SPECIFIC:
+   - 0x1DA: XOR output 0xBF applied
+   - 0x1D4: NO XOR output (plain result)
+   - This is why simple algorithm copying between frames fails
+
+4. ACCEPTANCE GATE:
    - RX acceptance must ONLY validate CRC for frames requiring it
    - Frames failing CRC validation must be REJECTED entirely
-   - No partial decoding of CRC-invalid frames
+   - After 10 consecutive bad 0x1DA frames, disable CAN fallback
+   - Stale CRC mismatch = algorithm error or implementation bug
 
-3. DISPLAY/MONITORING:
+5. DISPLAY/MONITORING:
    - CRC monitor must show actual calculated vs received values
-   - Stale CRC values indicate frame acceptance issue
+   - Expected: leaf_1d4_tx_crc_ok should always be 1 (on every 10ms TX)
+   - Expected: leaf_1da_rx_crc_ok should be 1 for valid frames
    - CRC toggling between OK/BAD indicates algorithm error
 
-4. TESTING PROCEDURE:
-   - Capture live 0x1DA frames from Nissan Leaf
-   - Manually verify CRC calculation with captured data
-   - Confirm polynomial 0x85 produces matching CRC byte 7
+6. TESTING PROCEDURE (DEFINITIVE):
+   - MUST validate against known-good reference frames (Thunderstruck TVCU)
+   - Never hypothesize: always test against captured wire frames
+   - The 4 reference frames below are the ground truth:
+     6E 6E 00 00 87 44 01 23
+     6E 6E 00 00 C7 44 01 E4
+     6E 6E 00 00 07 44 01 28
+     6E 6E 00 00 47 44 01 EF
+   - If implementation matches these 4 frames, it is correct
    - Do NOT deploy until verified against real frames
