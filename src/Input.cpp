@@ -4348,52 +4348,10 @@ void updateVcuDebug(bool simMode,
 
 float computeTorqueStepSequence(uint32_t nowMs, bool torqueGateArmed, bool inverterStatusClear)
 {
-#if METASENSE_TORQUE_STEP_SEQUENCER_ENABLED
-    if (!torqueGateArmed || !inverterStatusClear) {
-        s_torqueStepSeqNm = 0.0f;
-        s_torqueStepSeqDir = 1;
-        s_torqueStepSeqLastMs = nowMs;
-        return 0.0f;
-    }
-
-    if (s_torqueStepSeqLastMs == 0U) {
-        s_torqueStepSeqLastMs = nowMs;
-    }
-
-    if ((nowMs - s_torqueStepSeqLastMs) >= METASENSE_TORQUE_STEP_SEQUENCER_DWELL_MS) {
-        s_torqueStepSeqLastMs = nowMs;
-        if (s_torqueStepSeqDir > 0) {
-            if (s_torqueStepSeqNm < METASENSE_TORQUE_STEP_SEQUENCER_MAX_NM) {
-                s_torqueStepSeqNm += METASENSE_TORQUE_STEP_SEQUENCER_STEP_NM;
-                if (s_torqueStepSeqNm >= METASENSE_TORQUE_STEP_SEQUENCER_MAX_NM) {
-                    s_torqueStepSeqNm = METASENSE_TORQUE_STEP_SEQUENCER_MAX_NM;
-                    s_torqueStepSeqDir = -1;
-                }
-            } else {
-                s_torqueStepSeqDir = -1;
-                s_torqueStepSeqNm = METASENSE_TORQUE_STEP_SEQUENCER_MAX_NM;
-            }
-        } else {
-            if (s_torqueStepSeqNm > METASENSE_TORQUE_STEP_SEQUENCER_STEP_NM) {
-                s_torqueStepSeqNm -= METASENSE_TORQUE_STEP_SEQUENCER_STEP_NM;
-                if (s_torqueStepSeqNm <= 0.0f) {
-                    s_torqueStepSeqNm = 0.0f;
-                    s_torqueStepSeqDir = 1;
-                }
-            } else {
-                s_torqueStepSeqNm = 0.0f;
-                s_torqueStepSeqDir = 1;
-            }
-        }
-    }
-
-    return s_torqueStepSeqNm;
-#else
     (void)nowMs;
     (void)torqueGateArmed;
     (void)inverterStatusClear;
     return 0.0f;
-#endif
 }
 
 // ============================================================================
@@ -5648,18 +5606,7 @@ void loop()
             ++leaf1d4IdLoClockCorrectedMatches;
         }
 
-#if METASENSE_LEAF_CRC_CANDIDATE_HUNT
-        const uint32_t crc1d4CandidateMask = computeLeaf1d4CrcCandidateMask(canStatsDiag.last1d4SniffData,
-                                                                             canStatsDiag.last1d4SniffLen);
         ++leaf1d4CrcSamples;
-        for (uint8_t bit = 0U; bit < kLeaf1d4CrcCandidateCount; ++bit) {
-            if ((crc1d4CandidateMask & static_cast<uint32_t>(1U << bit)) != 0U) {
-                ++leaf1d4CrcCandidateMatches[bit];
-            }
-        }
-#else
-        ++leaf1d4CrcSamples;
-#endif
 
         s_corrLast1d4SniffFrames = canStatsDiag.rx1d4SniffFrames;
     }
@@ -6858,21 +6805,11 @@ void loop()
             if (!s_leafCanPartnerSeen) {
                 if (s_leafRxAwaitPartnerLastMs == 0U ||
                     (now - s_leafRxAwaitPartnerLastMs) >= kLeafRxAwaitPartnerLogMs) {
-#if METASENSE_LEAF_VCM_RX_WARN_LOGS
-                    Serial.println("[VCM-RX] Waiting for Leaf partner frame 1DA (RPM) not seen yet");
-                    Serial0.println("[VCM-RX] Waiting for Leaf partner frame 1DA (RPM) not seen yet");
-#endif
+
                     s_leafRxAwaitPartnerLastMs = now;
                 }
             } else if (s_leafRxWarnLastMs == 0U || (now - s_leafRxWarnLastMs) >= CAN_RX_MISSING_LOG_PERIOD_MS) {
-#if METASENSE_LEAF_VCM_RX_WARN_LOGS
-                Serial.printf("[VCM-RX] Missing/old required frame: 1DA=%d age_ms(1DA=%lu)\n",
-                              id1daFresh ? 0 : 1,
-                              static_cast<unsigned long>(elapsedMsSafe(now, leafFbDiag.rpm_update_ms)));
-                Serial0.printf("[VCM-RX] Missing/old required frame: 1DA=%d age_ms(1DA=%lu)\n",
-                               id1daFresh ? 0 : 1,
-                               static_cast<unsigned long>(elapsedMsSafe(now, leafFbDiag.rpm_update_ms)));
-#endif
+
                 s_leafRxWarnLastMs = now;
             }
         } else {
@@ -7183,76 +7120,8 @@ void loop()
 #endif
 
 
-    #if METASENSE_LEAF_120_TX_COMMIT_ENABLED == 0
-        // Keep passive 0x1D4 TX responsive in either manual or auto mode.
-        if ((now - lastLeafTxMs) >= CAN_TX_PERIOD_MS) {
-            const bool hvOkPreview = tele.vcuReady;
-            const bool inverterReadyPreview = tele.leaf_invReady;
-            const bool brakePreview = (tele.mode == MetaSense::DynoMode::Brake);
-            const bool gearDrivePreview = (tele.rpmTarget > 100.0f) || tele.recording;
-            const float uiTorquePreview = getLeafUiTorqueDemandNmInternal();
-            const float torquePreview = uiTorquePreview;
-            const bool sentPreview = MetaSense::Input::sendLeafTorqueCommand1d4(torquePreview,
-                                            inverterReadyPreview,
-                                            hvOkPreview,
-                                            brakePreview,
-                                            gearDrivePreview);
-            logLeaf1d4ShadowFrame(now,
-                      torquePreview,
-                      inverterReadyPreview,
-                      hvOkPreview,
-                      brakePreview,
-                      gearDrivePreview,
-                      sentPreview);
-            lastLeafTxMs = now;
-        }
-    #endif
-
         bool skipTxForGapTest = false;
-#if METASENSE_LEAF_TX_GAP_TEST_ENABLE
-        if (s_leafVcmState == LeafVcmBringupState::Ready) {
-            if (s_leafTxGapTestCycleStartMs == 0U) {
-                s_leafTxGapTestCycleStartMs = now;
-                s_leafTxGapTestActive = false;
-                s_leafTxGapTestLoggedStart = false;
-                s_leafTxGapTestLoggedEnd = false;
-            }
 
-            const uint32_t elapsedCycleMs = now - s_leafTxGapTestCycleStartMs;
-            if (elapsedCycleMs >= METASENSE_LEAF_TX_GAP_TEST_PERIOD_MS) {
-                s_leafTxGapTestCycleStartMs = now;
-                s_leafTxGapTestActive = true;
-                s_leafTxGapTestLoggedStart = false;
-                s_leafTxGapTestLoggedEnd = false;
-            }
-
-            if (s_leafTxGapTestActive) {
-                const uint32_t gapElapsedMs = now - s_leafTxGapTestCycleStartMs;
-                if (gapElapsedMs < METASENSE_LEAF_TX_GAP_TEST_DURATION_MS) {
-                    skipTxForGapTest = true;
-                    if (!s_leafTxGapTestLoggedStart) {
-                        Serial.printf("[VCM-GAPTEST] Pausing 0x120 TX for %lu ms to provoke timeout bit\n",
-                                      static_cast<unsigned long>(METASENSE_LEAF_TX_GAP_TEST_DURATION_MS));
-                        Serial0.printf("[VCM-GAPTEST] Pausing 0x120 TX for %lu ms to provoke timeout bit\n",
-                                       static_cast<unsigned long>(METASENSE_LEAF_TX_GAP_TEST_DURATION_MS));
-                        s_leafTxGapTestLoggedStart = true;
-                    }
-                } else {
-                    s_leafTxGapTestActive = false;
-                    if (!s_leafTxGapTestLoggedEnd) {
-                        Serial.println("[VCM-GAPTEST] 0x120 TX pause ended");
-                        Serial0.println("[VCM-GAPTEST] 0x120 TX pause ended");
-                        s_leafTxGapTestLoggedEnd = true;
-                    }
-                }
-            }
-        } else {
-            s_leafTxGapTestCycleStartMs = now;
-            s_leafTxGapTestActive = false;
-            s_leafTxGapTestLoggedStart = false;
-            s_leafTxGapTestLoggedEnd = false;
-        }
-#endif
 
         if (!skipTxForGapTest) {
             s_leafTxPacerTorqueNm = torqueToSend;
