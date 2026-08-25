@@ -422,11 +422,6 @@ static bool noteSniffId(uint32_t id, const uint8_t* data, uint8_t len)
     return false;
 }
 
-static bool isSuppressedIdentifierId(uint32_t id)
-{
-    return id == 0x120U || id == 0x1DCU || id == 0x55BU || id == 0x50BU || id == 0x05BU;
-}
-
 static void printFrameIdentifierReport(uint32_t nowMs)
 {
     static uint32_t lastReportMs = 0U;
@@ -439,7 +434,7 @@ static void printFrameIdentifierReport(uint32_t nowMs)
 
     uint32_t active = 0U;
     for (size_t i = 0U; i < kSniffIdSlots; ++i) {
-        if (!s_sniffIdEntries[i].seen || isSuppressedIdentifierId(s_sniffIdEntries[i].id)) {
+        if (!s_sniffIdEntries[i].seen) {
             continue;
         }
         const uint32_t deltaFrames = s_sniffIdEntries[i].frames - s_sniffIdEntries[i].lastReportedFrames;
@@ -660,7 +655,7 @@ bool isAcceptedLeafId(uint32_t id)
 bool isRxIdExcluded(uint32_t id)
 {
     // Closed RX policy: explicitly ignore command/echo families.
-    if (id == 0x120U || id == 0x11AU) {
+    if (id == 0x11AU) {
         return true;
     }
 #if METASENSE_STARTUP_SNIFF_CAPTURE_ENABLE
@@ -715,7 +710,7 @@ static void logTargetRxFrame(uint32_t id, const uint8_t* data, uint8_t len, bool
     if (data == nullptr) {
         return;
     }
-    if (id != 0x50BU && id != 0x11AU) {
+    if (id != 0x11AU) {
         return;
     }
 

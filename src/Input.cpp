@@ -343,10 +343,7 @@ static const uint32_t CAN_1DA_CRC_BAD_STREAK_LIMIT = 10;
 #ifndef METASENSE_LEAF_120_TX_COMMIT_ENABLED
 #define METASENSE_LEAF_120_TX_COMMIT_ENABLED 0
 #endif
-#ifndef METASENSE_LEAF_120_ANALYSIS_ENABLE
-// Legacy 0x120 reverse-engineering/analysis path. Keep disabled for 1D4-sniff mode.
-#define METASENSE_LEAF_120_ANALYSIS_ENABLE 0
-#endif
+
 #ifndef METASENSE_LEAF_120_STARTUP_ZERO_TORQUE
 // Hold 0x120 torque demand at zero during initial HV bring-up so the inverter
 // can precharge cleanly and clear its error bits before any torque is applied.
@@ -5320,229 +5317,6 @@ void loop()
     static uint32_t s_cmdZeroBiasN = 0U;
 
     const MetaSense::CANBus::Stats& canStatsDiag = MetaSense::CANBus::stats();
-    if ((METASENSE_LEAF_120_ANALYSIS_ENABLE != 0) &&
-        canStatsDiag.rx120Frames != s_corrLast120Frames &&
-        canStatsDiag.last120Len >= 2U) {
-        const float torqueNm = leafFbDiag.torque_nm;
-        const Leaf120CommandDecode id120FrameDecoded = decodeLeaf120Command(canStatsDiag.last120Data,
-                                                                            canStatsDiag.last120Len);
-        const uint8_t id120FrameB2 = id120FrameDecoded.unknown120_2;
-        const int16_t id120FrameCmdRaw = id120FrameDecoded.torqueDemandSignedBe;
-        constexpr int16_t kLeaf120DirectionThresholdRaw = 64;
-        if (id120FrameCmdRaw > kLeaf120DirectionThresholdRaw) {
-            ++leaf120B2PosSamples;
-            ++leaf120B2PosCounts[id120FrameB2];
-        } else if (id120FrameCmdRaw < -kLeaf120DirectionThresholdRaw) {
-            ++leaf120B2NegSamples;
-            ++leaf120B2NegCounts[id120FrameB2];
-        } else {
-            ++leaf120B2ZeroSamples;
-            ++leaf120B2ZeroCounts[id120FrameB2];
-        }
-        if (fabsf(tele.brakeTorqueNm) > 1.0f) {
-            ++leaf120B2BrakeSamples;
-            ++leaf120B2BrakeCounts[id120FrameB2];
-        }
-        const uint32_t crcCandidateMask = computeLeaf120CrcCandidateMask(canStatsDiag.last120Data,
-                                          canStatsDiag.last120Len);
-        const bool brakeActive120 = fabsf(tele.brakeTorqueNm) > 1.0f;
-        const uint8_t brakeBucket120 = brakeActive120 ? 1U : 0U;
-        constexpr uint8_t kLeaf120CmdStateZero = 0U;
-        constexpr uint8_t kLeaf120CmdStateMotor = 1U;
-        constexpr uint8_t kLeaf120CmdStateRegen = 2U;
-        uint8_t cmdState120 = kLeaf120CmdStateZero;
-        if (id120FrameCmdRaw > kLeaf120DirectionThresholdRaw) {
-            cmdState120 = kLeaf120CmdStateMotor;
-        } else if (id120FrameCmdRaw < -kLeaf120DirectionThresholdRaw) {
-            cmdState120 = kLeaf120CmdStateRegen;
-        }
-        const uint8_t modeNibble120 = static_cast<uint8_t>((canStatsDiag.last120Data[2] >> 4U) & 0x0FU);
-        const bool cmdStateIsMotor = (cmdState120 == kLeaf120CmdStateMotor);
-        ++leaf120CrcSamples;
-        ++leaf120CrcBrakeSamples[brakeBucket120];
-        ++leaf120CrcCmdStateSamples[cmdState120];
-        if (cmdStateIsMotor) {
-            ++leaf120CrcMotorHiNibSamples[modeNibble120];
-        }
-        ++leaf120CrcNibbleSamples[modeNibble120];
-        for (uint8_t bit = 0U; bit < kLeaf120CrcCandidateCount; ++bit) {
-            if ((crcCandidateMask & static_cast<uint16_t>(1U << bit)) != 0U) {
-                ++leaf120CrcCandidateMatches[bit];
-            }
-        }
-        if ((crcCandidateMask & static_cast<uint16_t>(1U << 15U)) != 0U) {
-            ++leaf120CrcRefIdLoMatchesByBrake[brakeBucket120];
-            ++leaf120CrcRefIdLoMatchesByCmdState[cmdState120];
-            if (cmdStateIsMotor) {
-                ++leaf120CrcRefIdLoMatchesByMotorHiNib[modeNibble120];
-            }
-            ++leaf120CrcRefIdLoMatchesByNibble[modeNibble120];
-        }
-        const uint8_t crc120Rx = canStatsDiag.last120Data[3];
-        const uint8_t crc120Ref00 = crc8Lsb(canStatsDiag.last120Data, 3U, 0xB8U, 0x00U, 0x00U);
-        const uint8_t crc120State = static_cast<uint8_t>(canStatsDiag.last120Data[2] & 0x0FU);
-
-        if (cmdStateIsMotor) {
-            const uint8_t crcScopeBase0 = crc120Ref00;
-            const uint8_t scopeIdLoPayload[4] = {
-                0x20U,
-                canStatsDiag.last120Data[0],
-                canStatsDiag.last120Data[1],
-                canStatsDiag.last120Data[2]
-            };
-            const uint8_t scopeIdBePayload[5] = {
-                0x01U,
-                0x20U,
-                canStatsDiag.last120Data[0],
-                canStatsDiag.last120Data[1],
-                canStatsDiag.last120Data[2]
-            };
-            const uint8_t crcScopeBase1 = crc8Lsb(scopeIdLoPayload, 4U, 0xB8U, 0x00U, 0x00U);
-            const uint8_t crcScopeBase2 = crc8Lsb(scopeIdBePayload, 5U, 0xB8U, 0x00U, 0x00U);
-            const uint8_t crcScopeBase3 = crc8Msb(scopeIdLoPayload, 4U, 0x1DU, 0xFFU, 0xFFU);
-            const uint8_t scopeBases[kLeaf120MotorScopeCount] = {
-                crcScopeBase0,
-                crcScopeBase1,
-                crcScopeBase2,
-                crcScopeBase3
-            };
-
-            for (uint8_t scopeIdx = 0U; scopeIdx < kLeaf120MotorScopeCount; ++scopeIdx) {
-                ++leaf120MotorScopeSamples[scopeIdx];
-                const uint8_t scopeBase = scopeBases[scopeIdx];
-                if (scopeBase == crc120Rx) {
-                    ++leaf120MotorScopeDirectMatches[scopeIdx];
-                }
-
-                const uint8_t scopeResidue = static_cast<uint8_t>(crc120Rx ^ scopeBase);
-                const uint32_t scopeResidueCount = ++leaf120MotorScopeResidueByState[scopeIdx][crc120State][scopeResidue];
-                if (scopeResidueCount > leaf120MotorScopeTopResidueCountByState[scopeIdx][crc120State]) {
-                    leaf120MotorScopeTopResidueCountByState[scopeIdx][crc120State] = scopeResidueCount;
-                    leaf120MotorScopeTopResidueByState[scopeIdx][crc120State] = scopeResidue;
-                }
-
-                const uint8_t scopeCorrected = static_cast<uint8_t>(scopeBase ^ leaf120MotorScopeTopResidueByState[scopeIdx][crc120State]);
-                if (scopeCorrected == crc120Rx) {
-                    ++leaf120MotorScopeStateFixMatches[scopeIdx];
-                }
-            }
-        }
-
-        const uint8_t crc120Residue = static_cast<uint8_t>(crc120Rx ^ crc120Ref00);
-        const uint32_t crc120ResidueCount = ++leaf120Ref00ResidueByState[crc120State][crc120Residue];
-        if (crc120ResidueCount > leaf120Ref00TopResidueCountByState[crc120State]) {
-            leaf120Ref00TopResidueCountByState[crc120State] = crc120ResidueCount;
-            leaf120Ref00TopResidueByState[crc120State] = crc120Residue;
-        }
-        const uint8_t crc120Corrected = static_cast<uint8_t>(crc120Ref00 ^ leaf120Ref00TopResidueByState[crc120State]);
-        if (crc120Corrected == crc120Rx) {
-            ++leaf120Ref00StateCorrectedMatches;
-            ++leaf120Ref00StateCorrectedMatchesByBrake[brakeBucket120];
-            ++leaf120Ref00StateCorrectedMatchesByCmdState[cmdState120];
-            if (cmdStateIsMotor) {
-                ++leaf120Ref00StateCorrectedMatchesByMotorHiNib[modeNibble120];
-            }
-            ++leaf120Ref00StateCorrectedMatchesByNibble[modeNibble120];
-        }
-        const uint8_t crc120Fixed8 = static_cast<uint8_t>(
-            crc120Ref00 ^ kLeaf120Ref00ResidueByState8[crc120State & 0x07U]);
-        if (crc120Fixed8 == crc120Rx) {
-            ++leaf120Ref00Fixed8Matches;
-            ++leaf120Ref00Fixed8MatchesByBrake[brakeBucket120];
-            ++leaf120Ref00Fixed8MatchesByCmdState[cmdState120];
-            if (cmdStateIsMotor) {
-                ++leaf120Ref00Fixed8MatchesByMotorHiNib[modeNibble120];
-            }
-            ++leaf120Ref00Fixed8MatchesByNibble[modeNibble120];
-        }
-
-        // TX experiment gate: use captured 0x120 torque + one nibble copy, regenerate CRC, and compare.
-        {
-            ++leaf120TxExpSamples;
-
-            const uint8_t crcExact = static_cast<uint8_t>(
-                crc8Lsb120(canStatsDiag.last120Data, 3U) ^
-                kLeaf120Ref00ResidueByState8[canStatsDiag.last120Data[2] & 0x07U]);
-            if (crcExact == crc120Rx) {
-                ++leaf120TxExpExactCrcMatches;
-            }
-
-            uint8_t modelFrame[4] = {0U, 0U, 0U, 0U};
-            const bool expReadyBit = tele.vcuReady;
-            const bool expHvOkBit = tele.vcuHvVoltage >= 250.0f;
-            const bool expBrakeBit = fabsf(tele.brakeTorqueNm) > 1.0f;
-            const bool expGearDriveBit = (id120FrameDecoded.torqueDemandSignedBe >= 0);
-            buildLeaf120ShadowFrame(id120FrameDecoded.torqueDemandNmBase,
-                                    expReadyBit,
-                                    expHvOkBit,
-                                    expBrakeBit,
-                                    expGearDriveBit,
-                                    modelFrame);
-
-            const uint8_t rxB2 = canStatsDiag.last120Data[2];
-
-            // Hypothesis A: high nibble is rolling counter from capture, low nibble from our model.
-            uint8_t synthHiCtr[4] = {
-                canStatsDiag.last120Data[0],
-                canStatsDiag.last120Data[1],
-                static_cast<uint8_t>((rxB2 & 0xF0U) | (modelFrame[2] & 0x0FU)),
-                0U
-            };
-            synthHiCtr[3] = static_cast<uint8_t>(
-                crc8Lsb120(synthHiCtr, 3U) ^ kLeaf120Ref00ResidueByState8[synthHiCtr[2] & 0x07U]);
-            if (synthHiCtr[3] == crc120Rx) {
-                ++leaf120TxExpHiCtrCrcMatches;
-            }
-            if (synthHiCtr[2] == rxB2) {
-                ++leaf120TxExpHiCtrB2Matches;
-            }
-
-            // Hypothesis B: low nibble is rolling counter from capture, high nibble from our model.
-            uint8_t synthLoCtr[4] = {
-                canStatsDiag.last120Data[0],
-                canStatsDiag.last120Data[1],
-                static_cast<uint8_t>((modelFrame[2] & 0xF0U) | (rxB2 & 0x0FU)),
-                0U
-            };
-            synthLoCtr[3] = static_cast<uint8_t>(
-                crc8Lsb120(synthLoCtr, 3U) ^ kLeaf120Ref00ResidueByState8[synthLoCtr[2] & 0x07U]);
-            if (synthLoCtr[3] == crc120Rx) {
-                ++leaf120TxExpLoCtrCrcMatches;
-            }
-            if (synthLoCtr[2] == rxB2) {
-                ++leaf120TxExpLoCtrB2Matches;
-            }
-        }
-
-        if (!s_corrTorqueEmaInit) {
-            s_corrTorqueEmaNm = torqueNm;
-            s_corrTorqueEmaInit = true;
-        } else {
-            const float kCorrTorqueEmaAlpha = 0.20f;
-            s_corrTorqueEmaNm += kCorrTorqueEmaAlpha * (torqueNm - s_corrTorqueEmaNm);
-        }
-        const uint16_t be01 = (static_cast<uint16_t>(canStatsDiag.last120Data[0]) << 8) |
-                              static_cast<uint16_t>(canStatsDiag.last120Data[1]);
-        const uint16_t le01 = static_cast<uint16_t>(canStatsDiag.last120Data[0]) |
-                              (static_cast<uint16_t>(canStatsDiag.last120Data[1]) << 8);
-        const int16_t be01s = static_cast<int16_t>(be01);
-        const bool strictZeroHold = (fabsf(torqueNm) <= 0.10f) &&
-                                    (fabsf(leafFbDiag.rpm) <= 100.0f) &&
-                                    (abs(static_cast<int>(be01s)) <= 64);
-        s_corrFitFrozenNow = strictZeroHold;
-        if (strictZeroHold) {
-            s_corrFitZeroHoldSkipN += 1U;
-        } else {
-            corrUpdate(s_corr120Be01Torque,
-                       static_cast<double>(be01s),
-                       static_cast<double>(s_corrTorqueEmaNm));
-            corrUpdate(s_corr120Le01Torque,
-                       static_cast<double>(static_cast<int16_t>(le01)),
-                       static_cast<double>(s_corrTorqueEmaNm));
-            s_corrFitAcceptedN += 1U;
-        }
-        s_corrLast120Frames = canStatsDiag.rx120Frames;
-    }
 
     if (canStatsDiag.rx1daFrames != s_corrLast1daFrames) {
         const uint32_t crc1daCandidateMask = computeLeaf1daCrcCandidateMask(leafFbDiag.id1da_raw, 8U);
@@ -6592,35 +6366,14 @@ void loop()
         const bool emitSimpleLine = (METASENSE_LEAF_MONITOR_SIMPLE_DECIMATE <= 1U) ||
                                     ((++s_simpleLogDecimator % METASENSE_LEAF_MONITOR_SIMPLE_DECIMATE) == 0U);
         if (emitSimpleLine) {
-            if (METASENSE_LEAF_120_ANALYSIS_ENABLE != 0) {
-                Serial.printf("[VCM-SIMPLE] mode=%s cmd120=%.2fNm fb1da=%.2fNm delta=%.2fNm raw=%d crc=0x%02X ageMs(tq=%lu,120=%lu)\n",
-                              tqModeStr,
-                              id120CmdAdjNmNow,
-                              tqEffNmNow,
-                              tqErrAdjNmNow,
-                              static_cast<int>(id120Sbe01),
-                              static_cast<unsigned>(id120Crc),
-                              id1dbAgeMs,
-                              raw120AgeMs);
-                Serial0.printf("[VCM-SIMPLE] mode=%s cmd120=%.2fNm fb1da=%.2fNm delta=%.2fNm raw=%d crc=0x%02X ageMs(tq=%lu,120=%lu)\n",
-                               tqModeStr,
-                               id120CmdAdjNmNow,
-                               tqEffNmNow,
-                               tqErrAdjNmNow,
-                               static_cast<int>(id120Sbe01),
-                               static_cast<unsigned>(id120Crc),
-                               id1dbAgeMs,
-                               raw120AgeMs);
-            } else {
-                Serial.printf("[VCM-SIMPLE] mode=%s fb1da=%.2fNm ageMs(tq=%lu)\n",
-                              tqModeStr,
-                              tqEffNmNow,
-                              id1dbAgeMs);
-                Serial0.printf("[VCM-SIMPLE] mode=%s fb1da=%.2fNm ageMs(tq=%lu)\n",
-                               tqModeStr,
-                               tqEffNmNow,
-                               id1dbAgeMs);
-            }
+            Serial.printf("[VCM-SIMPLE] mode=%s fb1da=%.2fNm ageMs(tq=%lu)\n",
+                          tqModeStr,
+                          tqEffNmNow,
+                          id1dbAgeMs);
+            Serial0.printf("[VCM-SIMPLE] mode=%s fb1da=%.2fNm ageMs(tq=%lu)\n",
+                           tqModeStr,
+                           tqEffNmNow,
+                           id1dbAgeMs);
         }
     #else
         Serial.printf("[VCM-MAP] id120(cmd_raw=%d cmd120_est_nm=%.2f cmd120_adj_nm=%.2f fb1da_nm=%.2f delta_nm=%.2f unknown_120_2=%u crc_120=0x%02X xor=0x%02X model=%s corr=%.3f n=%lu compat_le01_s=%d compat_le01_u=%u compat_be23=%u compat_le23=%u compat11a_tail=0x%04X)\n",
