@@ -4004,47 +4004,6 @@ bool sendLeafTorqueCommand1d4(float torqueDemandNm,
         const uint8_t clockB4 = static_cast<uint8_t>((data[4] >> 6U) & 0x03U);
         const uint8_t clockB6 = static_cast<uint8_t>(data[6] & 0x03U);
         static uint32_t s_leaf1d4TxDiagLastMs = 0U;
-    #if METASENSE_LEAF_CRC_DEEP_LOGS
-        if (s_leaf1d4TxDiagLastMs == 0U || (nowMs - s_leaf1d4TxDiagLastMs) >= 250U) {
-            Serial.printf("[VCM-1D4-TX-SELF] src=%s tq=%.2f raw=%d c4=%u c6=%u crc=0x%02X c1da=0x%02X cres=0x%02X c1d4=0x%02X data=%02X %02X %02X %02X %02X %02X %02X %02X\n",
-                          usedRingBase ? "ring" : "tmpl",
-                          static_cast<double>(torqueClamped),
-                          static_cast<int>(torqueRaw),
-                          static_cast<unsigned>(clockB4),
-                          static_cast<unsigned>(clockB6),
-                          static_cast<unsigned>(crcWire),
-                          static_cast<unsigned>(crc1daStyle),
-                          static_cast<unsigned>(crcResidue),
-                          static_cast<unsigned>(crc1d4Like),
-                          static_cast<unsigned>(data[0]),
-                          static_cast<unsigned>(data[1]),
-                          static_cast<unsigned>(data[2]),
-                          static_cast<unsigned>(data[3]),
-                          static_cast<unsigned>(data[4]),
-                          static_cast<unsigned>(data[5]),
-                          static_cast<unsigned>(data[6]),
-                          static_cast<unsigned>(data[7]));
-            Serial0.printf("[VCM-1D4-TX-SELF] src=%s tq=%.2f raw=%d c4=%u c6=%u crc=0x%02X c1da=0x%02X cres=0x%02X c1d4=0x%02X data=%02X %02X %02X %02X %02X %02X %02X %02X\n",
-                           usedRingBase ? "ring" : "tmpl",
-                           static_cast<double>(torqueClamped),
-                           static_cast<int>(torqueRaw),
-                           static_cast<unsigned>(clockB4),
-                           static_cast<unsigned>(clockB6),
-                           static_cast<unsigned>(crcWire),
-                           static_cast<unsigned>(crc1daStyle),
-                           static_cast<unsigned>(crcResidue),
-                           static_cast<unsigned>(crc1d4Like),
-                           static_cast<unsigned>(data[0]),
-                           static_cast<unsigned>(data[1]),
-                           static_cast<unsigned>(data[2]),
-                           static_cast<unsigned>(data[3]),
-                           static_cast<unsigned>(data[4]),
-                           static_cast<unsigned>(data[5]),
-                           static_cast<unsigned>(data[6]),
-                           static_cast<unsigned>(data[7]));
-            s_leaf1d4TxDiagLastMs = nowMs;
-        }
-#endif
 
         s_leaf1d4RollingCounter = static_cast<uint8_t>((s_leaf1d4RollingCounter + 1U) & 0x03U);
         s_leafLast1d4TxMs = nowMs;
