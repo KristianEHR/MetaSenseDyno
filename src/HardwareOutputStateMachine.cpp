@@ -143,9 +143,7 @@ void writeRelayPinsImmediate(const RelayCommand& cmd)
 {
     digitalWrite(MetaSense::Globals::kRbMinusFetPin, cmd.rbMinusOn ? HIGH : LOW);
     digitalWrite(MetaSense::Globals::kSssrPin, cmd.ssrOn ? HIGH : LOW);
-#if METASENSE_RBPLUS_RELAY_ENABLED
     digitalWrite(MetaSense::Globals::kRbPlusRelayPin, cmd.rbPlusOn ? HIGH : LOW);
-#endif
     digitalWrite(MetaSense::Globals::kPrechargeRelayPin, cmd.prechargeOn ? HIGH : LOW);
 }
 
@@ -562,11 +560,7 @@ void begin()
 
     const bool rbMinusValid = configureOutputPin(MetaSense::Globals::kRbMinusFetPin);
     const bool ssrValid = configureOutputPin(MetaSense::Globals::kSssrPin);
-#if METASENSE_RBPLUS_RELAY_ENABLED
     const bool rbPlusValid = configureOutputPin(MetaSense::Globals::kRbPlusRelayPin);
-#else
-    const bool rbPlusValid = false;
-#endif
     const bool prechargeValid = configureOutputPin(MetaSense::Globals::kPrechargeRelayPin);
     (void)rbMinusValid;
     (void)ssrValid;
@@ -826,11 +820,7 @@ const char* startGateReason()
 
 bool isRbPlusActive()
 {
-#if METASENSE_RBPLUS_RELAY_ENABLED
     return digitalRead(MetaSense::Globals::kRbPlusRelayPin) == HIGH;
-#else
-    return false;
-#endif
 }
 
 bool isRbPlusCommandedActive()

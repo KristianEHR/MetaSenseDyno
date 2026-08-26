@@ -10,10 +10,7 @@
 // Relay Control & Enable Flags
 // ============================================================================
 // RB+ relay control (R+ means relay plus / boost stage)
-// 0 = firmware releases GPIO from control (default)
-// 1 = firmware actively controls RB+ relay
-#ifndef METASENSE_RBPLUS_RELAY_ENABLED
-#define METASENSE_RBPLUS_RELAY_ENABLED 0
-#endif
+// Production: firmware actively controls RB+ relay
+#define METASENSE_RBPLUS_RELAY_ENABLED 1
 
 #endif // METASENSE_HARDWAREOUTPUT_CONFIG_H
