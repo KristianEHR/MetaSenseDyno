@@ -444,21 +444,21 @@ void logBuildProfile()
                    METASENSE_VCU_OWNS_HV_RPLUS_PRECHARGE != 0 ? 1 : 0);
 
     Serial.printf("[BOOT] Build profile: leaf_can_rx=%d, leaf_can_tx=%d, can_listen_only=%d, can_bitrate_kbps=%d, can_tx_pin=%d, can_rx_pin=%d, leaf_sim_feedback=%d\n",
-                  METASENSE_LEAF_CAN_RX_ENABLED != 0 ? 1 : 0,
-                  METASENSE_LEAF_CAN_TX_ENABLED != 0 ? 1 : 0,
+                  1,
+                  1,
                   METASENSE_LEAF_CAN_LISTEN_ONLY != 0 ? 1 : 0,
                   METASENSE_LEAF_CAN_BITRATE_KBPS,
                   METASENSE_LEAF_CAN_TX_PIN,
                   METASENSE_LEAF_CAN_RX_PIN,
-                  METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS != 0 ? 1 : 0);
+                  0);
     Serial0.printf("[BOOT] Build profile: leaf_can_rx=%d, leaf_can_tx=%d, can_listen_only=%d, can_bitrate_kbps=%d, can_tx_pin=%d, can_rx_pin=%d, leaf_sim_feedback=%d\n",
-                   METASENSE_LEAF_CAN_RX_ENABLED != 0 ? 1 : 0,
-                   METASENSE_LEAF_CAN_TX_ENABLED != 0 ? 1 : 0,
+                   1,
+                   1,
                    METASENSE_LEAF_CAN_LISTEN_ONLY != 0 ? 1 : 0,
                    METASENSE_LEAF_CAN_BITRATE_KBPS,
                    METASENSE_LEAF_CAN_TX_PIN,
                    METASENSE_LEAF_CAN_RX_PIN,
-                   METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS != 0 ? 1 : 0);
+                   0);
     Serial.printf("[FW-ID] id=%s hb_ms=%lu\n", METASENSE_FW_ID, static_cast<unsigned long>(kHeartbeatPeriodMs));
     Serial0.printf("[FW-ID] id=%s hb_ms=%lu\n", METASENSE_FW_ID, static_cast<unsigned long>(kHeartbeatPeriodMs));
 }
@@ -777,7 +777,7 @@ void networkTaskEntry(void* /*parameter*/)
                           nauLdoConfigured ? 1 : 0,
                           nauInternalCalOk ? 1 : 0,
                           static_cast<unsigned>(nauInternalCalAttempts),
-                          METASENSE_LEAF_CAN_RX_ENABLED != 0 ? 1 : 0,
+                          1,
                           0,
                           startupSniffDiag.enabled ? 1 : 0,
                           startupSniffDiag.active ? 1 : 0,
@@ -820,7 +820,7 @@ void networkTaskEntry(void* /*parameter*/)
                            nauLdoConfigured ? 1 : 0,
                            nauInternalCalOk ? 1 : 0,
                            static_cast<unsigned>(nauInternalCalAttempts),
-                           METASENSE_LEAF_CAN_RX_ENABLED != 0 ? 1 : 0,
+                           1,
                            0,
                            startupSniffDiag.enabled ? 1 : 0,
                            startupSniffDiag.active ? 1 : 0,

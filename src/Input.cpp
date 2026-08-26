@@ -322,12 +322,12 @@ constexpr uint32_t kLeafHandshakeAttemptPeriodMs = 20;
 // Removed ~130 lines of duplicated #ifndef/#define METASENSE_LEAF_* blocks
 
 constexpr bool kLeafCanHandshakeOnFirst1da = (METASENSE_LEAF_CAN_HANDSHAKE_ON_FIRST_1DA != 0);
-constexpr bool kLeafCanTxActive = (METASENSE_LEAF_CAN_TX_ENABLED != 0) &&
+constexpr bool kLeafCanTxActive = true &&  // METASENSE_LEAF_CAN_TX_ENABLED always 1
                                   (METASENSE_LEAF_CAN_LISTEN_ONLY == 0) &&
                                   !kLeafCanHandshakeOnFirst1da;
 constexpr bool kLeaf11aTxEnabled = (METASENSE_LEAF_11A_TX_ENABLED != 0) &&
                                    (METASENSE_LEAF_CAN_LISTEN_ONLY == 0) &&
-                                   (METASENSE_LEAF_CAN_TX_ENABLED != 0);
+                                   true;  // METASENSE_LEAF_CAN_TX_ENABLED always 1
 constexpr uint32_t kLeaf11aTxPeriodMs = METASENSE_LEAF_11A_TX_PERIOD_MS;
 
 const MetaSense::CANBus::Config kLeafCanConfig = []() {
@@ -2414,7 +2414,7 @@ static float selectLeafActualTorqueNm(const LeafInvFeedback& fb, float demandNm)
 
 void pollLeafCanFrames(uint32_t nowMs)
 {
-#if METASENSE_LEAF_CAN_RX_ENABLED
+    // METASENSE_LEAF_CAN_RX_ENABLED always true - CAN RX hardcoded enabled
     static bool canConfigured = false;
     static bool canReadyLogged = false;
 
@@ -2491,9 +2491,6 @@ void pollLeafCanFrames(uint32_t nowMs)
         lastCanLeafAnyUpdate = leafFb.status_update_ms;
         lastCanStatusFrameMs = leafFb.status_update_ms;
     }
-#else
-    (void)nowMs;
-#endif
 }
 
 void maybeInjectLeafSimFeedback(uint32_t nowMs)
