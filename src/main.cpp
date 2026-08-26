@@ -20,56 +20,9 @@
 #include "globals.h"
 #include "I2cBusLock.h"
 #include "TelnetSerialBridge.h"
-
-// Enable/disable runtime task instrumentation (set to 0 to disable)
-#define ENABLE_RUNTIME_INSTRUMENTATION 0
-
-// VCU ready source switch:
-// 1 = use GPIO RB+ input (normal operation)
-// 0 = force VCU ready true (bench testing without VCU)
-#if !defined(VCU_switch) && defined(VCU_set)
-#define VCU_switch VCU_set
-#endif
-
-#ifndef VCU_switch
-#define VCU_switch 0
-#endif
-
-#ifndef METASENSE_VCU_OWNS_HV_RPLUS_PRECHARGE
-#define METASENSE_VCU_OWNS_HV_RPLUS_PRECHARGE 0
-#endif
-
-#ifndef METASENSE_VCU_SIM_MODE
-#define METASENSE_VCU_SIM_MODE 0
-#endif
-
-#ifndef METASENSE_LEAF_CAN_RX_ENABLED
-#define METASENSE_LEAF_CAN_RX_ENABLED 1
-#endif
-
-#ifndef METASENSE_LEAF_CAN_TX_ENABLED
-#define METASENSE_LEAF_CAN_TX_ENABLED 0
-#endif
-
-#ifndef METASENSE_LEAF_CAN_LISTEN_ONLY
-#define METASENSE_LEAF_CAN_LISTEN_ONLY 0
-#endif
-
-#ifndef METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS
-#define METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS 0
-#endif
-
-#ifndef METASENSE_LEAF_CAN_TX_PIN
-#define METASENSE_LEAF_CAN_TX_PIN 4
-#endif
-
-#ifndef METASENSE_LEAF_CAN_RX_PIN
-#define METASENSE_LEAF_CAN_RX_PIN 5
-#endif
-
-#ifndef METASENSE_LEAF_CAN_BITRATE_KBPS
-#define METASENSE_LEAF_CAN_BITRATE_KBPS 500
-#endif
+#include "CanConfig.h"
+#include "VcuConfig.h"
+#include "BuildConfig.h"
 
 namespace MetaSense::Globals {
 const bool kVcuSwitch = (VCU_switch != 0);
@@ -93,24 +46,6 @@ constexpr const char* kOtaHostname = "dyno-controller";
 constexpr const char* kOtaPassword = "metasense";
 constexpr uint32_t kI2cClockHz = 50000;
 constexpr uint16_t kI2cTimeoutMs = 50;
-#ifndef METASENSE_CONTROL_PERIOD_MS
-#define METASENSE_CONTROL_PERIOD_MS 10
-#endif
-#ifndef METASENSE_HEARTBEAT_PERIOD_MS
-#define METASENSE_HEARTBEAT_PERIOD_MS 2000
-#endif
-#ifndef METASENSE_CAN_RX_ONE_LINE_LOG
-#define METASENSE_CAN_RX_ONE_LINE_LOG 0
-#endif
-#ifndef METASENSE_FW_ID
-#define METASENSE_FW_ID "unknown"
-#endif
-#ifndef METASENSE_STARTUP_SNIFF_RELEASE_TX_PIN
-#define METASENSE_STARTUP_SNIFF_RELEASE_TX_PIN -1
-#endif
-constexpr uint32_t kControlPeriodMs = METASENSE_CONTROL_PERIOD_MS;
-constexpr uint32_t kModbusPeriodMs = 50;
-constexpr uint32_t kHeartbeatPeriodMs = METASENSE_HEARTBEAT_PERIOD_MS;
 constexpr UBaseType_t kControlTaskPriority = 5;
 constexpr UBaseType_t kNetworkTaskPriority = 3;
 constexpr UBaseType_t kModbusTaskPriority = 1;

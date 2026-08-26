@@ -23,14 +23,12 @@
 #include "CANBus.h"
 #include "LeafCrc.h"
 #include "Leaf1d4ReplaySeries.h"
+#include "CanConfig.h"
+#include "FeatureFlags.h"
+#include "TorqueConfig.h"
+#include "LeafCanConfig.h"  // Phase 14C: Consolidated Leaf CAN protocol parameters
 #include "globals.h"
 #include "TelnetSerialBridge.h"
-
-// Default: CAN Monitor JSON telemetry is DISABLED (reduce WebSocket payload)
-// Enable via platformio.ini: -D METASENSE_CAN_MONITOR_JSON_ENABLED=1
-#ifndef METASENSE_CAN_MONITOR_JSON_ENABLED
-#define METASENSE_CAN_MONITOR_JSON_ENABLED 0
-#endif
 
 namespace MetaSense::WebSocketServer {
 
@@ -114,9 +112,6 @@ static uint32_t lastAmbientSampleMs = 0;
 // CAN RPM validity timeout + plausibility
 static uint32_t lastCanRpmUpdate   = 0;
 static const uint32_t CAN_RPM_TIMEOUT_MS = 100;
-#ifndef METASENSE_CAN_RPM_MIN_UPDATE_MS
-#define METASENSE_CAN_RPM_MIN_UPDATE_MS 10
-#endif
 static const uint32_t CAN_RPM_MIN_UPDATE_MS = METASENSE_CAN_RPM_MIN_UPDATE_MS;
 static float lastCanRpm            = 0.0f;
 static const float CAN_MAX_JUMP    = 2000.0f;
@@ -235,126 +230,14 @@ static const uint32_t CAN_RX_MISSING_LOG_PERIOD_MS = 5000;
 static const uint32_t CAN_EVENT_LOG_MIN_PERIOD_MS = 5000;
 static const uint32_t CAN_1DA_CRC_BAD_STREAK_LIMIT = 10;
 
-#ifndef METASENSE_LEAF_VCM_CHECKLIST_MODE
-#define METASENSE_LEAF_VCM_CHECKLIST_MODE 1
-#endif
-#ifndef METASENSE_LEAF_VCM_DIAGNOSTICS
-#define METASENSE_LEAF_VCM_DIAGNOSTICS 0
-#endif
-#ifndef METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS
-#define METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS 0
-#endif
-#ifndef METASENSE_TEST_TORQUE_OVERRIDE_ENABLED
-#define METASENSE_TEST_TORQUE_OVERRIDE_ENABLED 0
-#endif
-#ifndef METASENSE_TEST_TORQUE_OVERRIDE_NM
-#define METASENSE_TEST_TORQUE_OVERRIDE_NM 25.0f
-#endif
-#ifndef METASENSE_TORQUE_STEP_SEQUENCER_ENABLED
-#define METASENSE_TORQUE_STEP_SEQUENCER_ENABLED 0
-#endif
-#ifndef METASENSE_TORQUE_STEP_SEQUENCER_STEP_NM
-#define METASENSE_TORQUE_STEP_SEQUENCER_STEP_NM 0.5f
-#endif
-#ifndef METASENSE_TORQUE_STEP_SEQUENCER_MAX_NM
-#define METASENSE_TORQUE_STEP_SEQUENCER_MAX_NM 3.0f
-#endif
-#ifndef METASENSE_TORQUE_STEP_SEQUENCER_DWELL_MS
-#define METASENSE_TORQUE_STEP_SEQUENCER_DWELL_MS 5000U
-#endif
-#ifndef METASENSE_LEAF_120_CMD_BASE_SLOPE
-#define METASENSE_LEAF_120_CMD_BASE_SLOPE 0.0300f
-#endif
-#ifndef METASENSE_LEAF_120_CMD_BASE_OFFSET_NM
-#define METASENSE_LEAF_120_CMD_BASE_OFFSET_NM 0.000f
-#endif
-#ifndef METASENSE_LEAF_120_CMD_MIN_FIT_SAMPLES
-#define METASENSE_LEAF_120_CMD_MIN_FIT_SAMPLES 128U
-#endif
-#ifndef METASENSE_LEAF_VCM_LEGACY_VERBOSE_LOGS
-#define METASENSE_LEAF_VCM_LEGACY_VERBOSE_LOGS 0
-#endif
-#ifndef METASENSE_LEAF_VCM_RX_WARN_LOGS
-#define METASENSE_LEAF_VCM_RX_WARN_LOGS 0
-#endif
-#ifndef METASENSE_LEAF_CRC_DEEP_LOGS
-#define METASENSE_LEAF_CRC_DEEP_LOGS 0
-#endif
-#ifndef METASENSE_LEAF_MONITOR_SIMPLE_LOGS
-#define METASENSE_LEAF_MONITOR_SIMPLE_LOGS 1
-#endif
-#ifndef METASENSE_LEAF_MONITOR_SIMPLE_DECIMATE
-#define METASENSE_LEAF_MONITOR_SIMPLE_DECIMATE 20U
-#endif
-#ifndef METASENSE_LEAF_120_AUX_LOGS
-#define METASENSE_LEAF_120_AUX_LOGS 0
-#endif
-#ifndef METASENSE_LEAF_120_SHADOW_LOGS
-#define METASENSE_LEAF_120_SHADOW_LOGS 1
-#endif
-#ifndef METASENSE_LEAF_120_COMPARE_COPY_RX
-#define METASENSE_LEAF_120_COMPARE_COPY_RX 0
-#endif
-#ifndef METASENSE_LEAF_120_SHADOW_STATE_STRATEGY
-// 0: use explicit brake/gear inputs from control path
-// 1: derive state from torque sign (+ = MOTOR, - = BRAKE)
-// 2: 4-quadrant model using torque sign and RPM sign
-//    (0Nm=Neutral, +Nm=Forward, -Nm with rpm>0=Brake, -Nm with rpm<0=Reverse)
-#define METASENSE_LEAF_120_SHADOW_STATE_STRATEGY 0
-#endif
-#ifndef METASENSE_LEAF_120_SHADOW_TORQUE_DEADBAND_NM
-#define METASENSE_LEAF_120_SHADOW_TORQUE_DEADBAND_NM 1.0f
-#endif
-#ifndef METASENSE_LEAF_120_SHADOW_NEUTRAL_STARTUP_MS
-// >0 keeps state in neutral for startup transient window before forcing F states.
-#define METASENSE_LEAF_120_SHADOW_NEUTRAL_STARTUP_MS 0U
-#endif
-#ifndef METASENSE_LEAF_120_SHADOW_IDLE_FORCE_FWD
-// In torque-sign strategy, keep F in near-zero torque zone when enabled.
-#define METASENSE_LEAF_120_SHADOW_IDLE_FORCE_FWD 1
-#endif
-#ifndef METASENSE_LEAF_120_SHADOW_REVERSE_RPM_DEADBAND
-#define METASENSE_LEAF_120_SHADOW_REVERSE_RPM_DEADBAND 30.0f
-#endif
-#ifndef METASENSE_LEAF_120_FACTS_LOGS
-#define METASENSE_LEAF_120_FACTS_LOGS 0
-#endif
-#ifndef METASENSE_LEAF_120_FACTS_LOG_PERIOD_MS
-#define METASENSE_LEAF_120_FACTS_LOG_PERIOD_MS 5000U
-#endif
-#ifndef METASENSE_LEAF_120_NOISE_LOGS
-#define METASENSE_LEAF_120_NOISE_LOGS 0
-#endif
-#ifndef METASENSE_LEAF_120_NOISE_DB_NM
-#define METASENSE_LEAF_120_NOISE_DB_NM 0.4f
-#endif
-#ifndef METASENSE_LEAF_120_NOISE_EMA_ALPHA
-#define METASENSE_LEAF_120_NOISE_EMA_ALPHA 0.10f
-#endif
-#ifndef METASENSE_LEAF_120_NOISE_OUTLIER_ABS_NM
-#define METASENSE_LEAF_120_NOISE_OUTLIER_ABS_NM 5.0f
-#endif
-#ifndef METASENSE_LEAF_120_DT_SLOPE_STEADY_NMPS
-#define METASENSE_LEAF_120_DT_SLOPE_STEADY_NMPS 10.0f
-#endif
-#ifndef METASENSE_LEAF_120_DT_SLOPE_HIGH_NMPS
-#define METASENSE_LEAF_120_DT_SLOPE_HIGH_NMPS 120.0f
-#endif
-#ifndef METASENSE_LEAF_120_TX_COMMIT_ENABLED
-#define METASENSE_LEAF_120_TX_COMMIT_ENABLED 0
-#endif
-
-#ifndef METASENSE_LEAF_120_STARTUP_ZERO_TORQUE
-// Hold 0x120 torque demand at zero during initial HV bring-up so the inverter
-// can precharge cleanly and clear its error bits before any torque is applied.
-// A future sequencer can replace this with a staged ramp without changing the
-// surrounding state-machine logic.
-#define METASENSE_LEAF_120_STARTUP_ZERO_TORQUE 1
-#endif
 #ifndef METASENSE_LEAF_CRC_CANDIDATE_HUNT
 // Disable reverse-engineering candidate sweeps in normal operation.
 #define METASENSE_LEAF_CRC_CANDIDATE_HUNT 0
 #endif
+
+// DEAD: METASENSE_STARTUP_SNIFF_CAPTURE_ENABLE (Phase 15 cleanup) - no usage
+// kLeafTxSuppressedForSniff logic removed; sniffing now only controlled by listen_only mode
+
 // Allow scheduler jitter from WiFi/web/FS tasks without tripping a false VCM fault.
 static const uint32_t CAN_TX_MAX_GAP_MS = 120;
 
@@ -425,9 +308,6 @@ constexpr uint32_t kLeafVcmFaultRecoverMs = 500;
 constexpr float kLeafTorqueTrackStepNm = 2.0f;
 constexpr float kLeafTorqueTrackAbsTolNm = 3.0f;
 constexpr float kLeafTorqueTrackRelTol = 0.10f;
-#ifndef METASENSE_LEAF_TORQUE_TRACK_TIMEOUT_MS
-#define METASENSE_LEAF_TORQUE_TRACK_TIMEOUT_MS 3000
-#endif
 constexpr uint32_t kLeafTorqueTrackTimeoutMs = METASENSE_LEAF_TORQUE_TRACK_TIMEOUT_MS;
 constexpr uint32_t kLeafSimFeedbackPeriodMs = 20;
 constexpr uint32_t kLeafSimBootDelayMs = 1000;
@@ -438,177 +318,8 @@ constexpr uint16_t kLeafHandshakeMaxAttempts = 200;
 constexpr uint32_t kLeafHandshakeWindowMs = 5000;
 constexpr uint32_t kLeafHandshakeAttemptPeriodMs = 20;
 
-#ifndef METASENSE_LEAF_CAN_RX_ENABLED
-#define METASENSE_LEAF_CAN_RX_ENABLED 1
-#endif
-#ifndef METASENSE_LEAF_CAN_TX_ENABLED
-#define METASENSE_LEAF_CAN_TX_ENABLED 0
-#endif
-#ifndef METASENSE_LEAF_CAN_LISTEN_ONLY
-#define METASENSE_LEAF_CAN_LISTEN_ONLY 0
-#endif
-#ifndef METASENSE_STARTUP_SNIFF_CAPTURE_ENABLE
-#define METASENSE_STARTUP_SNIFF_CAPTURE_ENABLE 0
-#endif
-#ifndef METASENSE_LEAF_CAN_HANDSHAKE_ON_FIRST_1DA
-#define METASENSE_LEAF_CAN_HANDSHAKE_ON_FIRST_1DA 0
-#endif
-#ifndef METASENSE_LEAF_11A_TX_ENABLED
-#define METASENSE_LEAF_11A_TX_ENABLED 1
-#endif
-#ifndef METASENSE_LEAF_11A_TX_PERIOD_MS
-#define METASENSE_LEAF_11A_TX_PERIOD_MS 20
-#endif
-#ifndef METASENSE_LEAF_11A_FORCE_GEAR
-// Default fixed gear for 0x11A transmit.
-#define METASENSE_LEAF_11A_FORCE_GEAR 4U
-#endif
-#ifndef METASENSE_LEAF_11A_FORCE_CARONOFF
-// Default fixed CarOnOff for 0x11A transmit.
-#define METASENSE_LEAF_11A_FORCE_CARONOFF 2U
-#endif
-#ifndef METASENSE_LEAF_11A_TEMPLATE_BOOTSTRAP_ENABLE
-#define METASENSE_LEAF_11A_TEMPLATE_BOOTSTRAP_ENABLE 0
-#endif
-#ifndef METASENSE_LEAF_11A_TEMPLATE_B0
-#define METASENSE_LEAF_11A_TEMPLATE_B0 0x4EU
-#endif
-#ifndef METASENSE_LEAF_11A_TEMPLATE_B1
-#define METASENSE_LEAF_11A_TEMPLATE_B1 0x40U
-#endif
-#ifndef METASENSE_LEAF_11A_TEMPLATE_B2
-#define METASENSE_LEAF_11A_TEMPLATE_B2 0x00U
-#endif
-#ifndef METASENSE_LEAF_11A_TEMPLATE_B3
-#define METASENSE_LEAF_11A_TEMPLATE_B3 0xAAU
-#endif
-#ifndef METASENSE_LEAF_11A_TEMPLATE_B4
-#define METASENSE_LEAF_11A_TEMPLATE_B4 0xC0U
-#endif
-#ifndef METASENSE_LEAF_11A_TEMPLATE_B5
-#define METASENSE_LEAF_11A_TEMPLATE_B5 0x00U
-#endif
-#ifndef METASENSE_LEAF_11A_TEMPLATE_M0_B7
-#define METASENSE_LEAF_11A_TEMPLATE_M0_B7 0x6BU
-#endif
-#ifndef METASENSE_LEAF_11A_TEMPLATE_M1_B7
-#define METASENSE_LEAF_11A_TEMPLATE_M1_B7 0xEEU
-#endif
-#ifndef METASENSE_LEAF_11A_TEMPLATE_M2_B7
-#define METASENSE_LEAF_11A_TEMPLATE_M2_B7 0xE4U
-#endif
-#ifndef METASENSE_LEAF_11A_TEMPLATE_M3_B7
-#define METASENSE_LEAF_11A_TEMPLATE_M3_B7 0x61U
-#endif
-#ifndef METASENSE_LEAF_VARIANT_120_55A
-#define METASENSE_LEAF_VARIANT_120_55A 0
-#endif
-#ifndef METASENSE_LEAF_CAN_VARIANT_READY_FALLBACK
-#define METASENSE_LEAF_CAN_VARIANT_READY_FALLBACK 1
-#endif
-#ifndef METASENSE_LEAF_1D4_CRC_CLOCK_XOR_ENABLE
-// Conformant 0x1D4 CRC implementation:
-// CRC8 MSB poly 0x1D over [idLo + payload7], then XOR by HCM clock bin.
-#define METASENSE_LEAF_1D4_CRC_CLOCK_XOR_ENABLE 1
-#endif
-#ifndef METASENSE_LEAF_1D4_SNIFF_RX_ENABLED
-#define METASENSE_LEAF_1D4_SNIFF_RX_ENABLED 1
-#endif
-#ifndef METASENSE_LEAF_1D4_TEMPLATE_TX_MODE
-// 0: Build 0x1D4 command fields from logic.
-// 1: Start from a known-good Thunderstruck template frame and only patch
-//    selected fields (torque + clock + CRC) for controlled acceptance tests.
-// 2: Replay a captured clock-continuous 0x1D4 frame loop exactly as generated
-//    by tools/analyze_1d4_sniff.py --emit-loop-header.
-// 3: Use newest captured 0x1D4 ring-buffer frame as TX base, then patch
-//    torque + clock + CRC; if ring is empty, fallback to mode 0 builder.
-// 4: Strict raw replay from 0x1D4 ring-buffer frame (no patching, no builder fallback).
-#define METASENSE_LEAF_1D4_TEMPLATE_TX_MODE 0
-#endif
-#ifndef METASENSE_LEAF_1D4_RING_TX_SOURCE_AGE
-// 0 reads newest ring frame, 1 previous, etc.
-#define METASENSE_LEAF_1D4_RING_TX_SOURCE_AGE 0
-#endif
-#ifndef METASENSE_LEAF_1D4_REPLAY_RECALC_CRC
-// Keep enabled to harden generated loop frames against accidental edits.
-#define METASENSE_LEAF_1D4_REPLAY_RECALC_CRC 1
-#endif
-#ifndef METASENSE_LEAF_1D4_TEMPLATE_MAX_ABS_TORQUE_NM
-// Keep template TX in a conservative region while validating inverter acceptance.
-#define METASENSE_LEAF_1D4_TEMPLATE_MAX_ABS_TORQUE_NM 3.75f
-#endif
-#ifndef METASENSE_LEAF_1D4_TORQUE_LSB_NM
-#define METASENSE_LEAF_1D4_TORQUE_LSB_NM 0.0625f
-#endif
-#ifndef METASENSE_LEAF_1D4_TEMPLATE_B0
-#define METASENSE_LEAF_1D4_TEMPLATE_B0 0x6EU  // Static per Thunderstruck reference
-#endif
-#ifndef METASENSE_LEAF_1D4_TEMPLATE_B1
-#define METASENSE_LEAF_1D4_TEMPLATE_B1 0x6EU  // Static per Thunderstruck reference
-#endif
-#ifndef METASENSE_LEAF_1D4_TEMPLATE_B2
-#define METASENSE_LEAF_1D4_TEMPLATE_B2 0x00U  // Torque MSB
-#endif
-#ifndef METASENSE_LEAF_1D4_TEMPLATE_B3
-#define METASENSE_LEAF_1D4_TEMPLATE_B3 0x00U  // Torque LSB
-#endif
-#ifndef METASENSE_LEAF_1D4_TEMPLATE_B4
-#define METASENSE_LEAF_1D4_TEMPLATE_B4 0x87U  // Rolling counter (high nibble), fixed 0x7 (low nibble)
-#endif
-#ifndef METASENSE_LEAF_1D4_TEMPLATE_B5
-#define METASENSE_LEAF_1D4_TEMPLATE_B5 0x44U  // Static charge status per Thunderstruck reference
-#endif
-#ifndef METASENSE_LEAF_1D4_TEMPLATE_B6
-#define METASENSE_LEAF_1D4_TEMPLATE_B6 0x01U  // Static field per Thunderstruck reference
-#endif
-#ifndef METASENSE_LEAF_1D4_TEMPLATE_B7
-#define METASENSE_LEAF_1D4_TEMPLATE_B7 0x00U  // CRC placeholder (will be overwritten)
-#endif
-#ifndef METASENSE_LEAF_CAN_TX_PIN
-#define METASENSE_LEAF_CAN_TX_PIN 4
-#endif
-#ifndef METASENSE_LEAF_CAN_RX_PIN
-#define METASENSE_LEAF_CAN_RX_PIN 5
-#endif
-#ifndef METASENSE_LEAF_CAN_MAX_FRAMES_PER_LOOP
-#define METASENSE_LEAF_CAN_MAX_FRAMES_PER_LOOP 8
-#endif
-#ifndef METASENSE_LEAF_TX_GAP_TEST_ENABLE
-#define METASENSE_LEAF_TX_GAP_TEST_ENABLE 0
-#endif
-#ifndef METASENSE_LEAF_TX_GAP_TEST_PERIOD_MS
-#define METASENSE_LEAF_TX_GAP_TEST_PERIOD_MS 15000
-#endif
-#ifndef METASENSE_LEAF_TX_GAP_TEST_DURATION_MS
-#define METASENSE_LEAF_TX_GAP_TEST_DURATION_MS 500
-#endif
-#ifndef METASENSE_FORCE_TACHO_RPM_SOURCE
-// Default behavior: prefer 0x1DA-derived RPM when fresh, else fallback to tachogen.
-// Set to 1 only for forced tachogen-only diagnostics.
-#define METASENSE_FORCE_TACHO_RPM_SOURCE 0
-#endif
-
-#ifndef METASENSE_LEAF_1D4_RAW_SNIFF_ONLY
-#define METASENSE_LEAF_1D4_RAW_SNIFF_ONLY 0
-#endif
-
-#ifndef METASENSE_LEAF_1D4_KEEPALIVE_ZERO_REFRESH_MS
-// Periodically re-issue a zero-cross pulse to refresh inverter state before timeout fallback.
-#define METASENSE_LEAF_1D4_KEEPALIVE_ZERO_REFRESH_MS 500U
-#endif
-#ifndef METASENSE_LEAF_1D4_KEEPALIVE_ZERO_PULSE_MS
-// Keep the negative pulse long enough to cover multiple 10 ms TX frames.
-#define METASENSE_LEAF_1D4_KEEPALIVE_ZERO_PULSE_MS 20U
-#endif
-#ifndef METASENSE_LEAF_1D4_KEEPALIVE_ZERO_POS_NM
-#define METASENSE_LEAF_1D4_KEEPALIVE_ZERO_POS_NM 0.60f
-#endif
-#ifndef METASENSE_LEAF_1D4_KEEPALIVE_ZERO_PRE_POS_MS
-#define METASENSE_LEAF_1D4_KEEPALIVE_ZERO_PRE_POS_MS 20U
-#endif
-#ifndef METASENSE_LEAF_1D4_KEEPALIVE_ZERO_POST_POS_MS
-#define METASENSE_LEAF_1D4_KEEPALIVE_ZERO_POST_POS_MS 20U
-#endif
+// Phase 14C: Leaf CAN protocol parameters now consolidated in include/LeafCanConfig.h
+// Removed ~130 lines of duplicated #ifndef/#define METASENSE_LEAF_* blocks
 
 constexpr bool kLeafCanHandshakeOnFirst1da = (METASENSE_LEAF_CAN_HANDSHAKE_ON_FIRST_1DA != 0);
 constexpr bool kLeafCanTxActive = (METASENSE_LEAF_CAN_TX_ENABLED != 0) &&
@@ -822,29 +533,6 @@ struct Leaf120CommandDecode {
     uint8_t crc120 = 0U;
 };
 
-Leaf120CommandDecode decodeLeaf120Command(const uint8_t* data, uint8_t len)
-{
-    Leaf120CommandDecode decoded;
-    if (data == nullptr || len == 0U) {
-        return decoded;
-    }
-
-    if (len >= 2U) {
-        decoded.torqueDemandRawBe = (static_cast<uint16_t>(data[0]) << 8) |
-                                    static_cast<uint16_t>(data[1]);
-        decoded.torqueDemandSignedBe = static_cast<int16_t>(decoded.torqueDemandRawBe);
-        decoded.torqueDemandNmBase = METASENSE_LEAF_120_CMD_BASE_OFFSET_NM +
-                                     (METASENSE_LEAF_120_CMD_BASE_SLOPE * static_cast<float>(decoded.torqueDemandSignedBe));
-    }
-    if (len >= 3U) {
-        decoded.unknown120_2 = data[2];
-    }
-    if (len >= 4U) {
-        decoded.crc120 = data[3];
-    }
-
-    return decoded;
-}
 
 uint32_t extractIntelUnsigned(const uint8_t* data, uint8_t len, uint8_t startBit, uint8_t bitLen)
 {
@@ -3780,15 +3468,6 @@ void updateCanStatus(bool ready, bool fault, bool warning, bool limp)
     lastCanLeafAnyUpdate = lastCanStatusUpdate;
 }
 
-void buildLeaf120ShadowFrame(float torqueDemandNm,
-                             bool readyBit,
-                             bool hvOkBit,
-                             bool brakeBit,
-                             bool gearDriveBit,
-                             uint8_t (&out)[4]);
-
-uint8_t crc8Lsb120(const uint8_t* data, uint8_t len);
-
 struct Leaf11aFrameFields {
     uint8_t joystickGearPosition = 0U;
     uint8_t ecoSelected = 0U;
@@ -4052,228 +3731,6 @@ bool sendLeafTorqueCommand1d4FinalZero()
     return sendLeafTorqueCommand1d4(0.0f, false, false, false, false);
 }
 
-uint8_t crc8Lsb120(const uint8_t* data, uint8_t len)
-{
-    uint8_t crc = 0x00U;
-    for (uint8_t i = 0U; i < len; ++i) {
-        crc ^= data[i];
-        for (uint8_t bit = 0U; bit < 8U; ++bit) {
-            const bool lsb = (crc & 0x01U) != 0U;
-            crc >>= 1;
-            if (lsb) {
-                crc ^= 0xB8U;
-            }
-        }
-    }
-    return crc;
-}
-
-enum class Leaf120ShadowStateClass : uint8_t {
-    Neutral = 0,
-    Idle = 1,
-    Motor = 2,
-    Brake = 3,
-    Reverse = 4,
-};
-
-const char* leaf120ShadowStateClassName(Leaf120ShadowStateClass stateClass)
-{
-    switch (stateClass) {
-    case Leaf120ShadowStateClass::Neutral:
-        return "NEUTRAL";
-    case Leaf120ShadowStateClass::Idle:
-        return "IDLE";
-    case Leaf120ShadowStateClass::Motor:
-        return "MOTOR";
-    case Leaf120ShadowStateClass::Brake:
-        return "BRAKE";
-    case Leaf120ShadowStateClass::Reverse:
-        return "REVERSE";
-    }
-    return "IDLE";
-}
-
-constexpr uint8_t kLeaf120StateClassCount = 5U;
-constexpr uint8_t kLeaf120SlopeClassCount = 4U;
-
-uint8_t leaf120ShadowStateClassIndex(Leaf120ShadowStateClass stateClass)
-{
-    switch (stateClass) {
-    case Leaf120ShadowStateClass::Neutral:
-        return 0U;
-    case Leaf120ShadowStateClass::Idle:
-        return 1U;
-    case Leaf120ShadowStateClass::Motor:
-        return 2U;
-    case Leaf120ShadowStateClass::Brake:
-        return 3U;
-    case Leaf120ShadowStateClass::Reverse:
-        return 4U;
-    }
-    return 1U;
-}
-
-uint8_t topByteFromCounts(const uint32_t* counts, uint32_t& outCount)
-{
-    uint8_t topValue = 0U;
-    outCount = 0U;
-    if (counts == nullptr) {
-        return topValue;
-    }
-
-    for (uint16_t i = 0U; i < 256U; ++i) {
-        if (counts[i] > outCount) {
-            outCount = counts[i];
-            topValue = static_cast<uint8_t>(i);
-        }
-    }
-    return topValue;
-}
-
-const char* leaf120ShadowStrategyName()
-{
-#if METASENSE_LEAF_120_SHADOW_STATE_STRATEGY == 1
-    return "torque_sign";
-#elif METASENSE_LEAF_120_SHADOW_STATE_STRATEGY == 2
-    return "quadrant";
-#else
-    return "brake_flag";
-#endif
-}
-
-Leaf120ShadowStateClass resolveLeaf120ShadowState(float torqueDemandNm,
-                                                  float rpm,
-                                                  bool brakeIn,
-                                                  bool gearIn,
-                                                  bool& brakeOut,
-                                                  bool& gearOut)
-{
-    if (METASENSE_LEAF_120_SHADOW_NEUTRAL_STARTUP_MS > 0U &&
-        millis() < METASENSE_LEAF_120_SHADOW_NEUTRAL_STARTUP_MS) {
-        brakeOut = false;
-        gearOut = false;
-        return Leaf120ShadowStateClass::Neutral;
-    }
-
-    // Global neutral rule: zero/near-zero torque is a valid Neutral command.
-    const float tqDeadband = METASENSE_LEAF_120_SHADOW_TORQUE_DEADBAND_NM;
-    if (fabsf(torqueDemandNm) <= tqDeadband) {
-        brakeOut = false;
-        gearOut = false;
-        return Leaf120ShadowStateClass::Neutral;
-    }
-
-#if METASENSE_LEAF_120_SHADOW_STATE_STRATEGY == 1
-    if (torqueDemandNm > tqDeadband) {
-        brakeOut = false;
-        gearOut = true;
-        return Leaf120ShadowStateClass::Motor;
-    }
-    if (torqueDemandNm < -tqDeadband) {
-        brakeOut = true;
-        gearOut = true;
-        return Leaf120ShadowStateClass::Brake;
-    }
-
-    brakeOut = false;
-    gearOut = false;
-    return Leaf120ShadowStateClass::Neutral;
-#elif METASENSE_LEAF_120_SHADOW_STATE_STRATEGY == 2
-    const float rpmDeadband = METASENSE_LEAF_120_SHADOW_REVERSE_RPM_DEADBAND;
-
-    if (torqueDemandNm > tqDeadband) {
-        brakeOut = false;
-        gearOut = true;
-        return Leaf120ShadowStateClass::Motor;
-    }
-
-    // Negative torque branch.
-    if (rpm < -rpmDeadband) {
-        // Provisional reverse mapping candidate: BRAKE=1, GEAR=0.
-        brakeOut = true;
-        gearOut = false;
-        return Leaf120ShadowStateClass::Reverse;
-    }
-
-    // Regen/brake branch when rpm is positive or near zero.
-    brakeOut = true;
-    gearOut = true;
-    return Leaf120ShadowStateClass::Brake;
-#else
-    brakeOut = brakeIn;
-    gearOut = gearIn;
-    if (!gearOut) {
-        return Leaf120ShadowStateClass::Neutral;
-    }
-    if (brakeOut) {
-        return Leaf120ShadowStateClass::Brake;
-    }
-
-    return Leaf120ShadowStateClass::Motor;
-#endif
-}
-
-void buildLeaf120ShadowFrame(float torqueDemandNm,
-                             bool readyBit,
-                             bool hvOkBit,
-                             bool brakeBit,
-                             bool gearDriveBit,
-                             uint8_t (&out)[4])
-{
-    const float torqueClamped = constrain(torqueDemandNm, -300.0f, 300.0f);
-    const float rawFloat = (torqueClamped - METASENSE_LEAF_120_CMD_BASE_OFFSET_NM) /
-                           METASENSE_LEAF_120_CMD_BASE_SLOPE;
-    long rawLong = lroundf(rawFloat);
-    if (rawLong > 32767L) {
-        rawLong = 32767L;
-    } else if (rawLong < -32768L) {
-        rawLong = -32768L;
-    }
-    const int16_t torqueRawBe = static_cast<int16_t>(rawLong);
-    out[0] = static_cast<uint8_t>((static_cast<uint16_t>(torqueRawBe) >> 8) & 0xFFU);
-    out[1] = static_cast<uint8_t>(static_cast<uint16_t>(torqueRawBe) & 0xFFU);
-
-    // Encode control-state bits into the low nibble so the outbound 0x120 frame
-    // carries live readiness/HV/brake/gear context instead of a constant state.
-    uint8_t stateNibble = 0U;
-    if (readyBit) {
-        stateNibble |= 0x01U;
-    }
-    if (hvOkBit) {
-        stateNibble |= 0x02U;
-    }
-    if (brakeBit) {
-        stateNibble |= 0x04U;
-    }
-    if (gearDriveBit) {
-        stateNibble |= 0x08U;
-    }
-    out[2] = static_cast<uint8_t>(stateNibble & 0x0FU);
-
-    static const uint8_t k120ResidueByState8[8] = {
-        0x00U, 0xE1U, 0x47U, 0xA6U, 0x7AU, 0x9BU, 0x3DU, 0xDCU
-    };
-    const uint8_t baseCrc = crc8Lsb120(out, 3U);
-    out[3] = static_cast<uint8_t>(baseCrc ^ k120ResidueByState8[out[2] & 0x07U]);
-}
-
-void logLeaf1d4ShadowFrame(uint32_t nowMs,
-                           float torqueDemandNm,
-                           bool readyBit,
-                           bool hvOkBit,
-                           bool brakeBit,
-                           bool gearDriveBit,
-                           bool txSent)
-{
-    (void)nowMs;
-    (void)torqueDemandNm;
-    (void)readyBit;
-    (void)hvOkBit;
-    (void)brakeBit;
-    (void)gearDriveBit;
-    (void)txSent;
-}
-
 void updateVcuDebug(bool simMode,
                     bool inv12v,
                     float hvVoltage,
@@ -4468,13 +3925,7 @@ void leafTxPacerTask(void* /*param*/)
         static uint32_t s_leafTxPacerLastLoggedMs = 0;
         if ((nowMs - s_leafTxPacerLastLoggedMs) >= LEAF_1D4_TORQUE_PAYLOAD_UPDATE_PERIOD_MS) {
             s_leafTxPacerLastLoggedMs = nowMs;
-            logLeaf1d4ShadowFrame(nowMs,
-                                  s_leaf1d4PayloadTorqueNm,
-                                  s_leafTxPacerReadyBit,
-                                  s_leafTxPacerHvOkBit,
-                                  s_leafTxPacerBrakeBit,
-                                  s_leafTxPacerGearDriveBit,
-                                  sent1d4);
+            // 0x120 shadow diagnostics removed - production uses 0x1D4 only
         }
     }
 }
@@ -4770,13 +4221,7 @@ void stopRecording()
                                         (kLeafCanHandshakeOnFirst1da && s_leafHandshakeSent));
     if (leafTxChecklistActive) {
         const bool sent = sendLeafTorqueCommand1d4FinalZero();
-        logLeaf1d4ShadowFrame(millis(),
-                              0.0f,
-                              false,
-                              false,
-                              false,
-                              false,
-                              sent);
+        // 0x120 shadow diagnostics removed
     }
 }
 
@@ -5548,46 +4993,6 @@ void loop()
                                static_cast<unsigned long>(leaf120B2BrakeSamples),
                                brakeTop);
             }
-        #if METASENSE_LEAF_CRC_DEEP_LOGS
-            Serial.printf("[VCM-120-CRC-STATS] frames=%lu match(xor=%lu,sum=%lu,inv=%lu,c07_00=%lu,c07_FF=%lu,c1D_FF=%lu,c2F_FF=%lu,c1D_00=%lu,c1D_FF_00=%lu,c1D_id120be=%lu,c1D_id120lo=%lu,c1D_ref_FF=%lu,c1D_ref_FF_00=%lu,c1D_ref_00=%lu,c1D_ref_id120be=%lu,c1D_ref_id120lo=%lu,c2F_ref_FF=%lu)\n",
-                          static_cast<unsigned long>(leaf120CrcSamples),
-                          static_cast<unsigned long>(leaf120CrcCandidateMatches[0]),
-                          static_cast<unsigned long>(leaf120CrcCandidateMatches[1]),
-                          static_cast<unsigned long>(leaf120CrcCandidateMatches[2]),
-                          static_cast<unsigned long>(leaf120CrcCandidateMatches[3]),
-                          static_cast<unsigned long>(leaf120CrcCandidateMatches[4]),
-                          static_cast<unsigned long>(leaf120CrcCandidateMatches[5]),
-                          static_cast<unsigned long>(leaf120CrcCandidateMatches[6]),
-                          static_cast<unsigned long>(leaf120CrcCandidateMatches[7]),
-                          static_cast<unsigned long>(leaf120CrcCandidateMatches[8]),
-                          static_cast<unsigned long>(leaf120CrcCandidateMatches[9]),
-                          static_cast<unsigned long>(leaf120CrcCandidateMatches[10]),
-                          static_cast<unsigned long>(leaf120CrcCandidateMatches[11]),
-                          static_cast<unsigned long>(leaf120CrcCandidateMatches[12]),
-                          static_cast<unsigned long>(leaf120CrcCandidateMatches[13]),
-                          static_cast<unsigned long>(leaf120CrcCandidateMatches[14]),
-                          static_cast<unsigned long>(leaf120CrcCandidateMatches[15]),
-                          static_cast<unsigned long>(leaf120CrcCandidateMatches[16]));
-            Serial0.printf("[VCM-120-CRC-STATS] frames=%lu match(xor=%lu,sum=%lu,inv=%lu,c07_00=%lu,c07_FF=%lu,c1D_FF=%lu,c2F_FF=%lu,c1D_00=%lu,c1D_FF_00=%lu,c1D_id120be=%lu,c1D_id120lo=%lu,c1D_ref_FF=%lu,c1D_ref_FF_00=%lu,c1D_ref_00=%lu,c1D_ref_id120be=%lu,c1D_ref_id120lo=%lu,c2F_ref_FF=%lu)\n",
-                           static_cast<unsigned long>(leaf120CrcSamples),
-                           static_cast<unsigned long>(leaf120CrcCandidateMatches[0]),
-                           static_cast<unsigned long>(leaf120CrcCandidateMatches[1]),
-                           static_cast<unsigned long>(leaf120CrcCandidateMatches[2]),
-                           static_cast<unsigned long>(leaf120CrcCandidateMatches[3]),
-                           static_cast<unsigned long>(leaf120CrcCandidateMatches[4]),
-                           static_cast<unsigned long>(leaf120CrcCandidateMatches[5]),
-                           static_cast<unsigned long>(leaf120CrcCandidateMatches[6]),
-                           static_cast<unsigned long>(leaf120CrcCandidateMatches[7]),
-                           static_cast<unsigned long>(leaf120CrcCandidateMatches[8]),
-                           static_cast<unsigned long>(leaf120CrcCandidateMatches[9]),
-                           static_cast<unsigned long>(leaf120CrcCandidateMatches[10]),
-                           static_cast<unsigned long>(leaf120CrcCandidateMatches[11]),
-                           static_cast<unsigned long>(leaf120CrcCandidateMatches[12]),
-                           static_cast<unsigned long>(leaf120CrcCandidateMatches[13]),
-                           static_cast<unsigned long>(leaf120CrcCandidateMatches[14]),
-                           static_cast<unsigned long>(leaf120CrcCandidateMatches[15]),
-                           static_cast<unsigned long>(leaf120CrcCandidateMatches[16]));
-        #endif
             const float crc120StateFixPctAll = (leaf120CrcSamples > 0U)
                 ? (100.0f * static_cast<float>(leaf120Ref00StateCorrectedMatches) / static_cast<float>(leaf120CrcSamples))
                 : 0.0f;
@@ -5641,503 +5046,6 @@ void loop()
                                txExpLoCtrCrcPct,
                                txExpLoCtrB2Pct);
             }
-        #if METASENSE_LEAF_CRC_DEEP_LOGS
-            Serial.printf("[VCM-120-CRC2-STATS] ref00_state_fix(match=%lu/%lu fixed8=%lu/%lu s0=0x%02X:%lu s1=0x%02X:%lu s2=0x%02X:%lu s3=0x%02X:%lu s4=0x%02X:%lu s5=0x%02X:%lu s6=0x%02X:%lu s7=0x%02X:%lu s8=0x%02X:%lu s9=0x%02X:%lu sA=0x%02X:%lu sB=0x%02X:%lu sC=0x%02X:%lu sD=0x%02X:%lu sE=0x%02X:%lu sF=0x%02X:%lu)\n",
-                          static_cast<unsigned long>(leaf120Ref00StateCorrectedMatches),
-                          static_cast<unsigned long>(leaf120CrcSamples),
-                          static_cast<unsigned long>(leaf120Ref00Fixed8Matches),
-                          static_cast<unsigned long>(leaf120CrcSamples),
-                          static_cast<unsigned>(leaf120Ref00TopResidueByState[0]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[0]),
-                          static_cast<unsigned>(leaf120Ref00TopResidueByState[1]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[1]),
-                          static_cast<unsigned>(leaf120Ref00TopResidueByState[2]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[2]),
-                          static_cast<unsigned>(leaf120Ref00TopResidueByState[3]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[3]),
-                          static_cast<unsigned>(leaf120Ref00TopResidueByState[4]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[4]),
-                          static_cast<unsigned>(leaf120Ref00TopResidueByState[5]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[5]),
-                          static_cast<unsigned>(leaf120Ref00TopResidueByState[6]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[6]),
-                          static_cast<unsigned>(leaf120Ref00TopResidueByState[7]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[7]),
-                          static_cast<unsigned>(leaf120Ref00TopResidueByState[8]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[8]),
-                          static_cast<unsigned>(leaf120Ref00TopResidueByState[9]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[9]),
-                          static_cast<unsigned>(leaf120Ref00TopResidueByState[10]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[10]),
-                          static_cast<unsigned>(leaf120Ref00TopResidueByState[11]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[11]),
-                          static_cast<unsigned>(leaf120Ref00TopResidueByState[12]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[12]),
-                          static_cast<unsigned>(leaf120Ref00TopResidueByState[13]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[13]),
-                          static_cast<unsigned>(leaf120Ref00TopResidueByState[14]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[14]),
-                          static_cast<unsigned>(leaf120Ref00TopResidueByState[15]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[15]));
-            Serial0.printf("[VCM-120-CRC2-STATS] ref00_state_fix(match=%lu/%lu fixed8=%lu/%lu s0=0x%02X:%lu s1=0x%02X:%lu s2=0x%02X:%lu s3=0x%02X:%lu s4=0x%02X:%lu s5=0x%02X:%lu s6=0x%02X:%lu s7=0x%02X:%lu s8=0x%02X:%lu s9=0x%02X:%lu sA=0x%02X:%lu sB=0x%02X:%lu sC=0x%02X:%lu sD=0x%02X:%lu sE=0x%02X:%lu sF=0x%02X:%lu)\n",
-                           static_cast<unsigned long>(leaf120Ref00StateCorrectedMatches),
-                           static_cast<unsigned long>(leaf120CrcSamples),
-                           static_cast<unsigned long>(leaf120Ref00Fixed8Matches),
-                           static_cast<unsigned long>(leaf120CrcSamples),
-                           static_cast<unsigned>(leaf120Ref00TopResidueByState[0]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[0]),
-                           static_cast<unsigned>(leaf120Ref00TopResidueByState[1]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[1]),
-                           static_cast<unsigned>(leaf120Ref00TopResidueByState[2]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[2]),
-                           static_cast<unsigned>(leaf120Ref00TopResidueByState[3]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[3]),
-                           static_cast<unsigned>(leaf120Ref00TopResidueByState[4]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[4]),
-                           static_cast<unsigned>(leaf120Ref00TopResidueByState[5]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[5]),
-                           static_cast<unsigned>(leaf120Ref00TopResidueByState[6]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[6]),
-                           static_cast<unsigned>(leaf120Ref00TopResidueByState[7]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[7]),
-                           static_cast<unsigned>(leaf120Ref00TopResidueByState[8]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[8]),
-                           static_cast<unsigned>(leaf120Ref00TopResidueByState[9]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[9]),
-                           static_cast<unsigned>(leaf120Ref00TopResidueByState[10]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[10]),
-                           static_cast<unsigned>(leaf120Ref00TopResidueByState[11]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[11]),
-                           static_cast<unsigned>(leaf120Ref00TopResidueByState[12]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[12]),
-                           static_cast<unsigned>(leaf120Ref00TopResidueByState[13]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[13]),
-                           static_cast<unsigned>(leaf120Ref00TopResidueByState[14]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[14]),
-                           static_cast<unsigned>(leaf120Ref00TopResidueByState[15]), static_cast<unsigned long>(leaf120Ref00TopResidueCountByState[15]));
-        #endif
-        #if METASENSE_LEAF_CRC_DEEP_LOGS
-            uint32_t nibbleTopCount = 0U;
-            uint8_t nibbleTop = 0U;
-            for (uint8_t nib = 0U; nib < 16U; ++nib) {
-                if (leaf120CrcNibbleSamples[nib] > nibbleTopCount) {
-                    nibbleTopCount = leaf120CrcNibbleSamples[nib];
-                    nibbleTop = nib;
-                }
-            }
-            const float crcBrake0StateFixPct = (leaf120CrcBrakeSamples[0] > 0U)
-                ? (100.0f * static_cast<float>(leaf120Ref00StateCorrectedMatchesByBrake[0]) / static_cast<float>(leaf120CrcBrakeSamples[0]))
-                : 0.0f;
-            const float crcBrake1StateFixPct = (leaf120CrcBrakeSamples[1] > 0U)
-                ? (100.0f * static_cast<float>(leaf120Ref00StateCorrectedMatchesByBrake[1]) / static_cast<float>(leaf120CrcBrakeSamples[1]))
-                : 0.0f;
-            const float crcBrake0Fixed8Pct = (leaf120CrcBrakeSamples[0] > 0U)
-                ? (100.0f * static_cast<float>(leaf120Ref00Fixed8MatchesByBrake[0]) / static_cast<float>(leaf120CrcBrakeSamples[0]))
-                : 0.0f;
-            const float crcBrake1Fixed8Pct = (leaf120CrcBrakeSamples[1] > 0U)
-                ? (100.0f * static_cast<float>(leaf120Ref00Fixed8MatchesByBrake[1]) / static_cast<float>(leaf120CrcBrakeSamples[1]))
-                : 0.0f;
-            const float crcBrake0IdLoPct = (leaf120CrcBrakeSamples[0] > 0U)
-                ? (100.0f * static_cast<float>(leaf120CrcRefIdLoMatchesByBrake[0]) / static_cast<float>(leaf120CrcBrakeSamples[0]))
-                : 0.0f;
-            const float crcBrake1IdLoPct = (leaf120CrcBrakeSamples[1] > 0U)
-                ? (100.0f * static_cast<float>(leaf120CrcRefIdLoMatchesByBrake[1]) / static_cast<float>(leaf120CrcBrakeSamples[1]))
-                : 0.0f;
-            const float nibbleTopStateFixPct = (leaf120CrcNibbleSamples[nibbleTop] > 0U)
-                ? (100.0f * static_cast<float>(leaf120Ref00StateCorrectedMatchesByNibble[nibbleTop]) / static_cast<float>(leaf120CrcNibbleSamples[nibbleTop]))
-                : 0.0f;
-            const float nibbleTopFixed8Pct = (leaf120CrcNibbleSamples[nibbleTop] > 0U)
-                ? (100.0f * static_cast<float>(leaf120Ref00Fixed8MatchesByNibble[nibbleTop]) / static_cast<float>(leaf120CrcNibbleSamples[nibbleTop]))
-                : 0.0f;
-            const float nibbleTopIdLoPct = (leaf120CrcNibbleSamples[nibbleTop] > 0U)
-                ? (100.0f * static_cast<float>(leaf120CrcRefIdLoMatchesByNibble[nibbleTop]) / static_cast<float>(leaf120CrcNibbleSamples[nibbleTop]))
-                : 0.0f;
-            uint8_t motorHiTop = 0U;
-            uint32_t motorHiTopCount = 0U;
-            for (uint8_t hi = 0U; hi < 16U; ++hi) {
-                if (leaf120CrcMotorHiNibSamples[hi] > motorHiTopCount) {
-                    motorHiTopCount = leaf120CrcMotorHiNibSamples[hi];
-                    motorHiTop = hi;
-                }
-            }
-            const float motorHiTopStateFixPct = (motorHiTopCount > 0U)
-                ? (100.0f * static_cast<float>(leaf120Ref00StateCorrectedMatchesByMotorHiNib[motorHiTop]) / static_cast<float>(motorHiTopCount))
-                : 0.0f;
-            const float motorHiTopFixed8Pct = (motorHiTopCount > 0U)
-                ? (100.0f * static_cast<float>(leaf120Ref00Fixed8MatchesByMotorHiNib[motorHiTop]) / static_cast<float>(motorHiTopCount))
-                : 0.0f;
-            const float motorHiTopIdLoPct = (motorHiTopCount > 0U)
-                ? (100.0f * static_cast<float>(leaf120CrcRefIdLoMatchesByMotorHiNib[motorHiTop]) / static_cast<float>(motorHiTopCount))
-                : 0.0f;
-            const float crcCmdZeroStateFixPct = (leaf120CrcCmdStateSamples[0] > 0U)
-                ? (100.0f * static_cast<float>(leaf120Ref00StateCorrectedMatchesByCmdState[0]) / static_cast<float>(leaf120CrcCmdStateSamples[0]))
-                : 0.0f;
-            const float crcCmdMotorStateFixPct = (leaf120CrcCmdStateSamples[1] > 0U)
-                ? (100.0f * static_cast<float>(leaf120Ref00StateCorrectedMatchesByCmdState[1]) / static_cast<float>(leaf120CrcCmdStateSamples[1]))
-                : 0.0f;
-            const float crcCmdRegenStateFixPct = (leaf120CrcCmdStateSamples[2] > 0U)
-                ? (100.0f * static_cast<float>(leaf120Ref00StateCorrectedMatchesByCmdState[2]) / static_cast<float>(leaf120CrcCmdStateSamples[2]))
-                : 0.0f;
-            const float crcCmdZeroFixed8Pct = (leaf120CrcCmdStateSamples[0] > 0U)
-                ? (100.0f * static_cast<float>(leaf120Ref00Fixed8MatchesByCmdState[0]) / static_cast<float>(leaf120CrcCmdStateSamples[0]))
-                : 0.0f;
-            const float crcCmdMotorFixed8Pct = (leaf120CrcCmdStateSamples[1] > 0U)
-                ? (100.0f * static_cast<float>(leaf120Ref00Fixed8MatchesByCmdState[1]) / static_cast<float>(leaf120CrcCmdStateSamples[1]))
-                : 0.0f;
-            const float crcCmdRegenFixed8Pct = (leaf120CrcCmdStateSamples[2] > 0U)
-                ? (100.0f * static_cast<float>(leaf120Ref00Fixed8MatchesByCmdState[2]) / static_cast<float>(leaf120CrcCmdStateSamples[2]))
-                : 0.0f;
-            const float crcCmdZeroIdLoPct = (leaf120CrcCmdStateSamples[0] > 0U)
-                ? (100.0f * static_cast<float>(leaf120CrcRefIdLoMatchesByCmdState[0]) / static_cast<float>(leaf120CrcCmdStateSamples[0]))
-                : 0.0f;
-            const float crcCmdMotorIdLoPct = (leaf120CrcCmdStateSamples[1] > 0U)
-                ? (100.0f * static_cast<float>(leaf120CrcRefIdLoMatchesByCmdState[1]) / static_cast<float>(leaf120CrcCmdStateSamples[1]))
-                : 0.0f;
-            const float crcCmdRegenIdLoPct = (leaf120CrcCmdStateSamples[2] > 0U)
-                ? (100.0f * static_cast<float>(leaf120CrcRefIdLoMatchesByCmdState[2]) / static_cast<float>(leaf120CrcCmdStateSamples[2]))
-                : 0.0f;
-            Serial.printf("[VCM-120-CRC-SPLIT] brake(b0=%lu sf=%.1f%% f8=%.1f%% idlo=%.1f%%,b1=%lu sf=%.1f%% f8=%.1f%% idlo=%.1f%%) cmd(z=%lu sf=%.1f%% f8=%.1f%% idlo=%.1f%%,m=%lu sf=%.1f%% f8=%.1f%% idlo=%.1f%%,r=%lu sf=%.1f%% f8=%.1f%% idlo=%.1f%%) motorHi(top=h%X n=%lu sf=%.1f%% f8=%.1f%% idlo=%.1f%%) nib(top=n%X n=%lu sf=%.1f%% f8=%.1f%% idlo=%.1f%%)\n",
-                          static_cast<unsigned long>(leaf120CrcBrakeSamples[0]),
-                          crcBrake0StateFixPct,
-                          crcBrake0Fixed8Pct,
-                          crcBrake0IdLoPct,
-                          static_cast<unsigned long>(leaf120CrcBrakeSamples[1]),
-                          crcBrake1StateFixPct,
-                          crcBrake1Fixed8Pct,
-                          crcBrake1IdLoPct,
-                          static_cast<unsigned long>(leaf120CrcCmdStateSamples[0]),
-                          crcCmdZeroStateFixPct,
-                          crcCmdZeroFixed8Pct,
-                          crcCmdZeroIdLoPct,
-                          static_cast<unsigned long>(leaf120CrcCmdStateSamples[1]),
-                          crcCmdMotorStateFixPct,
-                          crcCmdMotorFixed8Pct,
-                          crcCmdMotorIdLoPct,
-                          static_cast<unsigned long>(leaf120CrcCmdStateSamples[2]),
-                          crcCmdRegenStateFixPct,
-                          crcCmdRegenFixed8Pct,
-                          crcCmdRegenIdLoPct,
-                          static_cast<unsigned>(motorHiTop),
-                          static_cast<unsigned long>(motorHiTopCount),
-                          motorHiTopStateFixPct,
-                          motorHiTopFixed8Pct,
-                          motorHiTopIdLoPct,
-                          static_cast<unsigned>(nibbleTop),
-                          static_cast<unsigned long>(nibbleTopCount),
-                          nibbleTopStateFixPct,
-                          nibbleTopFixed8Pct,
-                          nibbleTopIdLoPct);
-            Serial0.printf("[VCM-120-CRC-SPLIT] brake(b0=%lu sf=%.1f%% f8=%.1f%% idlo=%.1f%%,b1=%lu sf=%.1f%% f8=%.1f%% idlo=%.1f%%) cmd(z=%lu sf=%.1f%% f8=%.1f%% idlo=%.1f%%,m=%lu sf=%.1f%% f8=%.1f%% idlo=%.1f%%,r=%lu sf=%.1f%% f8=%.1f%% idlo=%.1f%%) motorHi(top=h%X n=%lu sf=%.1f%% f8=%.1f%% idlo=%.1f%%) nib(top=n%X n=%lu sf=%.1f%% f8=%.1f%% idlo=%.1f%%)\n",
-                           static_cast<unsigned long>(leaf120CrcBrakeSamples[0]),
-                           crcBrake0StateFixPct,
-                           crcBrake0Fixed8Pct,
-                           crcBrake0IdLoPct,
-                           static_cast<unsigned long>(leaf120CrcBrakeSamples[1]),
-                           crcBrake1StateFixPct,
-                           crcBrake1Fixed8Pct,
-                           crcBrake1IdLoPct,
-                           static_cast<unsigned long>(leaf120CrcCmdStateSamples[0]),
-                           crcCmdZeroStateFixPct,
-                           crcCmdZeroFixed8Pct,
-                           crcCmdZeroIdLoPct,
-                           static_cast<unsigned long>(leaf120CrcCmdStateSamples[1]),
-                           crcCmdMotorStateFixPct,
-                           crcCmdMotorFixed8Pct,
-                           crcCmdMotorIdLoPct,
-                           static_cast<unsigned long>(leaf120CrcCmdStateSamples[2]),
-                           crcCmdRegenStateFixPct,
-                           crcCmdRegenFixed8Pct,
-                           crcCmdRegenIdLoPct,
-                           static_cast<unsigned>(motorHiTop),
-                           static_cast<unsigned long>(motorHiTopCount),
-                           motorHiTopStateFixPct,
-                           motorHiTopFixed8Pct,
-                           motorHiTopIdLoPct,
-                           static_cast<unsigned>(nibbleTop),
-                           static_cast<unsigned long>(nibbleTopCount),
-                           nibbleTopStateFixPct,
-                           nibbleTopFixed8Pct,
-                           nibbleTopIdLoPct);
-
-            auto bitSetPct = [](const uint32_t* counts, uint32_t samples, uint8_t bit) -> float {
-                if (samples == 0U) {
-                    return 0.0f;
-                }
-                uint32_t setCount = 0U;
-                for (uint16_t value = 0U; value < 256U; ++value) {
-                    if ((static_cast<uint8_t>(value) & static_cast<uint8_t>(1U << bit)) != 0U) {
-                        setCount += counts[value];
-                    }
-                }
-                return 100.0f * static_cast<float>(setCount) / static_cast<float>(samples);
-            };
-
-            const float posB2Pct = bitSetPct(leaf120B2PosCounts, leaf120B2PosSamples, 2U);
-            const float posB3Pct = bitSetPct(leaf120B2PosCounts, leaf120B2PosSamples, 3U);
-            const float posB4Pct = bitSetPct(leaf120B2PosCounts, leaf120B2PosSamples, 4U);
-            const float posB5Pct = bitSetPct(leaf120B2PosCounts, leaf120B2PosSamples, 5U);
-            const float negB2Pct = bitSetPct(leaf120B2NegCounts, leaf120B2NegSamples, 2U);
-            const float negB3Pct = bitSetPct(leaf120B2NegCounts, leaf120B2NegSamples, 3U);
-            const float negB4Pct = bitSetPct(leaf120B2NegCounts, leaf120B2NegSamples, 4U);
-            const float negB5Pct = bitSetPct(leaf120B2NegCounts, leaf120B2NegSamples, 5U);
-
-            float maxSepPct = 0.0f;
-            uint8_t maxSepBit = 2U;
-            const float sepB2 = fabsf(posB2Pct - negB2Pct);
-            if (sepB2 > maxSepPct) {
-                maxSepPct = sepB2;
-                maxSepBit = 2U;
-            }
-            const float sepB3 = fabsf(posB3Pct - negB3Pct);
-            if (sepB3 > maxSepPct) {
-                maxSepPct = sepB3;
-                maxSepBit = 3U;
-            }
-            const float sepB4 = fabsf(posB4Pct - negB4Pct);
-            if (sepB4 > maxSepPct) {
-                maxSepPct = sepB4;
-                maxSepBit = 4U;
-            }
-            const float sepB5 = fabsf(posB5Pct - negB5Pct);
-            if (sepB5 > maxSepPct) {
-                maxSepPct = sepB5;
-                maxSepBit = 5U;
-            }
-
-            const bool signBucketsReady = (leaf120B2PosSamples >= 200U) && (leaf120B2NegSamples >= 200U);
-            const bool strongDirectionFlagBit = signBucketsReady && (maxSepPct >= 95.0f);
-            const char* signOnlyVerdict = strongDirectionFlagBit ? "NO" : "YES";
-            const char* idleZeroVerdict = (leaf120B2ZeroSamples >= 500U) ? "YES" : "UNCLEAR";
-
-            Serial.printf("[VCM-120-SIGN-HYP] sign_only=%s idle_zero=%s sep(max=b%u %.1f%%)"
-                          " pos(n=%lu b2=%.1f%% b3=%.1f%% b4=%.1f%% b5=%.1f%%)"
-                          " neg(n=%lu b2=%.1f%% b3=%.1f%% b4=%.1f%% b5=%.1f%%)"
-                          " zero(n=%lu)\n",
-                          signOnlyVerdict,
-                          idleZeroVerdict,
-                          static_cast<unsigned>(maxSepBit),
-                          maxSepPct,
-                          static_cast<unsigned long>(leaf120B2PosSamples),
-                          posB2Pct,
-                          posB3Pct,
-                          posB4Pct,
-                          posB5Pct,
-                          static_cast<unsigned long>(leaf120B2NegSamples),
-                          negB2Pct,
-                          negB3Pct,
-                          negB4Pct,
-                          negB5Pct,
-                          static_cast<unsigned long>(leaf120B2ZeroSamples));
-            Serial0.printf("[VCM-120-SIGN-HYP] sign_only=%s idle_zero=%s sep(max=b%u %.1f%%)"
-                           " pos(n=%lu b2=%.1f%% b3=%.1f%% b4=%.1f%% b5=%.1f%%)"
-                           " neg(n=%lu b2=%.1f%% b3=%.1f%% b4=%.1f%% b5=%.1f%%)"
-                           " zero(n=%lu)\n",
-                           signOnlyVerdict,
-                           idleZeroVerdict,
-                           static_cast<unsigned>(maxSepBit),
-                           maxSepPct,
-                           static_cast<unsigned long>(leaf120B2PosSamples),
-                           posB2Pct,
-                           posB3Pct,
-                           posB4Pct,
-                           posB5Pct,
-                           static_cast<unsigned long>(leaf120B2NegSamples),
-                           negB2Pct,
-                           negB3Pct,
-                           negB4Pct,
-                           negB5Pct,
-                           static_cast<unsigned long>(leaf120B2ZeroSamples));
-
-            static const char* kScopeNames[kLeaf120MotorScopeCount] = {
-                "d012_lsbB8",
-                "idlo_d012_lsbB8",
-                "idbe_d012_lsbB8",
-                "idlo_d012_msb1D"
-            };
-            uint8_t bestScopeIdx = 0U;
-            float bestScopeSfPct = -1.0f;
-            float scopeDirectPct[kLeaf120MotorScopeCount] = {0.0f, 0.0f, 0.0f, 0.0f};
-            float scopeStateFixPct[kLeaf120MotorScopeCount] = {0.0f, 0.0f, 0.0f, 0.0f};
-            for (uint8_t scopeIdx = 0U; scopeIdx < kLeaf120MotorScopeCount; ++scopeIdx) {
-                const uint32_t n = leaf120MotorScopeSamples[scopeIdx];
-                if (n > 0U) {
-                    scopeDirectPct[scopeIdx] = 100.0f * static_cast<float>(leaf120MotorScopeDirectMatches[scopeIdx]) /
-                                               static_cast<float>(n);
-                    scopeStateFixPct[scopeIdx] = 100.0f * static_cast<float>(leaf120MotorScopeStateFixMatches[scopeIdx]) /
-                                                 static_cast<float>(n);
-                }
-                if (scopeStateFixPct[scopeIdx] > bestScopeSfPct) {
-                    bestScopeSfPct = scopeStateFixPct[scopeIdx];
-                    bestScopeIdx = scopeIdx;
-                }
-            }
-
-            Serial.printf("[VCM-120-MOTOR-SWEEP] best=%s sf=%.1f%% n=%lu"
-                          " s0(d=%.1f%% sf=%.1f%%) s1(d=%.1f%% sf=%.1f%%)"
-                          " s2(d=%.1f%% sf=%.1f%%) s3(d=%.1f%% sf=%.1f%%)\n",
-                          kScopeNames[bestScopeIdx],
-                          bestScopeSfPct,
-                          static_cast<unsigned long>(leaf120MotorScopeSamples[bestScopeIdx]),
-                          scopeDirectPct[0],
-                          scopeStateFixPct[0],
-                          scopeDirectPct[1],
-                          scopeStateFixPct[1],
-                          scopeDirectPct[2],
-                          scopeStateFixPct[2],
-                          scopeDirectPct[3],
-                          scopeStateFixPct[3]);
-            Serial0.printf("[VCM-120-MOTOR-SWEEP] best=%s sf=%.1f%% n=%lu"
-                           " s0(d=%.1f%% sf=%.1f%%) s1(d=%.1f%% sf=%.1f%%)"
-                           " s2(d=%.1f%% sf=%.1f%%) s3(d=%.1f%% sf=%.1f%%)\n",
-                           kScopeNames[bestScopeIdx],
-                           bestScopeSfPct,
-                           static_cast<unsigned long>(leaf120MotorScopeSamples[bestScopeIdx]),
-                           scopeDirectPct[0],
-                           scopeStateFixPct[0],
-                           scopeDirectPct[1],
-                           scopeStateFixPct[1],
-                           scopeDirectPct[2],
-                           scopeStateFixPct[2],
-                           scopeDirectPct[3],
-                           scopeStateFixPct[3]);
-            Serial.printf("[VCM-1DA-CRC-STATS] frames=%lu match(xor=%lu,sum=%lu,inv=%lu,c07_00=%lu,c07_FF=%lu,c1D_FF=%lu,c2F_FF=%lu,c1D_00=%lu,c1D_FF_00=%lu,c1D_id1dabe=%lu,c1D_id1dalo=%lu,c1D_ref_FF=%lu,c1D_ref_FF_00=%lu,c1D_ref_00=%lu,c1D_ref_id1dabe=%lu,c1D_ref_id1dalo=%lu,c2F_ref_FF=%lu)\n",
-                          static_cast<unsigned long>(leaf1daCrcSamples),
-                          static_cast<unsigned long>(leaf1daCrcCandidateMatches[0]),
-                          static_cast<unsigned long>(leaf1daCrcCandidateMatches[1]),
-                          static_cast<unsigned long>(leaf1daCrcCandidateMatches[2]),
-                          static_cast<unsigned long>(leaf1daCrcCandidateMatches[3]),
-                          static_cast<unsigned long>(leaf1daCrcCandidateMatches[4]),
-                          static_cast<unsigned long>(leaf1daCrcCandidateMatches[5]),
-                          static_cast<unsigned long>(leaf1daCrcCandidateMatches[6]),
-                          static_cast<unsigned long>(leaf1daCrcCandidateMatches[7]),
-                          static_cast<unsigned long>(leaf1daCrcCandidateMatches[8]),
-                          static_cast<unsigned long>(leaf1daCrcCandidateMatches[9]),
-                          static_cast<unsigned long>(leaf1daCrcCandidateMatches[10]),
-                          static_cast<unsigned long>(leaf1daCrcCandidateMatches[11]),
-                          static_cast<unsigned long>(leaf1daCrcCandidateMatches[12]),
-                          static_cast<unsigned long>(leaf1daCrcCandidateMatches[13]),
-                          static_cast<unsigned long>(leaf1daCrcCandidateMatches[14]),
-                          static_cast<unsigned long>(leaf1daCrcCandidateMatches[15]),
-                          static_cast<unsigned long>(leaf1daCrcCandidateMatches[16]));
-            Serial0.printf("[VCM-1DA-CRC-STATS] frames=%lu match(xor=%lu,sum=%lu,inv=%lu,c07_00=%lu,c07_FF=%lu,c1D_FF=%lu,c2F_FF=%lu,c1D_00=%lu,c1D_FF_00=%lu,c1D_id1dabe=%lu,c1D_id1dalo=%lu,c1D_ref_FF=%lu,c1D_ref_FF_00=%lu,c1D_ref_00=%lu,c1D_ref_id1dabe=%lu,c1D_ref_id1dalo=%lu,c2F_ref_FF=%lu)\n",
-                           static_cast<unsigned long>(leaf1daCrcSamples),
-                           static_cast<unsigned long>(leaf1daCrcCandidateMatches[0]),
-                           static_cast<unsigned long>(leaf1daCrcCandidateMatches[1]),
-                           static_cast<unsigned long>(leaf1daCrcCandidateMatches[2]),
-                           static_cast<unsigned long>(leaf1daCrcCandidateMatches[3]),
-                           static_cast<unsigned long>(leaf1daCrcCandidateMatches[4]),
-                           static_cast<unsigned long>(leaf1daCrcCandidateMatches[5]),
-                           static_cast<unsigned long>(leaf1daCrcCandidateMatches[6]),
-                           static_cast<unsigned long>(leaf1daCrcCandidateMatches[7]),
-                           static_cast<unsigned long>(leaf1daCrcCandidateMatches[8]),
-                           static_cast<unsigned long>(leaf1daCrcCandidateMatches[9]),
-                           static_cast<unsigned long>(leaf1daCrcCandidateMatches[10]),
-                           static_cast<unsigned long>(leaf1daCrcCandidateMatches[11]),
-                           static_cast<unsigned long>(leaf1daCrcCandidateMatches[12]),
-                           static_cast<unsigned long>(leaf1daCrcCandidateMatches[13]),
-                           static_cast<unsigned long>(leaf1daCrcCandidateMatches[14]),
-                           static_cast<unsigned long>(leaf1daCrcCandidateMatches[15]),
-                           static_cast<unsigned long>(leaf1daCrcCandidateMatches[16]));
-            Serial.printf("[VCM-1D4-CRC-STATS] frames=%lu match(xor=%lu,sum=%lu,inv=%lu,c07_00=%lu,c07_FF=%lu,c1D_FF=%lu,c2F_FF=%lu,c1D_00=%lu,c1D_FF_00=%lu,c1D_id1d4be=%lu,c1D_id1d4lo=%lu,c1D_ref_FF=%lu,c1D_ref_FF_00=%lu,c1D_ref_00=%lu,c1D_ref_id1d4be=%lu,c1D_ref_id1d4lo=%lu,c2F_ref_FF=%lu)\n",
-                          static_cast<unsigned long>(leaf1d4CrcSamples),
-                          static_cast<unsigned long>(leaf1d4CrcCandidateMatches[0]),
-                          static_cast<unsigned long>(leaf1d4CrcCandidateMatches[1]),
-                          static_cast<unsigned long>(leaf1d4CrcCandidateMatches[2]),
-                          static_cast<unsigned long>(leaf1d4CrcCandidateMatches[3]),
-                          static_cast<unsigned long>(leaf1d4CrcCandidateMatches[4]),
-                          static_cast<unsigned long>(leaf1d4CrcCandidateMatches[5]),
-                          static_cast<unsigned long>(leaf1d4CrcCandidateMatches[6]),
-                          static_cast<unsigned long>(leaf1d4CrcCandidateMatches[7]),
-                          static_cast<unsigned long>(leaf1d4CrcCandidateMatches[8]),
-                          static_cast<unsigned long>(leaf1d4CrcCandidateMatches[9]),
-                          static_cast<unsigned long>(leaf1d4CrcCandidateMatches[10]),
-                          static_cast<unsigned long>(leaf1d4CrcCandidateMatches[11]),
-                          static_cast<unsigned long>(leaf1d4CrcCandidateMatches[12]),
-                          static_cast<unsigned long>(leaf1d4CrcCandidateMatches[13]),
-                          static_cast<unsigned long>(leaf1d4CrcCandidateMatches[14]),
-                          static_cast<unsigned long>(leaf1d4CrcCandidateMatches[15]),
-                          static_cast<unsigned long>(leaf1d4CrcCandidateMatches[16]));
-            Serial0.printf("[VCM-1D4-CRC-STATS] frames=%lu match(xor=%lu,sum=%lu,inv=%lu,c07_00=%lu,c07_FF=%lu,c1D_FF=%lu,c2F_FF=%lu,c1D_00=%lu,c1D_FF_00=%lu,c1D_id1d4be=%lu,c1D_id1d4lo=%lu,c1D_ref_FF=%lu,c1D_ref_FF_00=%lu,c1D_ref_00=%lu,c1D_ref_id1d4be=%lu,c1D_ref_id1d4lo=%lu,c2F_ref_FF=%lu)\n",
-                           static_cast<unsigned long>(leaf1d4CrcSamples),
-                           static_cast<unsigned long>(leaf1d4CrcCandidateMatches[0]),
-                           static_cast<unsigned long>(leaf1d4CrcCandidateMatches[1]),
-                           static_cast<unsigned long>(leaf1d4CrcCandidateMatches[2]),
-                           static_cast<unsigned long>(leaf1d4CrcCandidateMatches[3]),
-                           static_cast<unsigned long>(leaf1d4CrcCandidateMatches[4]),
-                           static_cast<unsigned long>(leaf1d4CrcCandidateMatches[5]),
-                           static_cast<unsigned long>(leaf1d4CrcCandidateMatches[6]),
-                           static_cast<unsigned long>(leaf1d4CrcCandidateMatches[7]),
-                           static_cast<unsigned long>(leaf1d4CrcCandidateMatches[8]),
-                           static_cast<unsigned long>(leaf1d4CrcCandidateMatches[9]),
-                           static_cast<unsigned long>(leaf1d4CrcCandidateMatches[10]),
-                           static_cast<unsigned long>(leaf1d4CrcCandidateMatches[11]),
-                           static_cast<unsigned long>(leaf1d4CrcCandidateMatches[12]),
-                           static_cast<unsigned long>(leaf1d4CrcCandidateMatches[13]),
-                           static_cast<unsigned long>(leaf1d4CrcCandidateMatches[14]),
-                           static_cast<unsigned long>(leaf1d4CrcCandidateMatches[15]),
-                           static_cast<unsigned long>(leaf1d4CrcCandidateMatches[16]));
-            uint32_t resTopCountMsb07 = 0U;
-            uint32_t resTopCountMsb1D = 0U;
-            uint32_t resTopCountMsb2F = 0U;
-            uint32_t resTopCountLsb1D = 0U;
-            uint32_t resTopCountLsb2F = 0U;
-            const uint8_t resTopMsb07 = findTopByteValue(leaf1daResidueCounts[0], resTopCountMsb07);
-            const uint8_t resTopMsb1D = findTopByteValue(leaf1daResidueCounts[2], resTopCountMsb1D);
-            const uint8_t resTopMsb2F = findTopByteValue(leaf1daResidueCounts[4], resTopCountMsb2F);
-            const uint8_t resTopLsb1D = findTopByteValue(leaf1daResidueCounts[5], resTopCountLsb1D);
-            const uint8_t resTopLsb2F = findTopByteValue(leaf1daResidueCounts[7], resTopCountLsb2F);
-            Serial.printf("[VCM-1DA-CRC2-STATS] frames=%lu residue(msb07=0x%02X:%lu,msb1D=0x%02X:%lu,msb2F=0x%02X:%lu,lsb1D=0x%02X:%lu,lsb2F=0x%02X:%lu) autosar(c2F_idbe=%lu,c1D_idbe=%lu,c2F_d6mask=%lu,c2F_clock=%lu)\n",
-                          static_cast<unsigned long>(leaf1daResidueSamples),
-                          static_cast<unsigned>(resTopMsb07),
-                          static_cast<unsigned long>(resTopCountMsb07),
-                          static_cast<unsigned>(resTopMsb1D),
-                          static_cast<unsigned long>(resTopCountMsb1D),
-                          static_cast<unsigned>(resTopMsb2F),
-                          static_cast<unsigned long>(resTopCountMsb2F),
-                          static_cast<unsigned>(resTopLsb1D),
-                          static_cast<unsigned long>(resTopCountLsb1D),
-                          static_cast<unsigned>(resTopLsb2F),
-                          static_cast<unsigned long>(resTopCountLsb2F),
-                          static_cast<unsigned long>(leaf1daAutosarCandidateMatches[0]),
-                          static_cast<unsigned long>(leaf1daAutosarCandidateMatches[1]),
-                          static_cast<unsigned long>(leaf1daAutosarCandidateMatches[2]),
-                          static_cast<unsigned long>(leaf1daAutosarCandidateMatches[3]));
-            Serial0.printf("[VCM-1DA-CRC2-STATS] frames=%lu residue(msb07=0x%02X:%lu,msb1D=0x%02X:%lu,msb2F=0x%02X:%lu,lsb1D=0x%02X:%lu,lsb2F=0x%02X:%lu) autosar(c2F_idbe=%lu,c1D_idbe=%lu,c2F_d6mask=%lu,c2F_clock=%lu)\n",
-                           static_cast<unsigned long>(leaf1daResidueSamples),
-                           static_cast<unsigned>(resTopMsb07),
-                           static_cast<unsigned long>(resTopCountMsb07),
-                           static_cast<unsigned>(resTopMsb1D),
-                           static_cast<unsigned long>(resTopCountMsb1D),
-                           static_cast<unsigned>(resTopMsb2F),
-                           static_cast<unsigned long>(resTopCountMsb2F),
-                           static_cast<unsigned>(resTopLsb1D),
-                           static_cast<unsigned long>(resTopCountLsb1D),
-                           static_cast<unsigned>(resTopLsb2F),
-                           static_cast<unsigned long>(resTopCountLsb2F),
-                           static_cast<unsigned long>(leaf1daAutosarCandidateMatches[0]),
-                           static_cast<unsigned long>(leaf1daAutosarCandidateMatches[1]),
-                           static_cast<unsigned long>(leaf1daAutosarCandidateMatches[2]),
-                           static_cast<unsigned long>(leaf1daAutosarCandidateMatches[3]));
-            uint32_t clkTopCountMsb07[4] = {0U, 0U, 0U, 0U};
-            uint8_t clkTopMsb07[4] = {0U, 0U, 0U, 0U};
-            uint32_t clkTopCountMsb1D[4] = {0U, 0U, 0U, 0U};
-            uint8_t clkTopMsb1D[4] = {0U, 0U, 0U, 0U};
-            for (uint8_t clk = 0U; clk < 4U; ++clk) {
-                clkTopMsb07[clk] = findTopByteValue(leaf1daResidueByClock[0][clk], clkTopCountMsb07[clk]);
-                clkTopMsb1D[clk] = findTopByteValue(leaf1daResidueByClock[2][clk], clkTopCountMsb1D[clk]);
-            }
-            Serial.printf("[VCM-1DA-CRC3-STATS] clock(n0=%lu,n1=%lu,n2=%lu,n3=%lu) msb07(c0=0x%02X:%lu,c1=0x%02X:%lu,c2=0x%02X:%lu,c3=0x%02X:%lu) msb1D(c0=0x%02X:%lu,c1=0x%02X:%lu,c2=0x%02X:%lu,c3=0x%02X:%lu)\n",
-                          static_cast<unsigned long>(leaf1daClockSamples[0]),
-                          static_cast<unsigned long>(leaf1daClockSamples[1]),
-                          static_cast<unsigned long>(leaf1daClockSamples[2]),
-                          static_cast<unsigned long>(leaf1daClockSamples[3]),
-                          static_cast<unsigned>(clkTopMsb07[0]),
-                          static_cast<unsigned long>(clkTopCountMsb07[0]),
-                          static_cast<unsigned>(clkTopMsb07[1]),
-                          static_cast<unsigned long>(clkTopCountMsb07[1]),
-                          static_cast<unsigned>(clkTopMsb07[2]),
-                          static_cast<unsigned long>(clkTopCountMsb07[2]),
-                          static_cast<unsigned>(clkTopMsb07[3]),
-                          static_cast<unsigned long>(clkTopCountMsb07[3]),
-                          static_cast<unsigned>(clkTopMsb1D[0]),
-                          static_cast<unsigned long>(clkTopCountMsb1D[0]),
-                          static_cast<unsigned>(clkTopMsb1D[1]),
-                          static_cast<unsigned long>(clkTopCountMsb1D[1]),
-                          static_cast<unsigned>(clkTopMsb1D[2]),
-                          static_cast<unsigned long>(clkTopCountMsb1D[2]),
-                          static_cast<unsigned>(clkTopMsb1D[3]),
-                          static_cast<unsigned long>(clkTopCountMsb1D[3]));
-            Serial0.printf("[VCM-1DA-CRC3-STATS] clock(n0=%lu,n1=%lu,n2=%lu,n3=%lu) msb07(c0=0x%02X:%lu,c1=0x%02X:%lu,c2=0x%02X:%lu,c3=0x%02X:%lu) msb1D(c0=0x%02X:%lu,c1=0x%02X:%lu,c2=0x%02X:%lu,c3=0x%02X:%lu)\n",
-                           static_cast<unsigned long>(leaf1daClockSamples[0]),
-                           static_cast<unsigned long>(leaf1daClockSamples[1]),
-                           static_cast<unsigned long>(leaf1daClockSamples[2]),
-                           static_cast<unsigned long>(leaf1daClockSamples[3]),
-                           static_cast<unsigned>(clkTopMsb07[0]),
-                           static_cast<unsigned long>(clkTopCountMsb07[0]),
-                           static_cast<unsigned>(clkTopMsb07[1]),
-                           static_cast<unsigned long>(clkTopCountMsb07[1]),
-                           static_cast<unsigned>(clkTopMsb07[2]),
-                           static_cast<unsigned long>(clkTopCountMsb07[2]),
-                           static_cast<unsigned>(clkTopMsb07[3]),
-                           static_cast<unsigned long>(clkTopCountMsb07[3]),
-                           static_cast<unsigned>(clkTopMsb1D[0]),
-                           static_cast<unsigned long>(clkTopCountMsb1D[0]),
-                           static_cast<unsigned>(clkTopMsb1D[1]),
-                           static_cast<unsigned long>(clkTopCountMsb1D[1]),
-                           static_cast<unsigned>(clkTopMsb1D[2]),
-                           static_cast<unsigned long>(clkTopCountMsb1D[2]),
-                           static_cast<unsigned>(clkTopMsb1D[3]),
-                           static_cast<unsigned long>(clkTopCountMsb1D[3]));
-        #endif
         #if !METASENSE_LEAF_1D4_RAW_SNIFF_ONLY
             const float crc1daClockFixPct = (leaf1daCrcSamples > 0U)
                 ? (100.0f * static_cast<float>(leaf1daIdLoClockCorrectedMatches) / static_cast<float>(leaf1daCrcSamples))
@@ -6189,63 +5097,6 @@ void loop()
                            static_cast<unsigned long>(leaf1d4IdLoTopResidueCountByClock[2]),
                            static_cast<unsigned>(leaf1d4IdLoTopResidueByClock[3]),
                            static_cast<unsigned long>(leaf1d4IdLoTopResidueCountByClock[3]));
-        #if METASENSE_LEAF_CRC_DEEP_LOGS
-            Serial.printf("[VCM-1DA-CRC4-STATS] idlo_clock_fix(match=%lu/%lu c0=0x%02X:%lu c1=0x%02X:%lu c2=0x%02X:%lu c3=0x%02X:%lu)\n",
-                          static_cast<unsigned long>(leaf1daIdLoClockCorrectedMatches),
-                          static_cast<unsigned long>(leaf1daCrcSamples),
-                          static_cast<unsigned>(leaf1daIdLoTopResidueByClock[0]),
-                          static_cast<unsigned long>(leaf1daIdLoTopResidueCountByClock[0]),
-                          static_cast<unsigned>(leaf1daIdLoTopResidueByClock[1]),
-                          static_cast<unsigned long>(leaf1daIdLoTopResidueCountByClock[1]),
-                          static_cast<unsigned>(leaf1daIdLoTopResidueByClock[2]),
-                          static_cast<unsigned long>(leaf1daIdLoTopResidueCountByClock[2]),
-                          static_cast<unsigned>(leaf1daIdLoTopResidueByClock[3]),
-                          static_cast<unsigned long>(leaf1daIdLoTopResidueCountByClock[3]));
-            Serial0.printf("[VCM-1DA-CRC4-STATS] idlo_clock_fix(match=%lu/%lu c0=0x%02X:%lu c1=0x%02X:%lu c2=0x%02X:%lu c3=0x%02X:%lu)\n",
-                           static_cast<unsigned long>(leaf1daIdLoClockCorrectedMatches),
-                           static_cast<unsigned long>(leaf1daCrcSamples),
-                           static_cast<unsigned>(leaf1daIdLoTopResidueByClock[0]),
-                           static_cast<unsigned long>(leaf1daIdLoTopResidueCountByClock[0]),
-                           static_cast<unsigned>(leaf1daIdLoTopResidueByClock[1]),
-                           static_cast<unsigned long>(leaf1daIdLoTopResidueCountByClock[1]),
-                           static_cast<unsigned>(leaf1daIdLoTopResidueByClock[2]),
-                           static_cast<unsigned long>(leaf1daIdLoTopResidueCountByClock[2]),
-                           static_cast<unsigned>(leaf1daIdLoTopResidueByClock[3]),
-                           static_cast<unsigned long>(leaf1daIdLoTopResidueCountByClock[3]));
-            const float crc1d4ClockFixPct = (leaf1d4CrcSamples > 0U)
-                ? (100.0f * static_cast<float>(leaf1d4IdLoClockCorrectedMatches) / static_cast<float>(leaf1d4CrcSamples))
-                : 0.0f;
-            Serial.printf("[VCM-1D4-CRC-OK] clockFix=%lu/%lu(%.1f%%)\n",
-                          static_cast<unsigned long>(leaf1d4IdLoClockCorrectedMatches),
-                          static_cast<unsigned long>(leaf1d4CrcSamples),
-                          crc1d4ClockFixPct);
-            Serial0.printf("[VCM-1D4-CRC-OK] clockFix=%lu/%lu(%.1f%%)\n",
-                           static_cast<unsigned long>(leaf1d4IdLoClockCorrectedMatches),
-                           static_cast<unsigned long>(leaf1d4CrcSamples),
-                           crc1d4ClockFixPct);
-            Serial.printf("[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=%lu/%lu c0=0x%02X:%lu c1=0x%02X:%lu c2=0x%02X:%lu c3=0x%02X:%lu)\n",
-                          static_cast<unsigned long>(leaf1d4IdLoClockCorrectedMatches),
-                          static_cast<unsigned long>(leaf1d4CrcSamples),
-                          static_cast<unsigned>(leaf1d4IdLoTopResidueByClock[0]),
-                          static_cast<unsigned long>(leaf1d4IdLoTopResidueCountByClock[0]),
-                          static_cast<unsigned>(leaf1d4IdLoTopResidueByClock[1]),
-                          static_cast<unsigned long>(leaf1d4IdLoTopResidueCountByClock[1]),
-                          static_cast<unsigned>(leaf1d4IdLoTopResidueByClock[2]),
-                          static_cast<unsigned long>(leaf1d4IdLoTopResidueCountByClock[2]),
-                          static_cast<unsigned>(leaf1d4IdLoTopResidueByClock[3]),
-                          static_cast<unsigned long>(leaf1d4IdLoTopResidueCountByClock[3]));
-            Serial0.printf("[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=%lu/%lu c0=0x%02X:%lu c1=0x%02X:%lu c2=0x%02X:%lu c3=0x%02X:%lu)\n",
-                           static_cast<unsigned long>(leaf1d4IdLoClockCorrectedMatches),
-                           static_cast<unsigned long>(leaf1d4CrcSamples),
-                           static_cast<unsigned>(leaf1d4IdLoTopResidueByClock[0]),
-                           static_cast<unsigned long>(leaf1d4IdLoTopResidueCountByClock[0]),
-                           static_cast<unsigned>(leaf1d4IdLoTopResidueByClock[1]),
-                           static_cast<unsigned long>(leaf1d4IdLoTopResidueCountByClock[1]),
-                           static_cast<unsigned>(leaf1d4IdLoTopResidueByClock[2]),
-                           static_cast<unsigned long>(leaf1d4IdLoTopResidueCountByClock[2]),
-                           static_cast<unsigned>(leaf1d4IdLoTopResidueByClock[3]),
-                           static_cast<unsigned long>(leaf1d4IdLoTopResidueCountByClock[3]));
-        #endif
         #endif
             lastCanAltDiagMs = now;
             lastCanAlt120FramesLogged = canStatsDiag.rx120Frames;
@@ -6451,13 +5302,7 @@ void loop()
                                                                                 hvOkPreview,
                                                                                 brakePreview,
                                                                                 gearDrivePreview);
-            logLeaf1d4ShadowFrame(now,
-                                  previewTorqueNm,
-                                  inverterReadyPreview,
-                                  hvOkPreview,
-                                  brakePreview,
-                                  gearDrivePreview,
-                                  sentManual);
+            // 0x120 shadow diagnostics removed
             lastLeafTxMs = now;
         }
 
@@ -6506,7 +5351,7 @@ void loop()
                                                                              false,
                                                                              false,
                                                                              true);
-                logLeaf1d4ShadowFrame(now, 0.0f, false, false, false, true, sent);
+                // 0x120 shadow diagnostics removed
                 if (sent) {
                     ++s_leafHandshakeSentCount;
                 }
@@ -6584,90 +5429,6 @@ void loop()
         float torqueToSend = 0.0f;
         const float uiTorqueDemandNm = getLeafUiTorqueDemandNmInternal();
 
-#if METASENSE_LEAF_VCM_CHECKLIST_MODE
-        switch (s_leafVcmState) {
-            case LeafVcmBringupState::CanOnline:
-                brakeBit = false;
-                if (canBusReady &&
-                    inverterAlive &&
-                    ((now - s_leafVcmStateSinceMs) >= kLeafVcmCanOnlineDetectMs)) {
-                    s_leafVcmState = LeafVcmBringupState::Precharge;
-                    s_leafVcmStateSinceMs = now;
-                }
-                break;
-
-            case LeafVcmBringupState::Precharge:
-                brakeBit = false;
-                if ((vcuDebugHvVoltage >= kLeafVcmHvReadyVoltageV) ||
-                    ((now - s_leafVcmStateSinceMs) >= kLeafVcmPrechargeTimeoutMs)) {
-                    s_leafVcmState = LeafVcmBringupState::HvOk;
-                    s_leafVcmStateSinceMs = now;
-                }
-                break;
-
-            case LeafVcmBringupState::HvOk:
-                hvOkBit = true;
-                brakeBit = false;
-                if (safetyOk && ((now - s_leafVcmStateSinceMs) >= kLeafVcmHvOkSettleMs)) {
-                    s_leafVcmState = LeafVcmBringupState::Ready;
-                    s_leafVcmStateSinceMs = now;
-                }
-                break;
-
-            case LeafVcmBringupState::Ready:
-                readyBit = true;
-                hvOkBit = true;
-                brakeBit = (tele.mode == MetaSense::DynoMode::Brake);
-                gearDriveBit = true;
-                if (safetyOk) {
-                    torqueToSend = torqueCmd;
-                } else {
-                    s_leafVcmState = LeafVcmBringupState::Fault;
-                    s_leafVcmStateSinceMs = now;
-                    s_leafVcmFaultLatched = true;
-                    s_leafVcmLastFaultMs = now;
-                    torqueToSend = 0.0f;
-                    readyBit = false;
-                    hvOkBit = false;
-                    brakeBit = false;
-                }
-                break;
-
-            case LeafVcmBringupState::Fault:
-                readyBit = false;
-                hvOkBit = false;
-                brakeBit = false;
-                gearDriveBit = true;
-                torqueToSend = 0.0f;
-                if (canBusReady &&
-                    inverterAlive &&
-                    !inverterFaulted &&
-                    ((now - s_leafVcmStateSinceMs) >= kLeafVcmFaultRecoverMs)) {
-                    s_leafTxGapFault = false;
-                    s_leafVcmFaultLatched = false;
-                    s_leafVcmState = LeafVcmBringupState::CanOnline;
-                    s_leafVcmStateSinceMs = now;
-                }
-                break;
-        }
-
-        const bool allowInverterFaultLatch = s_leafCanPartnerSeen &&
-                             !s_leafSimFeedbackActive &&
-                                             (s_leafVcmState == LeafVcmBringupState::Precharge ||
-                                              s_leafVcmState == LeafVcmBringupState::HvOk ||
-                                              s_leafVcmState == LeafVcmBringupState::Ready ||
-                                              s_leafVcmState == LeafVcmBringupState::Fault);
-        if (allowInverterFaultLatch && inverterFaulted) {
-            s_leafVcmState = LeafVcmBringupState::Fault;
-            s_leafVcmStateSinceMs = now;
-            s_leafVcmFaultLatched = true;
-            s_leafVcmLastFaultMs = now;
-            readyBit = false;
-            hvOkBit = false;
-            brakeBit = false;
-            torqueToSend = 0.0f;
-        }
-#else
         // No-TVCU startup must not claim ready/HV just because the local controller
         // is alive. The Leaf expects a qualified startup path (partner seen, bus live,
         // safe state, no fault) before the status bits may rise out of the 000/000
@@ -6683,12 +5444,7 @@ void loop()
         brakeBit = startupQualified && (tele.mode == MetaSense::DynoMode::Brake);
         gearDriveBit = startupQualified && ((tele.rpmTarget > 100.0f) || tele.recording);
         torqueToSend = (startupQualified && hvOk && inverterReadyBit) ? torqueCmd : 0.0f;
-#endif
 
-#if METASENSE_LEAF_120_STARTUP_ZERO_TORQUE
-    // Startup mode still uses the runtime UI torque target for explicit control.
-        torqueToSend = uiTorqueDemandNm;
-#else
         // Check hardware state: INIT always sends 0 Nm, IDLE/MOTOR can send manual/auto value
         const char* hwState = MetaSense::HardwareOutputStateMachine::stateName();
         const bool isInitState = (hwState != nullptr) && (strcmp(hwState, "INIT") == 0);
@@ -6719,7 +5475,6 @@ void loop()
                 torqueToSend = 0.0f;
             }
         }
-#endif
 
 
         bool skipTxForGapTest = false;

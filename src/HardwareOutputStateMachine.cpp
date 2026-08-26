@@ -4,15 +4,11 @@
 #include <driver/gpio.h>
 
 #include "HardwareOutputStateMachine.h"
+#include "HardwareOutputConfig.h"
 #include "globals.h"
 #include "WebSocketServer.h"
 
 namespace {
-
-#ifndef METASENSE_RBPLUS_RELAY_ENABLED
-// Default off: release RB+ GPIO from firmware control.
-#define METASENSE_RBPLUS_RELAY_ENABLED 0
-#endif
 
 enum class OutputState {
     INIT,

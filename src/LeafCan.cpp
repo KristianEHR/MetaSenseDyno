@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <math.h>
+#include "LeafCanConfig.h"  // Phase 14C: Consolidated Leaf CAN protocol parameters
 #include "TelnetSerialBridge.h"
 
 #ifndef METASENSE_LEAF_VARIANT_120_55A

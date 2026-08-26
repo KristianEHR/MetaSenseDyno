@@ -6,80 +6,8 @@
 #include "HardwareOutputStateMachine.h"
 #include "LeafCrc.h"
 #include "globals.h"
-
 #include "CanHAL.h"
-
-#ifndef METASENSE_CAN_LOG_KEY_FRAMES
-#define METASENSE_CAN_LOG_KEY_FRAMES 0
-#endif
-
-#ifndef METASENSE_CAN_LOG_ALL_FRAMES
-#define METASENSE_CAN_LOG_ALL_FRAMES 0
-#endif
-
-#ifndef METASENSE_CAN_LOG_11A_CHANGES
-#define METASENSE_CAN_LOG_11A_CHANGES 0
-#endif
-
-#ifndef METASENSE_CAN_ID_SCAN
-#define METASENSE_CAN_ID_SCAN 1
-#endif
-
-#ifndef METASENSE_CAN_SNIFF_ONLY
-#define METASENSE_CAN_SNIFF_ONLY 0
-#endif
-
-#ifndef METASENSE_CAN_FRAME_IDENTIFIER
-#define METASENSE_CAN_FRAME_IDENTIFIER 0
-#endif
-
-#ifndef METASENSE_CAN_RX_ONE_LINE_LOG
-#define METASENSE_CAN_RX_ONE_LINE_LOG 0
-#endif
-
-#ifndef METASENSE_STARTUP_SNIFF_CAPTURE_ENABLE
-#define METASENSE_STARTUP_SNIFF_CAPTURE_ENABLE 0
-#endif
-
-#ifndef METASENSE_STARTUP_SNIFF_CAPTURE_MS
-#define METASENSE_STARTUP_SNIFF_CAPTURE_MS 2000U
-#endif
-
-#ifndef METASENSE_STARTUP_SNIFF_CAPTURE_MAX_FRAMES
-#define METASENSE_STARTUP_SNIFF_CAPTURE_MAX_FRAMES 2048U
-#endif
-
-#ifndef METASENSE_STARTUP_SNIFF_ARM_DELAY_MS
-#define METASENSE_STARTUP_SNIFF_ARM_DELAY_MS 0U
-#endif
-
-#ifndef METASENSE_STARTUP_SNIFF_START_ON_FIRST_11A
-#define METASENSE_STARTUP_SNIFF_START_ON_FIRST_11A 0U
-#endif
-
-#ifndef METASENSE_STARTUP_SNIFF_REARM_ON_11A_GAP_MS
-#define METASENSE_STARTUP_SNIFF_REARM_ON_11A_GAP_MS 0U
-#endif
-
-#ifndef METASENSE_STARTUP_SNIFF_DUMP_DELAY_MS
-#define METASENSE_STARTUP_SNIFF_DUMP_DELAY_MS 30000U
-#endif
-
-#ifndef METASENSE_STARTUP_SNIFF_SAVE_PATH
-#define METASENSE_STARTUP_SNIFF_SAVE_PATH "/captures/startup_11a.csv"
-#endif
-
-#ifndef METASENSE_LEAF_1D4_SNIFF_RX_ENABLED
-#define METASENSE_LEAF_1D4_SNIFF_RX_ENABLED 1
-#endif
-
-#ifndef METASENSE_LEAF_1D4_RINGBUF_ENABLE
-#define METASENSE_LEAF_1D4_RINGBUF_ENABLE 0
-#endif
-
-#ifndef METASENSE_LEAF_1D4_RINGBUF_SIZE
-#define METASENSE_LEAF_1D4_RINGBUF_SIZE 64U
-#endif
+#include "CANDiagConfig.h"
 
 namespace MetaSense::CANBus {
 
@@ -376,9 +304,6 @@ void reset()
 #if METASENSE_LEAF_1D4_RINGBUF_ENABLE
     resetLeaf1d4Ring();
 #endif
-#if METASENSE_STARTUP_SNIFF_CAPTURE_ENABLE
-    resetStartupSniffCapture();
-#endif
 }
 
 void poll(uint32_t nowMs)
@@ -400,52 +325,9 @@ void poll(uint32_t nowMs)
     }
 #endif
 
-#if METASENSE_CAN_RX_ONE_LINE_LOG
-    if ((nowMs - lastPollHeartMs) >= 2000U) {
-        lastPollHeartMs = nowMs;
-        Serial.printf("[CAN-STAT] ready=%d state=%u rx=%lu leaf=%lu unk=%lu q=%lu miss=%lu over=%lu last=0x%03lX\n",
-                      static_cast<int>(s_stats.ready),
-                      static_cast<unsigned>(s_stats.lastTwaiState),
-                      static_cast<unsigned long>(s_stats.rxFrames),
-                      static_cast<unsigned long>(s_stats.rxLeafFrames),
-                      static_cast<unsigned long>(s_stats.rxUnknownFrames),
-                      static_cast<unsigned long>(s_stats.twaiRxQueued),
-                      static_cast<unsigned long>(s_stats.twaiRxMissed),
-                      static_cast<unsigned long>(s_stats.twaiRxOverrun),
-                      static_cast<unsigned long>(s_stats.lastRxId));
-    }
-#endif
-
     if (!ensureReady(nowMs)) {
         return;
     }
-#if METASENSE_STARTUP_SNIFF_CAPTURE_ENABLE
-    if (!s_startupSniffArmInitialized) {
-        s_startupSniffArmInitialized = true;
-        s_startupSniffArmAtMs = nowMs + METASENSE_STARTUP_SNIFF_ARM_DELAY_MS;
-        Serial.printf("[STARTUP-SNIFF] armed delay=%lums capture=%lums\n",
-                      static_cast<unsigned long>(METASENSE_STARTUP_SNIFF_ARM_DELAY_MS),
-                      static_cast<unsigned long>(METASENSE_STARTUP_SNIFF_CAPTURE_MS));
-    }
-    static uint32_t s_startupSniffDiagLastMs = 0U;
-    if (s_startupSniffDiagLastMs == 0U || (nowMs - s_startupSniffDiagLastMs) >= 2000U) {
-        s_startupSniffDiagLastMs = nowMs;
-        const uint32_t armInMs = (nowMs >= s_startupSniffArmAtMs) ? 0U : (s_startupSniffArmAtMs - nowMs);
-        const uint32_t last11aAgeMs = (s_startupSniffLast11aMs == 0U) ? 0U : (nowMs - s_startupSniffLast11aMs);
-        Serial.printf("[STARTUP-SNIFF-STAT] active=%u done=%u count=%u drop=%u arm_in=%lu last11a_age=%lu\n",
-                      static_cast<unsigned>(s_startupSniffActive ? 1U : 0U),
-                      static_cast<unsigned>(s_startupSniffDone ? 1U : 0U),
-                      static_cast<unsigned>(s_startupSniffCount),
-                      static_cast<unsigned>(s_startupSniffDropped),
-                      static_cast<unsigned long>(armInMs),
-                      static_cast<unsigned long>(last11aAgeMs));
-    }
-    if (!s_startupSniffDone && !s_startupSniffActive && nowMs >= s_startupSniffArmAtMs) {
-        if (METASENSE_STARTUP_SNIFF_START_ON_FIRST_11A == 0U) {
-            startStartupSniffCapture(nowMs);
-        }
-    }
-#endif
     static uint32_t lastRateMs = 0;
     static uint32_t lastUnknownScanMs = 0;
     static uint32_t lastUnknownAtScan = 0;
@@ -561,11 +443,6 @@ void poll(uint32_t nowMs)
             // Do not decode, count as unknown, or surface excluded IDs.
             continue;
         }
-
-    #if METASENSE_STARTUP_SNIFF_CAPTURE_ENABLE
-        const uint32_t captureNowMs = millis();
-        recordStartupSniffFrame(captureNowMs, id, data, len, isExtended);
-    #endif
         
         if (isExtended) {
             ++s_stats.rxExtFrames;
@@ -698,9 +575,6 @@ void poll(uint32_t nowMs)
 #if METASENSE_CAN_ID_SCAN
             noteUnknownId(id, data, len, nowMs, isExtended);
 #endif
-#if METASENSE_CAN_RX_ONE_LINE_LOG
-            logUnknownRxFrameOneLine(id, data, len, isExtended);
-#endif
             if (id == 0x1DBU) {
                 ++s_stats.rx1dbFrames;
             }
@@ -742,9 +616,6 @@ void poll(uint32_t nowMs)
         // Focused hunt: always surface these candidate IDs clearly.
         logTargetRxFrame(id, data, len, isExtended);
 
-    #if METASENSE_CAN_RX_ONE_LINE_LOG
-        logRxFrameOneLine(id, data, len, isExtended);
-    #else
         // Unconditional raw frame dump for sniffing every frame on the bus.
         Serial.printf("[CAN-RX-RAW] id=0x%03lX len=%u data=%02X %02X %02X %02X %02X %02X %02X %02X\n",
                   static_cast<unsigned long>(id),
@@ -769,14 +640,9 @@ void poll(uint32_t nowMs)
                   static_cast<unsigned>(data[5]),
                   static_cast<unsigned>(data[6]),
                   static_cast<unsigned>(data[7]));
-    #endif
         
     }
 
-#if METASENSE_STARTUP_SNIFF_CAPTURE_ENABLE
-    dumpStartupSniffCapture(nowMs);
-#endif
-    
 #if !METASENSE_CAN_SNIFF_ONLY
 #if !METASENSE_CAN_RX_ONE_LINE_LOG
     if (lastDiagMs == 0U || (nowMs - lastDiagMs) >= DIAG_PERIOD_MS) {
@@ -910,112 +776,17 @@ const Stats& stats()
 StartupSniffStatus startupSniffStatus()
 {
     StartupSniffStatus status;
-#if METASENSE_STARTUP_SNIFF_CAPTURE_ENABLE
-    status.enabled = true;
-    status.active = s_startupSniffActive;
-    status.done = s_startupSniffDone;
-    status.dumped = s_startupSniffDumped;
-    status.count = s_startupSniffCount;
-    status.dropped = s_startupSniffDropped;
-    status.armAtMs = s_startupSniffArmAtMs;
-    status.last11aMs = s_startupSniffLast11aMs;
-    status.dumpAtMs = s_startupSniffCompletedMs + METASENSE_STARTUP_SNIFF_DUMP_DELAY_MS;
-#endif
     return status;
 }
 
 bool saveStartupSniffCaptureToFile()
 {
-#if METASENSE_STARTUP_SNIFF_CAPTURE_ENABLE
-    if (!s_startupSniffDone || s_startupSniffDumped) {
-        return false;
-    }
-
-    const uint32_t elapsedMs = (s_startupSniffCompletedMs >= s_startupSniffStartMs)
-                                   ? (s_startupSniffCompletedMs - s_startupSniffStartMs)
-                                   : 0U;
-
-    LittleFS.mkdir("/captures");
-    File file = LittleFS.open(METASENSE_STARTUP_SNIFF_SAVE_PATH, "w");
-    if (!file) {
-        Serial.printf("[STARTUP-SNIFF] save failed path=%s\n", METASENSE_STARTUP_SNIFF_SAVE_PATH);
-        return false;
-    }
-
-    file.printf("meta,capture_ms,%lu,count,%u,dropped,%u\n",
-                static_cast<unsigned long>(elapsedMs),
-                static_cast<unsigned>(s_startupSniffCount),
-                static_cast<unsigned>(s_startupSniffDropped));
-    file.println("dt_ms,id_hex,id_dec,len,ext,gear,car_onoff,eco,btn,hb,mux,u4,startup,b0,b1,b2,b3,b4,b5,b6,b7");
-
-    for (uint16_t i = 0U; i < s_startupSniffCount; ++i) {
-        const StartupSniffFrame& frame = s_startupSniffFrames[i];
-        uint8_t gear = 0U;
-        uint8_t eco = 0U;
-        uint8_t carOnOff = 0U;
-        uint8_t btn = 0U;
-        uint8_t hb = 0U;
-        uint8_t u4 = 0U;
-        uint8_t mux = 0U;
-        uint8_t startup = 0U;
-        if (frame.len >= 8U) {
-            gear = static_cast<uint8_t>((frame.data[0] >> 4U) & 0x0FU);
-            eco = static_cast<uint8_t>((frame.data[1] >> 4U) & 0x01U);
-            carOnOff = static_cast<uint8_t>((frame.data[1] >> 5U) & 0x07U);
-            btn = frame.data[2];
-            hb = frame.data[3];
-            u4 = frame.data[4];
-            mux = frame.data[6];
-            startup = frame.data[7];
-        }
-
-        file.printf("%u,0x%03lX,%lu,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%02X,%02X,%02X,%02X,%02X,%02X,%02X,%02X\n",
-                    static_cast<unsigned>(frame.dtMs),
-                    static_cast<unsigned long>(frame.id),
-                    static_cast<unsigned long>(frame.id),
-                    static_cast<unsigned>(frame.len),
-                    static_cast<unsigned>(frame.ext),
-                    static_cast<unsigned>(gear),
-                    static_cast<unsigned>(carOnOff),
-                    static_cast<unsigned>(eco),
-                    static_cast<unsigned>(btn),
-                    static_cast<unsigned>(hb),
-                    static_cast<unsigned>(mux),
-                    static_cast<unsigned>(u4),
-                    static_cast<unsigned>(startup),
-                    static_cast<unsigned>(frame.data[0]),
-                    static_cast<unsigned>(frame.data[1]),
-                    static_cast<unsigned>(frame.data[2]),
-                    static_cast<unsigned>(frame.data[3]),
-                    static_cast<unsigned>(frame.data[4]),
-                    static_cast<unsigned>(frame.data[5]),
-                    static_cast<unsigned>(frame.data[6]),
-                    static_cast<unsigned>(frame.data[7]));
-    }
-
-    file.close();
-    s_startupSniffDumped = true;
-    Serial.printf("[STARTUP-SNIFF] saved %u frames to %s\n",
-                  static_cast<unsigned>(s_startupSniffCount),
-                  METASENSE_STARTUP_SNIFF_SAVE_PATH);
-    return true;
-#else
     return false;
-#endif
 }
 
 bool printStartupSniffCapture()
 {
-#if METASENSE_STARTUP_SNIFF_CAPTURE_ENABLE
-    if (!s_startupSniffDone) {
-        return false;
-    }
-    emitStartupSniffCaptureManual();
-    s_startupSniffDumped = true;
-    return true;
-#else
     return false;
-#endif
 }
 
 uint8_t get1d4RingCount()
