@@ -298,9 +298,6 @@ void reset()
     s_canHal.stop();
     LeafCan::reset(s_feedback);
     s_stats = Stats{};
-#if METASENSE_CAN_ID_SCAN
-    clearSniffIdEntries();
-#endif
 #if METASENSE_LEAF_1D4_RINGBUF_ENABLE
     resetLeaf1d4Ring();
 #endif
@@ -454,22 +451,6 @@ void poll(uint32_t nowMs)
         ++framesThisPoll;
 
         const uint32_t decodeId = normalizeLeafIdForDecode(id);
-#if METASENSE_CAN_ID_SCAN
-#if !METASENSE_CAN_RX_ONE_LINE_LOG
-        const bool newSniffId = noteSniffId(id, data, len);
-        if (newSniffId && (lastSniffPrintMs == 0U || (nowMs - lastSniffPrintMs) >= 50U)) {
-            lastSniffPrintMs = nowMs;
-            Serial.printf("0x%03lX ", static_cast<unsigned long>(id));
-            for (uint8_t b = 0U; b < len; ++b) {
-                Serial.printf("%02X", static_cast<unsigned>(data[b]));
-                if (b + 1U < len) {
-                    Serial.print(' ');
-                }
-            }
-            Serial.println();
-        }
-#endif
-#endif
 
         twai_message_t msg = {};
         msg.identifier = decodeId;
@@ -572,9 +553,6 @@ void poll(uint32_t nowMs)
             }
         } else {
             ++s_stats.rxUnknownFrames;
-#if METASENSE_CAN_ID_SCAN
-            noteUnknownId(id, data, len, nowMs, isExtended);
-#endif
             if (id == 0x1DBU) {
                 ++s_stats.rx1dbFrames;
             }
@@ -644,7 +622,6 @@ void poll(uint32_t nowMs)
     }
 
 #if !METASENSE_CAN_SNIFF_ONLY
-#if !METASENSE_CAN_RX_ONE_LINE_LOG
     if (lastDiagMs == 0U || (nowMs - lastDiagMs) >= DIAG_PERIOD_MS) {
         Serial.printf("[CAN-POLL-FRAME-COUNT] this_poll=%lu ext_frames=%lu\n", static_cast<unsigned long>(framesThisPoll), static_cast<unsigned long>(extFramesThisPoll));
     }
@@ -685,33 +662,6 @@ void poll(uint32_t nowMs)
         lastRxExtFrames = s_stats.rxExtFrames;
         (void)dunk;
     }
-#endif
-#endif
-
-#if METASENSE_CAN_ID_SCAN
-    #if METASENSE_CAN_FRAME_IDENTIFIER
-#if !METASENSE_CAN_RX_ONE_LINE_LOG
-    printFrameIdentifierReport(nowMs);
-#endif
-    #else
-#if !METASENSE_CAN_RX_ONE_LINE_LOG
-    const size_t sniffIdCount = countSniffIds();
-    if ((lastSniffSummaryMs == 0U || (nowMs - lastSniffSummaryMs) >= 5000U) &&
-        (sniffIdCount != lastSniffSnapshotCount || lastSniffSummaryMs == 0U)) {
-        printSniffIdSnapshot();
-        lastSniffSummaryMs = nowMs;
-        lastSniffSnapshotCount = static_cast<uint32_t>(sniffIdCount);
-    }
-
-    if (lastUnknownScanMs == 0U || (nowMs - lastUnknownScanMs) >= 5000U) {
-        if (s_stats.rxUnknownFrames != lastUnknownAtScan) {
-            printUnknownIdScan(nowMs);
-            lastUnknownAtScan = s_stats.rxUnknownFrames;
-        }
-        lastUnknownScanMs = nowMs;
-    }
-#endif
-    #endif
 #endif
 }
 
