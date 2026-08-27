@@ -2,12 +2,7 @@
 
 #include <Arduino.h>
 #include <math.h>
-#include "LeafCanConfig.h"  // Phase 14C: Consolidated Leaf CAN protocol parameters
 #include "TelnetSerialBridge.h"
-
-#ifndef METASENSE_LEAF_VARIANT_120_55A
-#define METASENSE_LEAF_VARIANT_120_55A 0
-#endif
 
 static inline float decodeMotorSpeed(const uint8_t *d)
 {
@@ -179,7 +174,8 @@ static inline void decodeTempsOffset1(const uint8_t *d,
                                       float &stator,
                                       float &coolant)
 {
-    // Variant observed on this inverter: 0x55A packs three temp bytes at [1..3].
+    // Legacy variant temperature decoding (not used in current standard Leaf inverter).
+    // Kept for reference only.
     inv = static_cast<float>(d[1]) - 40.0f;
     stator = static_cast<float>(d[2]) - 40.0f;
     coolant = static_cast<float>(d[3]) - 40.0f;

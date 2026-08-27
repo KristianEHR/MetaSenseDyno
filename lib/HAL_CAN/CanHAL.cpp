@@ -7,8 +7,8 @@
 #include "globals.h"
 
 #ifndef METASENSE_LEAF_CAN_TX_ENABLED
-// Safety default: allow Leaf CAN receive/monitoring, block all outbound frames.
-#define METASENSE_LEAF_CAN_TX_ENABLED 0
+// Default: allow Leaf CAN transmit (0x11A keep-alive, 0x1D4 torque commands)
+#define METASENSE_LEAF_CAN_TX_ENABLED 1
 #endif
 
 #ifndef METASENSE_LEAF_CAN_RX_ENABLED

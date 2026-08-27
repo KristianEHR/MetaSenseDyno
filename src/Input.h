@@ -42,6 +42,10 @@ namespace MetaSense::Input {
     float getLeafUiTorqueDemandNm();
     void setLeafManualTorqueMode(bool manualMode);
     bool getLeafManualTorqueMode();
+    void setLeaf11aUiGear(uint8_t gear);
+    uint8_t getLeaf11aUiGear();
+    void setLeaf11aUiCarOnOff(uint8_t carOnOff);
+    uint8_t getLeaf11aUiCarOnOff();
     bool sendLeafTorqueCommand1d4(float torqueDemandNm,
                                   bool inverterReadyBit,
                                   bool hvOkBit,
@@ -52,7 +56,7 @@ namespace MetaSense::Input {
                         bool inv12v,
                         float hvVoltage,
                         float torqueDemandNm,
-                        bool rbPlus,
+                        bool rPlus,
                         bool precharge,
                         bool ssr,
                         bool rMinus);

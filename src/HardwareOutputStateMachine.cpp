@@ -4,11 +4,13 @@
 #include <driver/gpio.h>
 
 #include "HardwareOutputStateMachine.h"
-#include "HardwareOutputConfig.h"
 #include "globals.h"
 #include "WebSocketServer.h"
+#include "CanConfig.h"
 
 namespace {
+
+// RB+ relay always controlled by hardware state machine
 
 enum class OutputState {
     INIT,
@@ -494,7 +496,8 @@ void applyOutputs(OutputState nextState,
             // maintaining the HV rail above 300 V.
             setRelayOutputs(false, true, true, true);
         } else {
-            setRelayOutputs(false, prechargeActive, false, prechargeActive);
+            // When precharge completes, hold RB+ relay engaged to maintain HV path
+            setRelayOutputs(false, prechargeActive, rbPlusHold, prechargeActive);
         }
         writePrimaryBrakeSplit(OutputState::START, 0.0f);
         break;
@@ -569,7 +572,8 @@ void begin()
 
     activeRelayCommand = RelayCommand{};
     logAllInvalidRelayInterlockCombos();
-    setRelayOutputs(false, false);
+    // INIT state: all 4 relays OFF (RB-, SSR, RB+, Precharge)
+    setRelayOutputs(false, false, false, false);
     state = OutputState::INIT;
     pendingState = state;
     pendingStateSinceMs = millis();

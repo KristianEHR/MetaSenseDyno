@@ -787,19 +787,19 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
             }
             persistSettings = false;
         } else if (key == "leaf1d4TorqueInc") {
-            // Increment torque by +0.1 Nm (only in IDLE/MOTOR states)
+            // Increment torque by +0.25 Nm (only in IDLE/MOTOR states)
             if (!isInitState) {
                 float current = MetaSense::Input::getLeafUiTorqueDemandNm();
-                MetaSense::Input::setLeafUiTorqueDemandNm(current + 0.1f);
+                MetaSense::Input::setLeafUiTorqueDemandNm(current + 0.25f);
             } else {
                 Serial.printf("[SAFETY] Manual torque inc rejected during INIT state\n");
             }
             persistSettings = false;
         } else if (key == "leaf1d4TorqueDec") {
-            // Decrement torque by -0.1 Nm (only in IDLE/MOTOR states)
+            // Decrement torque by -0.25 Nm (only in IDLE/MOTOR states)
             if (!isInitState) {
                 float current = MetaSense::Input::getLeafUiTorqueDemandNm();
-                MetaSense::Input::setLeafUiTorqueDemandNm(current - 0.1f);
+                MetaSense::Input::setLeafUiTorqueDemandNm(current - 0.25f);
             } else {
                 Serial.printf("[SAFETY] Manual torque dec rejected during INIT state\n");
             }
@@ -811,6 +811,16 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
             } else {
                 Serial.printf("[SAFETY] Manual torque mode change rejected during INIT state\n");
             }
+            persistSettings = false;
+        } else if (key == "leaf11aGear") {
+            // Set 0x11A gear position (0-15)
+            const uint8_t gearVal = static_cast<uint8_t>(val.toInt());
+            MetaSense::Input::setLeaf11aUiGear(gearVal);
+            persistSettings = false;
+        } else if (key == "leaf11aCarOnOff") {
+            // Set 0x11A car on/off status (0-7)
+            const uint8_t carOnOffVal = static_cast<uint8_t>(val.toInt());
+            MetaSense::Input::setLeaf11aUiCarOnOff(carOnOffVal);
             persistSettings = false;
         } else if (key == "rpmFilter") {
             MetaSense::Settings::filterAlpha = fval;

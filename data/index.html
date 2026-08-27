@@ -987,6 +987,7 @@
       <button id="toggleAmbientBtn" class="slim-btn" title="Toggle Ambient panel">🌡</button>
       <button id="toggleEnergyBtn" class="slim-btn" title="Toggle Acc. Energy panel">⚡</button>
       <button id="toggleManualTorqueBtn" class="slim-btn" title="Toggle Manual Torque panel">⚙</button>
+      <button id="toggleCan11aControlBtn" class="slim-btn" title="Toggle 0x11A Control panel">📋</button>
       <button id="toggleCanMonitorButton" class="slim-btn" title="Toggle CAN Monitor">📡</button>
       <button id="toggleInverterBtn" class="slim-btn" title="Toggle Inverter Status panel">🔌</button>
     </div>
@@ -1074,7 +1075,10 @@
       <span class="can-monitor-label can-sec-11a">Gear / CarOn / ECO</span>
       <span id="canMon11aDrive" class="can-monitor-value can-sec-11a">---</span>
 
-      <span class="can-monitor-label can-sec-11a">HB / MUX / BTN</span>
+      <span class="can-monitor-label can-sec-11a">MUX Sel / TX Slot</span>
+      <span id="canMon11aMuxSel" class="can-monitor-value can-sec-11a">---</span>
+
+      <span class="can-monitor-label can-sec-11a">HB / BTN</span>
       <span id="canMon11aSignals" class="can-monitor-value can-sec-11a">---</span>
 
       <span class="can-monitor-label can-sec-11a">TX==RX / diff</span>
@@ -1106,7 +1110,7 @@
 
       <span class="can-monitor-label can-sec-1d4tx">Step (Nm)</span>
       <span class="can-monitor-controls can-sec-1d4tx">
-        <input id="leaf1d4TorqueStep" class="can-step-input" type="number" min="0.10" max="0.10" step="0.10" value="0.10" readonly>
+        <input id="leaf1d4TorqueStep" class="can-step-input" type="number" min="0.25" max="0.25" step="0.25" value="0.25" readonly>
       </span>
 
       <span class="can-monitor-label can-monitor-section can-monitor-section-toggle" data-section="1d4tx" data-title="0x1D4 TX" role="button" tabindex="0" aria-expanded="true">0x1D4 TX:</span>
@@ -1335,13 +1339,49 @@
         
         <!-- +/- Buttons -->
         <div style="display: flex; gap: 8px; margin: 8px 0; justify-content: center;">
-          <button id="torqueDecBtn" style="flex: 1; padding: 10px 8px; background: #660000; color: #fff; border: 2px solid #ff6666; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 16px; transition: all 0.15s; text-shadow: 0 0 4px rgba(0,0,0,0.8);">−0.1</button>
-          <button id="torqueIncBtn" style="flex: 1; padding: 10px 8px; background: #006600; color: #fff; border: 2px solid #66ff66; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 16px; transition: all 0.15s; text-shadow: 0 0 4px rgba(0,0,0,0.8);">+0.1</button>
+          <button id="torqueDecBtn" style="flex: 1; padding: 10px 8px; background: #660000; color: #fff; border: 2px solid #ff6666; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 16px; transition: all 0.15s; text-shadow: 0 0 4px rgba(0,0,0,0.8);">−0.25</button>
+          <button id="torqueIncBtn" style="flex: 1; padding: 10px 8px; background: #006600; color: #fff; border: 2px solid #66ff66; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 16px; transition: all 0.15s; text-shadow: 0 0 4px rgba(0,0,0,0.8);">+0.25</button>
         </div>
         
         <!-- Range Info -->
         <div style="text-align: center; font-size: 11px; color: #888; margin-top: 6px;">
           Range: −300 to +300 Nm
+        </div>
+      </div>
+
+      <!-- 0x11A Gear/Car Control Panel -->
+      <div id="can11aControlPanel" class="gear-box" style="position: static; transform: none; margin-top: 12px; width: var(--side-gauge-size); background: rgba(0,0,0,0.7); border: 1px solid #88aaff; display: none;">
+        <div class="title" style="color: #88aaff;">📋 0x11A CONTROL</div>
+        
+        <!-- Gear Control -->
+        <div style="margin: 10px 0;">
+          <div style="text-align: center; font-size: 12px; color: #aaa; margin-bottom: 4px;">Gear Position</div>
+          <div style="display: flex; gap: 6px; justify-content: center; align-items: center;">
+            <button id="can11aGearDecBtn" style="flex: 0 0 40px; padding: 8px 4px; background: #440000; color: #fff; border: 2px solid #ff6666; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px;">−</button>
+            <div style="flex: 1; text-align: center; padding: 8px; background: #2a2a2a; border: 1px solid #666; border-radius: 4px; font-size: 24px; color: #00ffaa; font-weight: bold; min-width: 50px;">
+              <span id="can11aGearDisplay">4</span>
+            </div>
+            <button id="can11aGearIncBtn" style="flex: 0 0 40px; padding: 8px 4px; background: #004400; color: #fff; border: 2px solid #66ff66; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px;">+</button>
+          </div>
+          <div style="text-align: center; font-size: 10px; color: #666; margin-top: 2px;">Range: 0-4</div>
+        </div>
+
+        <!-- Car OnOff Control -->
+        <div style="margin: 10px 0;">
+          <div style="text-align: center; font-size: 12px; color: #aaa; margin-bottom: 4px;">Car Status (OnOff)</div>
+          <div style="display: flex; gap: 6px; justify-content: center; align-items: center;">
+            <button id="can11aCarDecBtn" style="flex: 0 0 40px; padding: 8px 4px; background: #440000; color: #fff; border: 2px solid #ff6666; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px;">−</button>
+            <div style="flex: 1; text-align: center; padding: 8px; background: #2a2a2a; border: 1px solid #666; border-radius: 4px; font-size: 24px; color: #ffaa88; font-weight: bold; min-width: 50px;">
+              <span id="can11aCarDisplay">2</span>
+            </div>
+            <button id="can11aCarIncBtn" style="flex: 0 0 40px; padding: 8px 4px; background: #004400; color: #fff; border: 2px solid #66ff66; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px;">+</button>
+          </div>
+          <div style="text-align: center; font-size: 10px; color: #666; margin-top: 2px;">Range: 0-4</div>
+        </div>
+
+        <!-- Info -->
+        <div style="text-align: center; font-size: 11px; color: #888; margin-top: 8px; padding-top: 6px; border-top: 1px solid #444;">
+          Modify to test inverter response
         </div>
       </div>
 
@@ -1488,6 +1528,7 @@
     let runStartHeartbeatMs = null;
     let xAxisChoice = "rpm";
     let ws = null;
+    let wsConnectAttemptInProgress = false;
     let currentKpSource = "firmware";
     let currentRpmSource = "leafrpm";
     let lastActiveRpmSource = "leafrpm";
@@ -1508,11 +1549,12 @@
     const canMonitorSectionDefaults = { "1da": true, "55a": true, "11a": false, "1d4tx": true };
     const leaf1d4TorqueMinNm = -300;
     const leaf1d4TorqueMaxNm = 300;
-    const leaf1d4TorqueDefaultStepNm = 0.1;
+    const leaf1d4TorqueDefaultStepNm = 0.25;
     const autoButtonIdleLabel = "Auto Run (F8)";
     const autoButtonActiveLabel = "🔴 Auto Run ACTIVE (F8 to cancel)";
     let canMonitorSections = { ...canMonitorSectionDefaults };
     let leaf1d4ControlState = { mode: "manual", targetNm: 0 };
+    let can11aControlState = { gear: 4, carOnOff: 2 };
 	
   // Run summary values used for history export.
 	let currentPeakHP = 0;
@@ -1762,9 +1804,10 @@
       const id1daCrcWireBadFrames = Number(telemetry.leaf_1da_crc_wire_bad_frames);
 
       // Extract 0x1D4 TX fields
-      const id1d4TxFrames = Number(telemetry.leaf_1d4_tx_frames);
-      const id1d4TxAgeMs = Number(telemetry.leaf_1d4_tx_age_ms);
       const id1d4TxTorqueNm = Number(telemetry.leaf_1d4_tx_torque_nm);
+      const metricsEnabled = (telemetry.leaf_1d4_tx_frames !== undefined);
+      const id1d4TxFrames = metricsEnabled ? Number(telemetry.leaf_1d4_tx_frames) : 0;
+      const id1d4TxAgeMs = metricsEnabled ? Number(telemetry.leaf_1d4_tx_age_ms) : 0;
       const id1d4TxTorqueRaw = Number(telemetry.leaf_1d4_tx_torque_raw);
       const id1d4HvStatus = Number(telemetry.leaf_1d4_tx_hv_status);
       const id1d4RelayPlus = Number(telemetry.leaf_1d4_tx_relay_plus);
@@ -1776,10 +1819,10 @@
       const id1d4TxRaw = String(telemetry.leaf_1d4_tx_raw_b0b7 || "-- -- -- -- -- -- -- --");
 
       // Extract 0x11A RX fields
-      const id11aFrames = Number(telemetry.leaf_11a_frames);
-      const id11aAgeMs = Number(telemetry.leaf_11a_age_ms);
-      const id11aTxFrames = Number(telemetry.leaf_11a_tx_frames);
-      const id11aTxAgeMs = Number(telemetry.leaf_11a_tx_age_ms);
+      const id11aFrames = metricsEnabled ? Number(telemetry.leaf_11a_frames) : 0;
+      const id11aAgeMs = metricsEnabled ? Number(telemetry.leaf_11a_age_ms) : 0;
+      const id11aTxFrames = metricsEnabled ? Number(telemetry.leaf_11a_tx_frames) : 0;
+      const id11aTxAgeMs = metricsEnabled ? Number(telemetry.leaf_11a_tx_age_ms) : 0;
       const id11aGear = Number(telemetry.leaf_11a_gear);
       const id11aCarOnOff = Number(telemetry.leaf_11a_car_onoff);
       const id11aEco = Number(telemetry.leaf_11a_eco);
@@ -1836,7 +1879,9 @@
         return "---";
       };
       
-      setText("canMon1d4Tx", `${fmtInt(id1d4TxFrames)} / ${fmtInt(id1d4TxAgeMs)}`);
+      if (metricsEnabled) {
+        setText("canMon1d4Tx", `${fmtInt(id1d4TxFrames)} / ${fmtInt(id1d4TxAgeMs)}`);
+      }
       setText("canMon1d4TxTorque", fmt(id1d4TxTorqueNm, 2));
       setText("canMon1d4TxTorqueRaw", fmtInt(id1d4TxTorqueRaw));
       setText("canMon1d4TxHv", fmtYesNo(id1d4HvStatus));
@@ -1847,10 +1892,13 @@
       setText("canMon1d4TxRaw", fmtRaw8(id1d4TxRaw));
 
       // Update 0x11A display fields
-      setText("canMon11aSource", `rx ${fmtInt(id11aFrames)} / ${fmtInt(id11aAgeMs)}`);
-      setText("canMon11aTx", `${fmtInt(id11aTxFrames)} / ${fmtInt(id11aTxAgeMs)}`);
+      if (metricsEnabled) {
+        setText("canMon11aSource", `rx ${fmtInt(id11aFrames)} / ${fmtInt(id11aAgeMs)}`);
+        setText("canMon11aTx", `${fmtInt(id11aTxFrames)} / ${fmtInt(id11aTxAgeMs)}`);
+      }
       setText("canMon11aDrive", `G${fmtInt(id11aGear)} / CO${fmtInt(id11aCarOnOff)} / E${fmtInt(id11aEco)}`);
-      setText("canMon11aSignals", `HB:0x${fmtHexByte(id11aHeartbeat)} MUX:0x${fmtHexByte(id11aMux)} BTN:0x${fmtHexByte(id11aButton)}`);
+      setText("canMon11aMuxSel", `MUX ${fmtInt(id11aMux)}/4`);
+      setText("canMon11aSignals", `HB:0x${fmtHexByte(id11aHeartbeat)} BTN:0x${fmtHexByte(id11aButton)}`);
       setText("canMon11aRaw", id11aRaw);
       setText("canMon11aTxRaw", id11aTxRaw);
     }
@@ -3022,9 +3070,32 @@
     }
 
     function connectWS() {
+      // Prevent multiple simultaneous connection attempts
+      if (wsConnectAttemptInProgress) {
+        console.warn("⚠️ WebSocket connection attempt already in progress, skipping");
+        return;
+      }
+      
+      // Force close any stale WebSocket before reconnecting
+      if (ws) {
+        try {
+          if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+            ws.close();
+            console.log("Closed stale WebSocket");
+          }
+        } catch (e) {
+          console.warn("Error closing stale WebSocket:", e);
+        }
+        ws = null;
+      }
+      
+      wsConnectAttemptInProgress = true;
+      document.getElementById("status").innerText = "🔄 Connecting...";
+      
       ws = new WebSocket("ws://" + location.hostname + "/ws");
       
       ws.onopen = function() {
+        wsConnectAttemptInProgress = false;
         document.getElementById("status").innerText = "✅ Live Data Active";
         ws.send("PAGE_MAIN");
         ws.send("SET_UI_MODE:dashboard");
@@ -3700,15 +3771,52 @@ else if (msg.type === "info" || msg.type === "status") {
       };
       
       ws.onerror = function(event) {
+        wsConnectAttemptInProgress = false;
         console.error("❌ WebSocket Error:", event);
         document.getElementById("status").innerText = "❌ WebSocket Error";
       };
       
-      ws.onclose = function() { 
+      ws.onclose = function() {
+        wsConnectAttemptInProgress = false;
         document.getElementById("status").innerText = "⚠️ Reconnecting...";
         setTimeout(connectWS, 1000); 
       };
     }
+    
+    // Handle browser back-forward cache restoration
+    window.addEventListener('pageshow', function(event) {
+      if (event.persisted) {
+        console.log("📄 Page restored from back-forward cache, reconnecting WebSocket...");
+        // Force reconnection by resetting state and closing any stale connection
+        wsConnectAttemptInProgress = false;
+        if (ws) {
+          try {
+            ws.close();
+          } catch (e) {
+            console.warn("Error closing WebSocket during pageshow:", e);
+          }
+          ws = null;
+        }
+        // Give browser a brief moment before reconnecting
+        setTimeout(connectWS, 100);
+      }
+    });
+    
+    window.addEventListener('pagehide', function(event) {
+      if (event.persisted) {
+        console.log("📄 Page entering back-forward cache, closing WebSocket...");
+        // Explicitly close WebSocket before caching to prevent state issues
+        if (ws) {
+          try {
+            ws.close();
+          } catch (e) {
+            console.warn("Error closing WebSocket during pagehide:", e);
+          }
+          ws = null;
+        }
+        wsConnectAttemptInProgress = false;
+      }
+    });
     
     function init() {
       loadCanMonitorPreference();
@@ -3899,6 +4007,21 @@ else if (msg.type === "info" || msg.type === "status") {
       }
     };
 
+    // Toggle 0x11A Control panel visibility
+    document.getElementById("toggleCan11aControlBtn").onclick = function() {
+      const panel = document.getElementById("can11aControlPanel");
+      const btn = document.getElementById("toggleCan11aControlBtn");
+      if (panel && panel.style.display !== "none") {
+        panel.style.display = "none";
+        btn.classList.remove("active");
+        localStorage.setItem("can11aControlPanelVisible", "false");
+      } else if (panel) {
+        panel.style.display = "block";
+        btn.classList.add("active");
+        localStorage.setItem("can11aControlPanelVisible", "true");
+      }
+    };
+
     // Toggle Inverter Status panel visibility
     document.getElementById("toggleInverterBtn").onclick = function() {
       const panel = document.getElementById("inverterStatusPanel");
@@ -3919,6 +4042,7 @@ else if (msg.type === "info" || msg.type === "status") {
       const ambientBtn = document.getElementById("toggleAmbientBtn");
       const energyBtn = document.getElementById("toggleEnergyBtn");
       const torqueBtn = document.getElementById("toggleManualTorqueBtn");
+      const can11aBtn = document.getElementById("toggleCan11aControlBtn");
       const inverterBtn = document.getElementById("toggleInverterBtn");
       
       if (localStorage.getItem("ambientPanelVisible") === "false") {
@@ -3937,6 +4061,11 @@ else if (msg.type === "info" || msg.type === "status") {
         document.getElementById("manualTorquePanel").style.display = "none";
       } else {
         torqueBtn.classList.add("active");
+      }
+      
+      if (localStorage.getItem("can11aControlPanelVisible") === "true") {
+        document.getElementById("can11aControlPanel").style.display = "block";
+        can11aBtn.classList.add("active");
       }
       
       if (localStorage.getItem("inverterPanelVisible") === "false") {
@@ -4037,7 +4166,7 @@ else if (msg.type === "info" || msg.type === "status") {
           const cmd = "SET_SINGLE:leaf1d4TorqueInc=1";
           console.log("Sending:", cmd);
           ws.send(cmd);
-          showToast("Torque +0.1 Nm");
+          showToast("Torque +0.25 Nm");
         } else {
           showToast("Not connected to device");
         }
@@ -4050,14 +4179,83 @@ else if (msg.type === "info" || msg.type === "status") {
         if (ws && ws.readyState === WebSocket.OPEN) {
           // Instant UI feedback
           const current = Number(cachedTelemetry.leaf_torque_demand_manual || 0);
-          const updated = Number((current - 0.1).toFixed(2));
+          const updated = Number((current - 0.25).toFixed(2));
           const manualEl = document.getElementById("manualTorqueDisplay");
           if (manualEl) manualEl.textContent = updated.toFixed(2);
           
           const cmd = "SET_SINGLE:leaf1d4TorqueDec=1";
           console.log("Sending:", cmd);
           ws.send(cmd);
-          showToast("Torque −0.1 Nm");
+          showToast("Torque −0.25 Nm");
+        } else {
+          showToast("Not connected to device");
+        }
+      };
+    }
+
+    // 0x11A Gear/Car Control Handlers
+    const gearIncBtn = document.getElementById("can11aGearIncBtn");
+    const gearDecBtn = document.getElementById("can11aGearDecBtn");
+    const carIncBtn = document.getElementById("can11aCarIncBtn");
+    const carDecBtn = document.getElementById("can11aCarDecBtn");
+    const gearDisplay = document.getElementById("can11aGearDisplay");
+    const carDisplay = document.getElementById("can11aCarDisplay");
+
+    if (!gearIncBtn) console.error("can11aGearIncBtn not found");
+    if (!gearDecBtn) console.error("can11aGearDecBtn not found");
+    if (!carIncBtn) console.error("can11aCarIncBtn not found");
+    if (!carDecBtn) console.error("can11aCarDecBtn not found");
+
+    if (gearIncBtn) {
+      gearIncBtn.onclick = function() {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          can11aControlState.gear = Math.min(4, can11aControlState.gear + 1);
+          if (gearDisplay) gearDisplay.textContent = can11aControlState.gear;
+          const cmd = "SET_SINGLE:leaf11aGear=" + can11aControlState.gear;
+          ws.send(cmd);
+          showToast("0x11A Gear: " + can11aControlState.gear);
+        } else {
+          showToast("Not connected to device");
+        }
+      };
+    }
+
+    if (gearDecBtn) {
+      gearDecBtn.onclick = function() {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          can11aControlState.gear = Math.max(0, can11aControlState.gear - 1);
+          if (gearDisplay) gearDisplay.textContent = can11aControlState.gear;
+          const cmd = "SET_SINGLE:leaf11aGear=" + can11aControlState.gear;
+          ws.send(cmd);
+          showToast("0x11A Gear: " + can11aControlState.gear);
+        } else {
+          showToast("Not connected to device");
+        }
+      };
+    }
+
+    if (carIncBtn) {
+      carIncBtn.onclick = function() {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          can11aControlState.carOnOff = Math.min(4, can11aControlState.carOnOff + 1);
+          if (carDisplay) carDisplay.textContent = can11aControlState.carOnOff;
+          const cmd = "SET_SINGLE:leaf11aCarOnOff=" + can11aControlState.carOnOff;
+          ws.send(cmd);
+          showToast("0x11A CarOnOff: " + can11aControlState.carOnOff);
+        } else {
+          showToast("Not connected to device");
+        }
+      };
+    }
+
+    if (carDecBtn) {
+      carDecBtn.onclick = function() {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          can11aControlState.carOnOff = Math.max(0, can11aControlState.carOnOff - 1);
+          if (carDisplay) carDisplay.textContent = can11aControlState.carOnOff;
+          const cmd = "SET_SINGLE:leaf11aCarOnOff=" + can11aControlState.carOnOff;
+          ws.send(cmd);
+          showToast("0x11A CarOnOff: " + can11aControlState.carOnOff);
         } else {
           showToast("Not connected to device");
         }

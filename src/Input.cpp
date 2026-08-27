@@ -24,11 +24,14 @@
 #include "LeafCrc.h"
 #include "Leaf1d4ReplaySeries.h"
 #include "CanConfig.h"
-#include "FeatureFlags.h"
-#include "TorqueConfig.h"
-#include "LeafCanConfig.h"  // Phase 14C: Consolidated Leaf CAN protocol parameters
 #include "globals.h"
 #include "TelnetSerialBridge.h"
+
+// Default: CAN Monitor JSON telemetry is DISABLED (reduce WebSocket payload)
+// Enable via platformio.ini: -D METASENSE_CAN_MONITOR_JSON_ENABLED=1
+#ifndef METASENSE_CAN_MONITOR_JSON_ENABLED
+#define METASENSE_CAN_MONITOR_JSON_ENABLED 0
+#endif
 
 namespace MetaSense::WebSocketServer {
 
@@ -112,6 +115,9 @@ static uint32_t lastAmbientSampleMs = 0;
 // CAN RPM validity timeout + plausibility
 static uint32_t lastCanRpmUpdate   = 0;
 static const uint32_t CAN_RPM_TIMEOUT_MS = 100;
+#ifndef METASENSE_CAN_RPM_MIN_UPDATE_MS
+#define METASENSE_CAN_RPM_MIN_UPDATE_MS 10
+#endif
 static const uint32_t CAN_RPM_MIN_UPDATE_MS = METASENSE_CAN_RPM_MIN_UPDATE_MS;
 static float lastCanRpm            = 0.0f;
 static const float CAN_MAX_JUMP    = 2000.0f;
@@ -180,6 +186,9 @@ static uint8_t s_leaf11aMuxRxSeenMask = 0U;
 static bool s_leaf11aMuxTemplatesLocked = false;
 static uint32_t s_leaf11aMuxTemplateLastRxFrames = 0U;
 static uint8_t s_leaf11aMuxTemplateBySel[4][8] = {{0U}};
+// UI-controlled values for 0x11A frame (initialized with defaults from CanConfig.h)
+static uint8_t s_leaf11aUiGear = METASENSE_LEAF_11A_FORCE_GEAR;
+static uint8_t s_leaf11aUiCarOnOff = METASENSE_LEAF_11A_FORCE_CARONOFF;
 static uint32_t lastLeaf1d4MonitorSampleMs = 0;
 static bool lastCanDiagInitialized = false;
 static bool lastCanDiagReady = false;
@@ -230,14 +239,126 @@ static const uint32_t CAN_RX_MISSING_LOG_PERIOD_MS = 5000;
 static const uint32_t CAN_EVENT_LOG_MIN_PERIOD_MS = 5000;
 static const uint32_t CAN_1DA_CRC_BAD_STREAK_LIMIT = 10;
 
+#ifndef METASENSE_LEAF_VCM_CHECKLIST_MODE
+#define METASENSE_LEAF_VCM_CHECKLIST_MODE 1
+#endif
+#ifndef METASENSE_LEAF_VCM_DIAGNOSTICS
+#define METASENSE_LEAF_VCM_DIAGNOSTICS 0
+#endif
+#ifndef METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS
+#define METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS 0
+#endif
+#ifndef METASENSE_TEST_TORQUE_OVERRIDE_ENABLED
+#define METASENSE_TEST_TORQUE_OVERRIDE_ENABLED 0
+#endif
+#ifndef METASENSE_TEST_TORQUE_OVERRIDE_NM
+#define METASENSE_TEST_TORQUE_OVERRIDE_NM 25.0f
+#endif
+#ifndef METASENSE_TORQUE_STEP_SEQUENCER_ENABLED
+#define METASENSE_TORQUE_STEP_SEQUENCER_ENABLED 0
+#endif
+#ifndef METASENSE_TORQUE_STEP_SEQUENCER_STEP_NM
+#define METASENSE_TORQUE_STEP_SEQUENCER_STEP_NM 0.5f
+#endif
+#ifndef METASENSE_TORQUE_STEP_SEQUENCER_MAX_NM
+#define METASENSE_TORQUE_STEP_SEQUENCER_MAX_NM 3.0f
+#endif
+#ifndef METASENSE_TORQUE_STEP_SEQUENCER_DWELL_MS
+#define METASENSE_TORQUE_STEP_SEQUENCER_DWELL_MS 5000U
+#endif
+#ifndef METASENSE_LEAF_120_CMD_BASE_SLOPE
+#define METASENSE_LEAF_120_CMD_BASE_SLOPE 0.0300f
+#endif
+#ifndef METASENSE_LEAF_120_CMD_BASE_OFFSET_NM
+#define METASENSE_LEAF_120_CMD_BASE_OFFSET_NM 0.000f
+#endif
+#ifndef METASENSE_LEAF_120_CMD_MIN_FIT_SAMPLES
+#define METASENSE_LEAF_120_CMD_MIN_FIT_SAMPLES 128U
+#endif
+#ifndef METASENSE_LEAF_VCM_LEGACY_VERBOSE_LOGS
+#define METASENSE_LEAF_VCM_LEGACY_VERBOSE_LOGS 0
+#endif
+#ifndef METASENSE_LEAF_VCM_RX_WARN_LOGS
+#define METASENSE_LEAF_VCM_RX_WARN_LOGS 0
+#endif
+#ifndef METASENSE_LEAF_CRC_DEEP_LOGS
+#define METASENSE_LEAF_CRC_DEEP_LOGS 0
+#endif
+#ifndef METASENSE_LEAF_MONITOR_SIMPLE_LOGS
+#define METASENSE_LEAF_MONITOR_SIMPLE_LOGS 1
+#endif
+#ifndef METASENSE_LEAF_MONITOR_SIMPLE_DECIMATE
+#define METASENSE_LEAF_MONITOR_SIMPLE_DECIMATE 20U
+#endif
+#ifndef METASENSE_LEAF_120_AUX_LOGS
+#define METASENSE_LEAF_120_AUX_LOGS 0
+#endif
+#ifndef METASENSE_LEAF_120_SHADOW_LOGS
+#define METASENSE_LEAF_120_SHADOW_LOGS 1
+#endif
+#ifndef METASENSE_LEAF_120_COMPARE_COPY_RX
+#define METASENSE_LEAF_120_COMPARE_COPY_RX 0
+#endif
+#ifndef METASENSE_LEAF_120_SHADOW_STATE_STRATEGY
+// 0: use explicit brake/gear inputs from control path
+// 1: derive state from torque sign (+ = MOTOR, - = BRAKE)
+// 2: 4-quadrant model using torque sign and RPM sign
+//    (0Nm=Neutral, +Nm=Forward, -Nm with rpm>0=Brake, -Nm with rpm<0=Reverse)
+#define METASENSE_LEAF_120_SHADOW_STATE_STRATEGY 0
+#endif
+#ifndef METASENSE_LEAF_120_SHADOW_TORQUE_DEADBAND_NM
+#define METASENSE_LEAF_120_SHADOW_TORQUE_DEADBAND_NM 1.0f
+#endif
+#ifndef METASENSE_LEAF_120_SHADOW_NEUTRAL_STARTUP_MS
+// >0 keeps state in neutral for startup transient window before forcing F states.
+#define METASENSE_LEAF_120_SHADOW_NEUTRAL_STARTUP_MS 0U
+#endif
+#ifndef METASENSE_LEAF_120_SHADOW_IDLE_FORCE_FWD
+// In torque-sign strategy, keep F in near-zero torque zone when enabled.
+#define METASENSE_LEAF_120_SHADOW_IDLE_FORCE_FWD 1
+#endif
+#ifndef METASENSE_LEAF_120_SHADOW_REVERSE_RPM_DEADBAND
+#define METASENSE_LEAF_120_SHADOW_REVERSE_RPM_DEADBAND 30.0f
+#endif
+#ifndef METASENSE_LEAF_120_FACTS_LOGS
+#define METASENSE_LEAF_120_FACTS_LOGS 0
+#endif
+#ifndef METASENSE_LEAF_120_FACTS_LOG_PERIOD_MS
+#define METASENSE_LEAF_120_FACTS_LOG_PERIOD_MS 5000U
+#endif
+#ifndef METASENSE_LEAF_120_NOISE_LOGS
+#define METASENSE_LEAF_120_NOISE_LOGS 0
+#endif
+#ifndef METASENSE_LEAF_120_NOISE_DB_NM
+#define METASENSE_LEAF_120_NOISE_DB_NM 0.4f
+#endif
+#ifndef METASENSE_LEAF_120_NOISE_EMA_ALPHA
+#define METASENSE_LEAF_120_NOISE_EMA_ALPHA 0.10f
+#endif
+#ifndef METASENSE_LEAF_120_NOISE_OUTLIER_ABS_NM
+#define METASENSE_LEAF_120_NOISE_OUTLIER_ABS_NM 5.0f
+#endif
+#ifndef METASENSE_LEAF_120_DT_SLOPE_STEADY_NMPS
+#define METASENSE_LEAF_120_DT_SLOPE_STEADY_NMPS 10.0f
+#endif
+#ifndef METASENSE_LEAF_120_DT_SLOPE_HIGH_NMPS
+#define METASENSE_LEAF_120_DT_SLOPE_HIGH_NMPS 120.0f
+#endif
+#ifndef METASENSE_LEAF_120_TX_COMMIT_ENABLED
+#define METASENSE_LEAF_120_TX_COMMIT_ENABLED 0
+#endif
+
+#ifndef METASENSE_LEAF_120_STARTUP_ZERO_TORQUE
+// Hold 0x120 torque demand at zero during initial HV bring-up so the inverter
+// can precharge cleanly and clear its error bits before any torque is applied.
+// A future sequencer can replace this with a staged ramp without changing the
+// surrounding state-machine logic.
+#define METASENSE_LEAF_120_STARTUP_ZERO_TORQUE 1
+#endif
 #ifndef METASENSE_LEAF_CRC_CANDIDATE_HUNT
 // Disable reverse-engineering candidate sweeps in normal operation.
 #define METASENSE_LEAF_CRC_CANDIDATE_HUNT 0
 #endif
-
-// DEAD: METASENSE_STARTUP_SNIFF_CAPTURE_ENABLE (Phase 15 cleanup) - no usage
-// kLeafTxSuppressedForSniff logic removed; sniffing now only controlled by listen_only mode
-
 // Allow scheduler jitter from WiFi/web/FS tasks without tripping a false VCM fault.
 static const uint32_t CAN_TX_MAX_GAP_MS = 120;
 
@@ -308,6 +429,9 @@ constexpr uint32_t kLeafVcmFaultRecoverMs = 500;
 constexpr float kLeafTorqueTrackStepNm = 2.0f;
 constexpr float kLeafTorqueTrackAbsTolNm = 3.0f;
 constexpr float kLeafTorqueTrackRelTol = 0.10f;
+#ifndef METASENSE_LEAF_TORQUE_TRACK_TIMEOUT_MS
+#define METASENSE_LEAF_TORQUE_TRACK_TIMEOUT_MS 3000
+#endif
 constexpr uint32_t kLeafTorqueTrackTimeoutMs = METASENSE_LEAF_TORQUE_TRACK_TIMEOUT_MS;
 constexpr uint32_t kLeafSimFeedbackPeriodMs = 20;
 constexpr uint32_t kLeafSimBootDelayMs = 1000;
@@ -318,16 +442,140 @@ constexpr uint16_t kLeafHandshakeMaxAttempts = 200;
 constexpr uint32_t kLeafHandshakeWindowMs = 5000;
 constexpr uint32_t kLeafHandshakeAttemptPeriodMs = 20;
 
-// Phase 14C: Leaf CAN protocol parameters now consolidated in include/LeafCanConfig.h
-// Removed ~130 lines of duplicated #ifndef/#define METASENSE_LEAF_* blocks
+#ifndef METASENSE_LEAF_CAN_RX_ENABLED
+#define METASENSE_LEAF_CAN_RX_ENABLED 1
+#endif
+#ifndef METASENSE_LEAF_CAN_TX_ENABLED
+#define METASENSE_LEAF_CAN_TX_ENABLED 1
+#endif
+#ifndef METASENSE_LEAF_CAN_LISTEN_ONLY
+#define METASENSE_LEAF_CAN_LISTEN_ONLY 0
+#endif
+#ifndef METASENSE_STARTUP_SNIFF_CAPTURE_ENABLE
+#define METASENSE_STARTUP_SNIFF_CAPTURE_ENABLE 0
+#endif
+#ifndef METASENSE_LEAF_CAN_HANDSHAKE_ON_FIRST_1DA
+#define METASENSE_LEAF_CAN_HANDSHAKE_ON_FIRST_1DA 0
+#endif
+// All 0x11A template definitions are now in include/CanConfig.h
+// These will be used from CanConfig.h via #ifndef guards
+#ifndef METASENSE_55A
+#define METASENSE_55A 0
+#endif
+#ifndef METASENSE_LEAF_CAN_VARIANT_READY_FALLBACK
+#define METASENSE_LEAF_CAN_VARIANT_READY_FALLBACK 1
+#endif
+#ifndef METASENSE_LEAF_1D4_CRC_CLOCK_XOR_ENABLE
+// Conformant 0x1D4 CRC implementation:
+// CRC8 MSB poly 0x1D over [idLo + payload7], then XOR by HCM clock bin.
+#define METASENSE_LEAF_1D4_CRC_CLOCK_XOR_ENABLE 1
+#endif
+#ifndef METASENSE_LEAF_1D4_SNIFF_RX_ENABLED
+#define METASENSE_LEAF_1D4_SNIFF_RX_ENABLED 1
+#endif
+#ifndef METASENSE_LEAF_1D4_TEMPLATE_TX_MODE
+// 0: Build 0x1D4 command fields from logic.
+// 1: Start from a known-good Thunderstruck template frame and only patch
+//    selected fields (torque + clock + CRC) for controlled acceptance tests.
+// 2: Replay a captured clock-continuous 0x1D4 frame loop exactly as generated
+//    by tools/analyze_1d4_sniff.py --emit-loop-header.
+// 3: Use newest captured 0x1D4 ring-buffer frame as TX base, then patch
+//    torque + clock + CRC; if ring is empty, fallback to mode 0 builder.
+// 4: Strict raw replay from 0x1D4 ring-buffer frame (no patching, no builder fallback).
+#define METASENSE_LEAF_1D4_TEMPLATE_TX_MODE 0
+#endif
+#ifndef METASENSE_LEAF_1D4_RING_TX_SOURCE_AGE
+// 0 reads newest ring frame, 1 previous, etc.
+#define METASENSE_LEAF_1D4_RING_TX_SOURCE_AGE 0
+#endif
+#ifndef METASENSE_LEAF_1D4_REPLAY_RECALC_CRC
+// Keep enabled to harden generated loop frames against accidental edits.
+#define METASENSE_LEAF_1D4_REPLAY_RECALC_CRC 1
+#endif
+#ifndef METASENSE_LEAF_1D4_TEMPLATE_MAX_ABS_TORQUE_NM
+// Keep template TX in a conservative region while validating inverter acceptance.
+#define METASENSE_LEAF_1D4_TEMPLATE_MAX_ABS_TORQUE_NM 3.75f
+#endif
+#ifndef METASENSE_LEAF_1D4_TORQUE_LSB_NM
+#define METASENSE_LEAF_1D4_TORQUE_LSB_NM 0.0625f
+#endif
+#ifndef METASENSE_LEAF_1D4_TEMPLATE_B0
+#define METASENSE_LEAF_1D4_TEMPLATE_B0 0x6EU  // Static per Thunderstruck reference
+#endif
+#ifndef METASENSE_LEAF_1D4_TEMPLATE_B1
+#define METASENSE_LEAF_1D4_TEMPLATE_B1 0x6EU  // Static per Thunderstruck reference
+#endif
+#ifndef METASENSE_LEAF_1D4_TEMPLATE_B2
+#define METASENSE_LEAF_1D4_TEMPLATE_B2 0x00U  // Torque MSB
+#endif
+#ifndef METASENSE_LEAF_1D4_TEMPLATE_B3
+#define METASENSE_LEAF_1D4_TEMPLATE_B3 0x00U  // Torque LSB
+#endif
+#ifndef METASENSE_LEAF_1D4_TEMPLATE_B4
+#define METASENSE_LEAF_1D4_TEMPLATE_B4 0x87U  // Rolling counter (high nibble), fixed 0x7 (low nibble)
+#endif
+#ifndef METASENSE_LEAF_1D4_TEMPLATE_B5
+#define METASENSE_LEAF_1D4_TEMPLATE_B5 0x44U  // Static charge status per Thunderstruck reference
+#endif
+#ifndef METASENSE_LEAF_1D4_TEMPLATE_B6
+#define METASENSE_LEAF_1D4_TEMPLATE_B6 0x01U  // Static field per Thunderstruck reference
+#endif
+#ifndef METASENSE_LEAF_1D4_TEMPLATE_B7
+#define METASENSE_LEAF_1D4_TEMPLATE_B7 0x00U  // CRC placeholder (will be overwritten)
+#endif
+#ifndef METASENSE_LEAF_CAN_TX_PIN
+#define METASENSE_LEAF_CAN_TX_PIN 4
+#endif
+#ifndef METASENSE_LEAF_CAN_RX_PIN
+#define METASENSE_LEAF_CAN_RX_PIN 5
+#endif
+#ifndef METASENSE_LEAF_CAN_MAX_FRAMES_PER_LOOP
+#define METASENSE_LEAF_CAN_MAX_FRAMES_PER_LOOP 8
+#endif
+#ifndef METASENSE_LEAF_TX_GAP_TEST_ENABLE
+#define METASENSE_LEAF_TX_GAP_TEST_ENABLE 0
+#endif
+#ifndef METASENSE_LEAF_TX_GAP_TEST_PERIOD_MS
+#define METASENSE_LEAF_TX_GAP_TEST_PERIOD_MS 15000
+#endif
+#ifndef METASENSE_LEAF_TX_GAP_TEST_DURATION_MS
+#define METASENSE_LEAF_TX_GAP_TEST_DURATION_MS 500
+#endif
+#ifndef METASENSE_FORCE_TACHO_RPM_SOURCE
+// Default behavior: prefer 0x1DA-derived RPM when fresh, else fallback to tachogen.
+// Set to 1 only for forced tachogen-only diagnostics.
+#define METASENSE_FORCE_TACHO_RPM_SOURCE 0
+#endif
+
+#ifndef METASENSE_LEAF_1D4_RAW_SNIFF_ONLY
+#define METASENSE_LEAF_1D4_RAW_SNIFF_ONLY 0
+#endif
+
+#ifndef METASENSE_LEAF_1D4_KEEPALIVE_ZERO_REFRESH_MS
+// Periodically re-issue a zero-cross pulse to refresh inverter state before timeout fallback.
+#define METASENSE_LEAF_1D4_KEEPALIVE_ZERO_REFRESH_MS 500U
+#endif
+#ifndef METASENSE_LEAF_1D4_KEEPALIVE_ZERO_PULSE_MS
+// Keep the negative pulse long enough to cover multiple 10 ms TX frames.
+#define METASENSE_LEAF_1D4_KEEPALIVE_ZERO_PULSE_MS 20U
+#endif
+#ifndef METASENSE_LEAF_1D4_KEEPALIVE_ZERO_POS_NM
+#define METASENSE_LEAF_1D4_KEEPALIVE_ZERO_POS_NM 0.60f
+#endif
+#ifndef METASENSE_LEAF_1D4_KEEPALIVE_ZERO_PRE_POS_MS
+#define METASENSE_LEAF_1D4_KEEPALIVE_ZERO_PRE_POS_MS 20U
+#endif
+#ifndef METASENSE_LEAF_1D4_KEEPALIVE_ZERO_POST_POS_MS
+#define METASENSE_LEAF_1D4_KEEPALIVE_ZERO_POST_POS_MS 20U
+#endif
 
 constexpr bool kLeafCanHandshakeOnFirst1da = (METASENSE_LEAF_CAN_HANDSHAKE_ON_FIRST_1DA != 0);
-constexpr bool kLeafCanTxActive = true &&  // METASENSE_LEAF_CAN_TX_ENABLED always 1
+constexpr bool kLeafCanTxActive = (METASENSE_LEAF_CAN_TX_ENABLED != 0) &&
                                   (METASENSE_LEAF_CAN_LISTEN_ONLY == 0) &&
                                   !kLeafCanHandshakeOnFirst1da;
 constexpr bool kLeaf11aTxEnabled = (METASENSE_LEAF_11A_TX_ENABLED != 0) &&
                                    (METASENSE_LEAF_CAN_LISTEN_ONLY == 0) &&
-                                   true;  // METASENSE_LEAF_CAN_TX_ENABLED always 1
+                                   (METASENSE_LEAF_CAN_TX_ENABLED != 0);
 constexpr uint32_t kLeaf11aTxPeriodMs = METASENSE_LEAF_11A_TX_PERIOD_MS;
 
 const MetaSense::CANBus::Config kLeafCanConfig = []() {
@@ -533,6 +781,29 @@ struct Leaf120CommandDecode {
     uint8_t crc120 = 0U;
 };
 
+Leaf120CommandDecode decodeLeaf120Command(const uint8_t* data, uint8_t len)
+{
+    Leaf120CommandDecode decoded;
+    if (data == nullptr || len == 0U) {
+        return decoded;
+    }
+
+    if (len >= 2U) {
+        decoded.torqueDemandRawBe = (static_cast<uint16_t>(data[0]) << 8) |
+                                    static_cast<uint16_t>(data[1]);
+        decoded.torqueDemandSignedBe = static_cast<int16_t>(decoded.torqueDemandRawBe);
+        decoded.torqueDemandNmBase = METASENSE_LEAF_120_CMD_BASE_OFFSET_NM +
+                                     (METASENSE_LEAF_120_CMD_BASE_SLOPE * static_cast<float>(decoded.torqueDemandSignedBe));
+    }
+    if (len >= 3U) {
+        decoded.unknown120_2 = data[2];
+    }
+    if (len >= 4U) {
+        decoded.crc120 = data[3];
+    }
+
+    return decoded;
+}
 
 uint32_t extractIntelUnsigned(const uint8_t* data, uint8_t len, uint8_t startBit, uint8_t bitLen)
 {
@@ -844,9 +1115,10 @@ void patchLeaf1d4TorqueFieldMotorola23_12(uint8_t (&frame)[8], int16_t torqueRaw
 {
     // DBC: SG_ MotorAmpTorqueRequest : 23|12@0- (0.25,0)
     // 12-bit signed two's complement placed as Motorola at start bit 23.
+    // Motorola: MSB at start bit 23 (byte 2 bit 7), spans byte 2 bits 7-0 + byte 3 bits 7-4
     const uint16_t raw12 = static_cast<uint16_t>(torqueRaw) & 0x0FFFU;
     frame[2] = static_cast<uint8_t>((raw12 >> 4) & 0xFFU);
-    frame[3] = static_cast<uint8_t>((frame[3] & 0xF0U) | (raw12 & 0x000FU));
+    frame[3] = static_cast<uint8_t>((frame[3] & 0x0FU) | ((raw12 & 0x000FU) << 4));
 }
 
 void patchLeaf1d4FrameFields(const Leaf1d4FrameFields& fields,
@@ -2414,7 +2686,7 @@ static float selectLeafActualTorqueNm(const LeafInvFeedback& fb, float demandNm)
 
 void pollLeafCanFrames(uint32_t nowMs)
 {
-    // METASENSE_LEAF_CAN_RX_ENABLED always true - CAN RX hardcoded enabled
+#if METASENSE_LEAF_CAN_RX_ENABLED
     static bool canConfigured = false;
     static bool canReadyLogged = false;
 
@@ -2491,6 +2763,9 @@ void pollLeafCanFrames(uint32_t nowMs)
         lastCanLeafAnyUpdate = leafFb.status_update_ms;
         lastCanStatusFrameMs = leafFb.status_update_ms;
     }
+#else
+    (void)nowMs;
+#endif
 }
 
 void maybeInjectLeafSimFeedback(uint32_t nowMs)
@@ -3209,6 +3484,38 @@ bool getLeafManualTorqueMode()
     return s_leafManualTorqueMode;
 }
 
+void setLeaf11aUiGear(uint8_t gear)
+{
+    s_leaf11aUiGear = static_cast<uint8_t>(gear & 0x0FU);
+    // Update all 4 template slots with the new gear value
+    for (uint8_t muxSel = 0U; muxSel < 4U; ++muxSel) {
+        uint8_t* slot = s_leaf11aMuxTemplateBySel[muxSel];
+        // Byte 0: bits 4-7 contain the gear value
+        slot[0] = static_cast<uint8_t>((slot[0] & 0x0FU) | ((s_leaf11aUiGear & 0x0FU) << 4U));
+    }
+}
+
+uint8_t getLeaf11aUiGear()
+{
+    return s_leaf11aUiGear;
+}
+
+void setLeaf11aUiCarOnOff(uint8_t carOnOff)
+{
+    s_leaf11aUiCarOnOff = static_cast<uint8_t>(carOnOff & 0x07U);
+    // Update all 4 template slots with the new car on/off value
+    for (uint8_t muxSel = 0U; muxSel < 4U; ++muxSel) {
+        uint8_t* slot = s_leaf11aMuxTemplateBySel[muxSel];
+        // Byte 1: bits 5-7 contain the car on/off value
+        slot[1] = static_cast<uint8_t>((slot[1] & 0x1FU) | ((s_leaf11aUiCarOnOff & 0x07U) << 5U));
+    }
+}
+
+uint8_t getLeaf11aUiCarOnOff()
+{
+    return s_leaf11aUiCarOnOff;
+}
+
 uint16_t getLoadCellSampleRateSps()
 {
     return getLoadCellSampleRateSpsLocal();
@@ -3465,6 +3772,15 @@ void updateCanStatus(bool ready, bool fault, bool warning, bool limp)
     lastCanLeafAnyUpdate = lastCanStatusUpdate;
 }
 
+void buildLeaf120ShadowFrame(float torqueDemandNm,
+                             bool readyBit,
+                             bool hvOkBit,
+                             bool brakeBit,
+                             bool gearDriveBit,
+                             uint8_t (&out)[4]);
+
+uint8_t crc8Lsb120(const uint8_t* data, uint8_t len);
+
 struct Leaf11aFrameFields {
     uint8_t joystickGearPosition = 0U;
     uint8_t ecoSelected = 0U;
@@ -3556,11 +3872,7 @@ bool sendLeafKeepAlive11a(uint32_t nowMs, bool forceImmediate = false, uint8_t m
 
     Leaf11aFrameFields fields = decodeLeaf11aFields(templateData, sizeof(templateData));
     fields.multiplexor = muxSel;
-
-    const uint8_t probeGear = static_cast<uint8_t>(METASENSE_LEAF_11A_FORCE_GEAR & 0x0FU);
-    const uint8_t probeCarOnOff = static_cast<uint8_t>(METASENSE_LEAF_11A_FORCE_CARONOFF & 0x07U);
-    fields.joystickGearPosition = static_cast<uint8_t>(probeGear & 0x0FU);
-    fields.carOnOffStatus = static_cast<uint8_t>(probeCarOnOff & 0x07U);
+    // Note: Gear, CarOnOff, and Eco values come from the template which is updated by UI controls
     uint8_t txData[8] = {0U};
     encodeLeaf11aFrame(fields, txData, templateData);
 
@@ -3726,6 +4038,228 @@ bool sendLeafTorqueCommand1d4AndKeepAlive11a(float torqueDemandNm,
 bool sendLeafTorqueCommand1d4FinalZero()
 {
     return sendLeafTorqueCommand1d4(0.0f, false, false, false, false);
+}
+
+uint8_t crc8Lsb120(const uint8_t* data, uint8_t len)
+{
+    uint8_t crc = 0x00U;
+    for (uint8_t i = 0U; i < len; ++i) {
+        crc ^= data[i];
+        for (uint8_t bit = 0U; bit < 8U; ++bit) {
+            const bool lsb = (crc & 0x01U) != 0U;
+            crc >>= 1;
+            if (lsb) {
+                crc ^= 0xB8U;
+            }
+        }
+    }
+    return crc;
+}
+
+enum class Leaf120ShadowStateClass : uint8_t {
+    Neutral = 0,
+    Idle = 1,
+    Motor = 2,
+    Brake = 3,
+    Reverse = 4,
+};
+
+const char* leaf120ShadowStateClassName(Leaf120ShadowStateClass stateClass)
+{
+    switch (stateClass) {
+    case Leaf120ShadowStateClass::Neutral:
+        return "NEUTRAL";
+    case Leaf120ShadowStateClass::Idle:
+        return "IDLE";
+    case Leaf120ShadowStateClass::Motor:
+        return "MOTOR";
+    case Leaf120ShadowStateClass::Brake:
+        return "BRAKE";
+    case Leaf120ShadowStateClass::Reverse:
+        return "REVERSE";
+    }
+    return "IDLE";
+}
+
+constexpr uint8_t kLeaf120StateClassCount = 5U;
+constexpr uint8_t kLeaf120SlopeClassCount = 4U;
+
+uint8_t leaf120ShadowStateClassIndex(Leaf120ShadowStateClass stateClass)
+{
+    switch (stateClass) {
+    case Leaf120ShadowStateClass::Neutral:
+        return 0U;
+    case Leaf120ShadowStateClass::Idle:
+        return 1U;
+    case Leaf120ShadowStateClass::Motor:
+        return 2U;
+    case Leaf120ShadowStateClass::Brake:
+        return 3U;
+    case Leaf120ShadowStateClass::Reverse:
+        return 4U;
+    }
+    return 1U;
+}
+
+uint8_t topByteFromCounts(const uint32_t* counts, uint32_t& outCount)
+{
+    uint8_t topValue = 0U;
+    outCount = 0U;
+    if (counts == nullptr) {
+        return topValue;
+    }
+
+    for (uint16_t i = 0U; i < 256U; ++i) {
+        if (counts[i] > outCount) {
+            outCount = counts[i];
+            topValue = static_cast<uint8_t>(i);
+        }
+    }
+    return topValue;
+}
+
+const char* leaf120ShadowStrategyName()
+{
+#if METASENSE_LEAF_120_SHADOW_STATE_STRATEGY == 1
+    return "torque_sign";
+#elif METASENSE_LEAF_120_SHADOW_STATE_STRATEGY == 2
+    return "quadrant";
+#else
+    return "brake_flag";
+#endif
+}
+
+Leaf120ShadowStateClass resolveLeaf120ShadowState(float torqueDemandNm,
+                                                  float rpm,
+                                                  bool brakeIn,
+                                                  bool gearIn,
+                                                  bool& brakeOut,
+                                                  bool& gearOut)
+{
+    if (METASENSE_LEAF_120_SHADOW_NEUTRAL_STARTUP_MS > 0U &&
+        millis() < METASENSE_LEAF_120_SHADOW_NEUTRAL_STARTUP_MS) {
+        brakeOut = false;
+        gearOut = false;
+        return Leaf120ShadowStateClass::Neutral;
+    }
+
+    // Global neutral rule: zero/near-zero torque is a valid Neutral command.
+    const float tqDeadband = METASENSE_LEAF_120_SHADOW_TORQUE_DEADBAND_NM;
+    if (fabsf(torqueDemandNm) <= tqDeadband) {
+        brakeOut = false;
+        gearOut = false;
+        return Leaf120ShadowStateClass::Neutral;
+    }
+
+#if METASENSE_LEAF_120_SHADOW_STATE_STRATEGY == 1
+    if (torqueDemandNm > tqDeadband) {
+        brakeOut = false;
+        gearOut = true;
+        return Leaf120ShadowStateClass::Motor;
+    }
+    if (torqueDemandNm < -tqDeadband) {
+        brakeOut = true;
+        gearOut = true;
+        return Leaf120ShadowStateClass::Brake;
+    }
+
+    brakeOut = false;
+    gearOut = false;
+    return Leaf120ShadowStateClass::Neutral;
+#elif METASENSE_LEAF_120_SHADOW_STATE_STRATEGY == 2
+    const float rpmDeadband = METASENSE_LEAF_120_SHADOW_REVERSE_RPM_DEADBAND;
+
+    if (torqueDemandNm > tqDeadband) {
+        brakeOut = false;
+        gearOut = true;
+        return Leaf120ShadowStateClass::Motor;
+    }
+
+    // Negative torque branch.
+    if (rpm < -rpmDeadband) {
+        // Provisional reverse mapping candidate: BRAKE=1, GEAR=0.
+        brakeOut = true;
+        gearOut = false;
+        return Leaf120ShadowStateClass::Reverse;
+    }
+
+    // Regen/brake branch when rpm is positive or near zero.
+    brakeOut = true;
+    gearOut = true;
+    return Leaf120ShadowStateClass::Brake;
+#else
+    brakeOut = brakeIn;
+    gearOut = gearIn;
+    if (!gearOut) {
+        return Leaf120ShadowStateClass::Neutral;
+    }
+    if (brakeOut) {
+        return Leaf120ShadowStateClass::Brake;
+    }
+
+    return Leaf120ShadowStateClass::Motor;
+#endif
+}
+
+void buildLeaf120ShadowFrame(float torqueDemandNm,
+                             bool readyBit,
+                             bool hvOkBit,
+                             bool brakeBit,
+                             bool gearDriveBit,
+                             uint8_t (&out)[4])
+{
+    const float torqueClamped = constrain(torqueDemandNm, -300.0f, 300.0f);
+    const float rawFloat = (torqueClamped - METASENSE_LEAF_120_CMD_BASE_OFFSET_NM) /
+                           METASENSE_LEAF_120_CMD_BASE_SLOPE;
+    long rawLong = lroundf(rawFloat);
+    if (rawLong > 32767L) {
+        rawLong = 32767L;
+    } else if (rawLong < -32768L) {
+        rawLong = -32768L;
+    }
+    const int16_t torqueRawBe = static_cast<int16_t>(rawLong);
+    out[0] = static_cast<uint8_t>((static_cast<uint16_t>(torqueRawBe) >> 8) & 0xFFU);
+    out[1] = static_cast<uint8_t>(static_cast<uint16_t>(torqueRawBe) & 0xFFU);
+
+    // Encode control-state bits into the low nibble so the outbound 0x120 frame
+    // carries live readiness/HV/brake/gear context instead of a constant state.
+    uint8_t stateNibble = 0U;
+    if (readyBit) {
+        stateNibble |= 0x01U;
+    }
+    if (hvOkBit) {
+        stateNibble |= 0x02U;
+    }
+    if (brakeBit) {
+        stateNibble |= 0x04U;
+    }
+    if (gearDriveBit) {
+        stateNibble |= 0x08U;
+    }
+    out[2] = static_cast<uint8_t>(stateNibble & 0x0FU);
+
+    static const uint8_t k120ResidueByState8[8] = {
+        0x00U, 0xE1U, 0x47U, 0xA6U, 0x7AU, 0x9BU, 0x3DU, 0xDCU
+    };
+    const uint8_t baseCrc = crc8Lsb120(out, 3U);
+    out[3] = static_cast<uint8_t>(baseCrc ^ k120ResidueByState8[out[2] & 0x07U]);
+}
+
+void logLeaf1d4ShadowFrame(uint32_t nowMs,
+                           float torqueDemandNm,
+                           bool readyBit,
+                           bool hvOkBit,
+                           bool brakeBit,
+                           bool gearDriveBit,
+                           bool txSent)
+{
+    (void)nowMs;
+    (void)torqueDemandNm;
+    (void)readyBit;
+    (void)hvOkBit;
+    (void)brakeBit;
+    (void)gearDriveBit;
+    (void)txSent;
 }
 
 void updateVcuDebug(bool simMode,
@@ -3922,7 +4456,13 @@ void leafTxPacerTask(void* /*param*/)
         static uint32_t s_leafTxPacerLastLoggedMs = 0;
         if ((nowMs - s_leafTxPacerLastLoggedMs) >= LEAF_1D4_TORQUE_PAYLOAD_UPDATE_PERIOD_MS) {
             s_leafTxPacerLastLoggedMs = nowMs;
-            // 0x120 shadow diagnostics removed - production uses 0x1D4 only
+            logLeaf1d4ShadowFrame(nowMs,
+                                  s_leaf1d4PayloadTorqueNm,
+                                  s_leafTxPacerReadyBit,
+                                  s_leafTxPacerHvOkBit,
+                                  s_leafTxPacerBrakeBit,
+                                  s_leafTxPacerGearDriveBit,
+                                  sent1d4);
         }
     }
 }
@@ -4218,7 +4758,13 @@ void stopRecording()
                                         (kLeafCanHandshakeOnFirst1da && s_leafHandshakeSent));
     if (leafTxChecklistActive) {
         const bool sent = sendLeafTorqueCommand1d4FinalZero();
-        // 0x120 shadow diagnostics removed
+        logLeaf1d4ShadowFrame(millis(),
+                              0.0f,
+                              false,
+                              false,
+                              false,
+                              false,
+                              sent);
     }
 }
 
@@ -5299,7 +5845,13 @@ void loop()
                                                                                 hvOkPreview,
                                                                                 brakePreview,
                                                                                 gearDrivePreview);
-            // 0x120 shadow diagnostics removed
+            logLeaf1d4ShadowFrame(now,
+                                  previewTorqueNm,
+                                  inverterReadyPreview,
+                                  hvOkPreview,
+                                  brakePreview,
+                                  gearDrivePreview,
+                                  sentManual);
             lastLeafTxMs = now;
         }
 
@@ -5348,7 +5900,7 @@ void loop()
                                                                              false,
                                                                              false,
                                                                              true);
-                // 0x120 shadow diagnostics removed
+                logLeaf1d4ShadowFrame(now, 0.0f, false, false, false, true, sent);
                 if (sent) {
                     ++s_leafHandshakeSentCount;
                 }
