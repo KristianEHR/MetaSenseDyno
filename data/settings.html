@@ -240,16 +240,18 @@
       <label>PI Control Gains</label>
       <div class="info">
         These values control the active dyno PI loop and are saved to NVS.<br>
-        Stable baseline recommendation: Kp = 0.0500, Ki = 0.0200.
+        <strong>Current defaults (tuned 2026-08-27):</strong> Kp = 0.0730, Ki = 0.5240 (10ms loop, 20ms latency)<br>
+        <strong>Conservative alternative:</strong> Kp = 0.0500, Ki = 0.4000 (slower, more delay-robust)<br>
+        See <code>PI_TUNING_CALCULATION.md</code> for control theory derivation.
       </div>
       <label>Kp (Proportional Gain)</label>
       <div class="param-row">
-        <input type="number" id="kp" value="0.0200" min="0" max="10" step="0.0001">
+        <input type="number" id="kp" value="0.0500" min="0" max="10" step="0.0001">
         <button onclick="saveSingle('kp', event)">💾 SAVE</button>
       </div>
       <label>Ki (Integral Gain)</label>
       <div class="param-row">
-        <input type="number" id="ki" value="0.0500" min="0" max="10" step="0.0001">
+        <input type="number" id="ki" value="0.4000" min="0" max="10" step="0.0001">
         <button onclick="saveSingle('ki', event)">💾 SAVE</button>
       </div>
 

@@ -407,7 +407,7 @@ static bool s_leafTxGapTestActive = false;
 static bool s_leafTxGapTestLoggedStart = false;
 static bool s_leafTxGapTestLoggedEnd = false;
 static volatile float s_leafUiTorqueDemandNm = 0.0f;
-static volatile bool s_leafManualTorqueMode = false;  // true=manual, false=auto (PI controller)
+static volatile bool s_leafManualTorqueMode = true;  // true=manual (default), false=auto (PI controller)
 static const char* s_lastHardwareState = nullptr;     // Track state for INIT entry detection
 static volatile bool s_leafTxPacerEnabled = false;
 static volatile float s_leafTxPacerTorqueNm = 0.0f;
@@ -2989,14 +2989,132 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
     const uint32_t dashboardCadenceMs = (clientCount > 0) ? 50U : 100U;    // 50ms for stable updates
 
     // === LIGHTWEIGHT DATA: Essential telemetry ===
-    // Browser expects "data" message type with ALL these fields
+    // Browser expects "data" message type with core fields
+    // When METASENSE_CAN_MONITOR_MODE=0 (production): minimal JSON, reduced CPU/WiFi load
+    // When METASENSE_CAN_MONITOR_MODE=1 (debug): full metrics including leaf_1da/1d4/11a CAN frame data
     if (now - lastDashboardMs >= dashboardCadenceMs) {
         lastDashboardMs = now;
         
-        // Use static buffer for JSON to avoid String() float conversion issues
-        static char jsonBuffer[2600];  // Increased to 2600 for 0x11A fields
-        int pos = 0;
         const auto& leafFb = MetaSense::CANBus::feedback();
+
+#if METASENSE_CAN_MONITOR_MODE == 0
+        // MODE 0 (PRODUCTION): Minimal JSON without CAN metrics for CPU efficiency
+        // Reduced buffer size for production telemetry
+        static char jsonBuffer[1200];  // Smaller buffer: production mode
+        int pos = 0;
+        
+        // Build minimal JSON using snprintf
+        pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos,
+            "{\"type\":\"data\","
+            "\"rpm\":%.1f,"
+            "\"rpm_error\":0,"
+            "\"drum_rpm\":%.1f,"
+            "\"kw\":%.2f,"
+            "\"peakKW\":%.2f,"
+            "\"peakKW_RPM\":%.0f,"
+            "\"torque\":%.2f,"
+            "\"brakeTorque\":%.2f,"
+            "\"torque_measured\":%.2f,"
+            "\"load_kg\":%.2f,"
+            "\"throttle_pct\":%.1f,"
+            "\"peakTorque\":%.2f,"
+            "\"peakTorque_RPM\":%.0f,"
+            "\"e_torque\":%.2f,"
+            "\"energy\":%.2f,"
+            "\"energy_active\":%d,"
+            "\"rel_humidity\":%.1f,"
+            "\"ratio_confidence\":0,"
+            "\"rpm_target\":%.0f,"
+            "\"can_fallback\":0,"
+            "\"rpm_source_active\":\"leafrpm\","
+            "\"kp_source\":\"firmware\","
+            "\"kp_live\":0,"
+            "\"ki_live\":0,"
+            "\"egt_hot\":%.1f,"
+            "\"egt_status\":%d,"
+            "\"egt_ready\":%d,"
+            "\"pressure\":%.1f,"
+            "\"ambient_temp\":%.1f,"
+            "\"air_density\":%.3f,"
+            "\"climate_cf\":%.3f,"
+            "\"dyno_mode\":\"%s\","
+            "\"inv_ready\":%d,"
+            "\"sw_active\":%d,"
+            "\"load_raw\":0,"
+            "\"nau_ready\":0,"
+            "\"recording\":%d,"
+            "\"lambda\":%.2f,"
+            "\"massflow_m3h\":%.2f,"
+            "\"leaf_rpm\":%.0f,"
+            "\"leaf_torque\":%.2f,"
+            "\"leaf_torque_demand\":%.2f,"
+            "\"leaf_torque_demand_manual\":%.2f,"
+            "\"leaf_torque_mode\":\"%s\","
+            "\"leaf_1da_input_v\":%.1f,"
+            "\"leaf_1da_inv_fault_map\":%d,"
+            "\"leaf_1da_inv_status_bit\":%d,"
+            "\"leaf_1da_inv_temp\":%.1f,"
+            "\"leaf_coolant_temp\":%.1f,"
+            "\"leaf_ready\":%d,"
+            "\"hw_precharge\":%d,"
+            "\"hw_rb_plus\":%d,"
+            "\"hw_rb_minus\":%d,"
+            "\"hw_ssr\":%d,"
+            "\"hw_state\":\"%s\""
+            "}",
+            data.rpm,
+            data.drumRpm,
+            data.kw,
+            data.peakKW,
+            data.peakKW_RPM,
+            data.torqueNm,
+            data.brakeTorqueNm,
+            data.torqueNm,
+            data.loadKg,
+            data.throttlePercent,
+            data.peakTorque,
+            data.peakTorque_RPM,
+            data.eTorque,
+            data.energyMJ,
+            isRecording ? 1 : 0,
+            data.humidity,
+            data.rpmTarget,
+            data.egtHotC,
+            (int)data.egtStatus,
+            data.egtReady ? 1 : 0,
+            data.pressureHpa,
+            data.ambientC,
+            data.airDensity,
+            data.climateCF,
+            MetaSense::toString(data.mode),
+            data.leaf_invReady ? 1 : 0,
+            data.swActive ? 1 : 0,
+            isRecording ? 1 : 0,
+            data.lambdaValue,
+            data.massflowM3h,
+            data.leaf_rpm,
+            data.leaf_torqueNm,
+            data.leaf_torqueDemandNm,
+            MetaSense::Input::getLeafUiTorqueDemandNm(),
+            MetaSense::Input::getLeafManualTorqueMode() ? "manual" : "auto",
+            leafFb.input_voltage,  // leaf_1da_input_v
+            (int)leafFb.inv_fault_map,  // leaf_1da_inv_fault_map
+            (int)leafFb.inv_status_bit,  // leaf_1da_inv_status_bit
+            data.leaf_invTempC,  // leaf_1da_inv_temp
+            data.leaf_coolantTempC,  // leaf_coolant_temp
+            leafFb.ready ? 1 : 0,
+            MetaSense::HardwareOutputStateMachine::isPrechargeActive() ? 1 : 0,
+            MetaSense::HardwareOutputStateMachine::isRbPlusActive() ? 1 : 0,
+            MetaSense::HardwareOutputStateMachine::isRbMinusActive() ? 1 : 0,
+            MetaSense::HardwareOutputStateMachine::isSsrActive() ? 1 : 0,
+            MetaSense::HardwareOutputStateMachine::stateName()
+        );
+
+#else  // METASENSE_CAN_MONITOR_MODE == 1
+        // MODE 1 (DEBUG): Full JSON WITH all CAN metrics for monitoring/debugging
+        // Use static buffer for JSON to avoid String() float conversion issues
+        static char jsonBuffer[2600];  // Larger buffer: debug mode with all metrics
+        int pos = 0;
         
         // FIX: Use stats data that was captured ATOMICALLY at frame reception
         // last1daData[] and last1daWireCrcCalc are always synchronized (set together in CANBus handler)
@@ -3012,7 +3130,7 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         const uint8_t leaf1d4CrcCalc = computeLeaf1d4CrcConformant(s_leaf1d4PayloadCachedFrameData);  // CRC Calc from same frame
         const int leaf1d4CrcOk = (leaf1d4CrcRx == leaf1d4CrcCalc) ? 1 : 0;  // Match result from same frame
         
-        // Build JSON using snprintf for robust numeric formatting
+        // Build JSON with full CAN metrics using snprintf for robust numeric formatting
         pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos,
             "{\"type\":\"data\","
             "\"rpm\":%.1f,"
@@ -3232,9 +3350,9 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             MetaSense::CANBus::stats().last11aTxData[6],  // leaf_11a_tx_raw_b6
             MetaSense::CANBus::stats().last11aTxData[7]   // leaf_11a_tx_raw_b7
         );
+#endif  // METASENSE_CAN_MONITOR_MODE
         
         wsock.textAll(jsonBuffer);
-        // Note: All CAN monitor fields (leaf_1da_*) already included in dashboard JSON above
     }
 
     // === EXCEPTIONS ONLY: Send alerts for errors/faults via serial ===
@@ -6136,8 +6254,9 @@ void loop()
                           static_cast<unsigned long>(canStats.twaiTxErrorCounter),
                           static_cast<unsigned long>(canStats.twaiRxErrorCounter));
             
-            // Forward to telnet and Serial0 ONLY if there's an error condition
-            if (canStats.txFailures > 0 || canStats.txWhileNotReady > 0 || canStats.recoveries > 0 ||
+            // Forward to telnet and Serial0 ONLY if there's a serious error condition
+            // (exclude transient txWhileNotReady which is normal during startup)
+            if (canStats.txFailures > 0 || canStats.recoveries > 0 ||
                 canStats.busOffEvents > 0 || canStats.statusQueryFailures > 0 || canStats.twaiBusError > 0 ||
                 canStats.twaiTxErrorCounter > 0 || canStats.twaiRxErrorCounter > 0) {
                 MetaSense::TelnetSerialBridge::telnetBridgePrintf("[CAN-EVENT-ERROR] ready=%d state=%u tx_total=%lu tx_1d4=%lu tx_11a=%lu tx_fail=%lu tx_not_ready=%lu recov=%lu bus_off=%lu status_q_fail=%lu twai(rx_miss=%lu rx_ovr=%lu arb_lost=%lu bus_err=%lu tec=%lu rec=%lu)\n",

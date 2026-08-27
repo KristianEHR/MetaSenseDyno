@@ -5,6 +5,7 @@
 #include <driver/gpio.h>
 #include <esp_err.h>
 #include "globals.h"
+#include "../include/CanConfig.h"  // For METASENSE_LEAF_CAN_RX_QUEUE_LEN, TX_QUEUE_LEN
 
 #ifndef METASENSE_LEAF_CAN_TX_ENABLED
 // Default: allow Leaf CAN transmit (0x11A keep-alive, 0x1D4 torque commands)
@@ -72,7 +73,12 @@ bool CanHAL::begin(int txPin, int rxPin) {
     }
 
     const twai_mode_t mode = METASENSE_LEAF_CAN_LISTEN_ONLY ? TWAI_MODE_LISTEN_ONLY : TWAI_MODE_NORMAL;
+    
+    // Manually configure g_config with larger RX/TX queues to handle high-frequency traffic:
+    // 0x1D4 TX (100/sec) + 0x11A TX (100/sec) + 0x1DA RX responses (100+/sec)
     twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT((gpio_num_t)txPin, (gpio_num_t)rxPin, mode);
+    g_config.rx_queue_len = METASENSE_LEAF_CAN_RX_QUEUE_LEN;  // Default 128 (was ~25)
+    g_config.tx_queue_len = METASENSE_LEAF_CAN_TX_QUEUE_LEN;  // Default 128 (was ~25)
 
     twai_timing_config_t t_config;
 #if METASENSE_LEAF_CAN_BITRATE_KBPS == 1000
@@ -96,12 +102,14 @@ bool CanHAL::begin(int txPin, int rxPin) {
         Serial.printf("[CAN-INIT] NORMAL mode\n");
     }
 
-    Serial.printf("[CAN-INIT] mode=%d bitrate=%dk rx_pin=%d tx_pin=%d rx_enabled=%d filter=ACCEPT_ALL\n",
+    Serial.printf("[CAN-INIT] mode=%d bitrate=%dk rx_pin=%d tx_pin=%d rx_enabled=%d filter=ACCEPT_ALL rx_queue=%lu tx_queue=%lu\n",
                   static_cast<int>(mode),
                   static_cast<unsigned>(METASENSE_LEAF_CAN_BITRATE_KBPS),
                   rxPin,
                   txPin,
-                  static_cast<int>(METASENSE_LEAF_CAN_RX_ENABLED));
+                  static_cast<int>(METASENSE_LEAF_CAN_RX_ENABLED),
+                  static_cast<unsigned long>(g_config.rx_queue_len),
+                  static_cast<unsigned long>(g_config.tx_queue_len));
 
     if (twai_driver_install(&g_config, &t_config, &f_config) != ESP_OK) {
         Serial.println("[CAN-INIT] twai_driver_install FAILED");

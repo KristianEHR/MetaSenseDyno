@@ -718,6 +718,7 @@
 
 .can-monitor {
   --can-value-col-width: 24ch;
+  display: none;
   position: fixed;
   top: 50%;
   left: 20px;
@@ -1653,7 +1654,7 @@
       leaf_torque: 0,
       leaf_torque_demand: 0,
       leaf_torque_demand_manual: 0,
-      leaf_torque_mode: "auto",
+      leaf_torque_mode: "manual",
       leaf_1da_input_v: 0,
       leaf_1da_torque_nm: 0,
       leaf_1da_rpm: 0,
@@ -2672,12 +2673,27 @@
     }
 
     function loadCanMonitorPreference() {
-      let visible = false;  // Default to hidden (CAN Monitor JSON typically disabled)
-      try {
-        const pref = localStorage.getItem(canMonitorPrefKey);
-        if (pref === "1") visible = true;  // Only show if explicitly enabled
-      } catch (e) {
-        visible = false;
+      let visible = false;  // Default to hidden
+      // CAN Monitor is only available in metrics-enabled builds (METASENSE_CAN_MONITOR_MODE == 1)
+      // Check if CAN metrics are present in telemetry
+      const metricsAvailable = cachedTelemetry && cachedTelemetry.leaf_1da_crc !== undefined;
+      const btn = document.getElementById("toggleCanMonitorButton");
+      if (!metricsAvailable) {
+        // Hide CAN Monitor button if metrics build is not active
+        if (btn) {
+          btn.style.display = "none";
+        }
+      } else {
+        // Metrics available - restore user preference
+        if (btn) {
+          btn.style.display = "";
+        }
+        try {
+          const pref = localStorage.getItem(canMonitorPrefKey);
+          if (pref === "1") visible = true;  // Show if previously enabled
+        } catch (e) {
+          visible = false;
+        }
       }
       setCanMonitorVisibility(visible, false);
     }
@@ -3463,6 +3479,15 @@
               if (torqueDecBtn) torqueDecBtn.disabled = !isManual;
             }
 
+            // Check if CAN metrics are available (indicates metrics build mode)
+            // and enable CAN Monitor button access if they are
+            if (telemetry.leaf_1da_crc !== undefined) {
+              const canMonitorBtn = document.getElementById("toggleCanMonitorButton");
+              if (canMonitorBtn) {
+                canMonitorBtn.style.display = "";  // Show button for metrics build
+              }
+            }
+            
             // Update Inverter Status Panel
             if (telemetry.leaf_1da_inv_fault_map !== undefined) {
               const faultEl = document.getElementById("inverterFaultValue");

@@ -15,10 +15,16 @@ constexpr float kDefaultLoadAvgN2 = 5.0f;
 constexpr uint8_t kDefaultLoadFilterMode = 1;
 constexpr uint16_t kDefaultLoadCellGain = 128;
 constexpr uint16_t kDefaultLoadCellRateSps = 320;
-constexpr float kDefaultKp = 0.073f;
-constexpr float kDefaultKi = 0.524f;
-constexpr float kLegacyDefaultKp = 0.02f;
-constexpr float kLegacyDefaultKi = 0.05f;
+// PI gains: conservative baseline tuned for 10ms control loop + 20ms CAN RX latency
+// Calculated from inertia model: J=0.1125 kg⋅m² (10kg drum @ 0.15m radius)
+// Pole placement method with delay compensation (ζ=0.7, ωn=4 rad/s)
+// See PI_TUNING_CALCULATION.md for derivation.
+// Conservative baseline: Kp=0.050, Ki=0.400 → settling ~2.5s, robust to latency variation
+// Aggressive alternative: Kp=0.073, Ki=0.524 → settling ~1.5s (test via Pot3 live tuning)
+constexpr float kDefaultKp = 0.050f;
+constexpr float kDefaultKi = 0.400f;
+constexpr float kLegacyDefaultKp = 0.02f;    // Pre-2026 100ms control loop
+constexpr float kLegacyDefaultKi = 0.05f;    // Pre-2026 100ms control loop
 constexpr bool  kDefaultUsePot3Kp = false;
 constexpr float kDefaultAmbientRhOffsetPct = 0.0f;
 constexpr float kDefaultMotorModeMaxRpm = 2000.0f;
@@ -64,7 +70,8 @@ float loadAvgN2 = kDefaultLoadAvgN2;
 uint8_t loadFilterMode = kDefaultLoadFilterMode;
 uint16_t loadCellGain = kDefaultLoadCellGain;
 uint16_t loadCellRateSps = kDefaultLoadCellRateSps;
-// Conservative baseline for 100 ms control loop cadence.
+// PI gains tuned for 10ms control loop cadence with 20ms CAN feedback latency.
+// See PI_TUNING_CALCULATION.md for inertia-based pole placement derivation.
 float kp = kDefaultKp;
 float ki = kDefaultKi;
 bool usePot3Kp = kDefaultUsePot3Kp;

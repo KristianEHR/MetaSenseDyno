@@ -34,6 +34,15 @@
 #define METASENSE_LEAF_CAN_BITRATE_KBPS 500
 #endif
 
+// CAN Bus Queue Configuration (for high-frequency traffic)
+#ifndef METASENSE_LEAF_CAN_RX_QUEUE_LEN
+#define METASENSE_LEAF_CAN_RX_QUEUE_LEN 128
+#endif
+
+#ifndef METASENSE_LEAF_CAN_TX_QUEUE_LEN
+#define METASENSE_LEAF_CAN_TX_QUEUE_LEN 128
+#endif
+
 // Leaf Variant Configuration - ACTIVE (=1)
 #ifndef METASENSE_55A
 #define METASENSE_55A 1
@@ -69,12 +78,13 @@
 #endif
 
 // Frame Configuration: 0x11A (Keep-Alive) - ACTIVE (=1)
+// Sent every 10ms paired with 0x1D4 (same cadence, no separate timing)
 #ifndef METASENSE_LEAF_11A_TX_ENABLED
 #define METASENSE_LEAF_11A_TX_ENABLED 1
 #endif
 
 #ifndef METASENSE_LEAF_11A_TX_PERIOD_MS
-#define METASENSE_LEAF_11A_TX_PERIOD_MS 20
+#define METASENSE_LEAF_11A_TX_PERIOD_MS 10
 #endif
 
 #ifndef METASENSE_LEAF_11A_TEMPLATE_BOOTSTRAP_ENABLE
@@ -137,18 +147,26 @@
 #define METASENSE_LEAF_11A_TEMPLATE_M3_B7 0x61U
 #endif
 
-// Telemetry Configuration - ACTIVE (=1)
+// Telemetry Configuration
+// METASENSE_CAN_MONITOR_MODE: 0=production (16ms, NO metrics), 1=debug (50ms WITH detailed CAN metrics)
+// Mode 0: Sends only core telemetry (rpm, power, temps) - minimal CPU/WiFi load
+// Mode 1: Sends full metrics including leaf_1da/1d4/11a CAN frame data - for debugging/monitoring
+#ifndef METASENSE_CAN_MONITOR_MODE
+#define METASENSE_CAN_MONITOR_MODE 0
+#endif
+
+// Only enable CAN metrics JSON when monitor mode = 1
 #ifndef METASENSE_CAN_MONITOR_JSON_ENABLED
-#define METASENSE_CAN_MONITOR_JSON_ENABLED 1
+#define METASENSE_CAN_MONITOR_JSON_ENABLED (METASENSE_CAN_MONITOR_MODE == 1)
 #endif
 
+// Telemetry period (ms): 16ms for production, 50ms for debug/monitor mode
 #ifndef METASENSE_WS_FAST_PERIOD_MS
+#if METASENSE_CAN_MONITOR_MODE == 1
 #define METASENSE_WS_FAST_PERIOD_MS 50
+#else
+#define METASENSE_WS_FAST_PERIOD_MS 16
 #endif
-
-// CAN ID Scan (required by code even when disabled)
-#ifndef METASENSE_CAN_ID_SCAN
-#define METASENSE_CAN_ID_SCAN 0
 #endif
 
 // Simulation Feedback (required by code)

@@ -9,7 +9,7 @@ namespace MetaSense::CANBus {
 struct Config {
 	int txPin = 4;
 	int rxPin = 5;
-	uint8_t maxFramesPerPoll = 8;
+	uint8_t maxFramesPerPoll = 64;  // Drain 64 frames per poll to minimize RX latency for PI loop
 	uint32_t initRetryMs = 2000;
 };
 
