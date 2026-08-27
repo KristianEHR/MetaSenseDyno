@@ -239,6 +239,44 @@ static const uint32_t CAN_RX_MISSING_LOG_PERIOD_MS = 5000;
 static const uint32_t CAN_EVENT_LOG_MIN_PERIOD_MS = 5000;
 static const uint32_t CAN_1DA_CRC_BAD_STREAK_LIMIT = 10;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Voltage-based brake torque controller (overvoltage protection)
+// ─────────────────────────────────────────────────────────────────────────────
+// When inverter voltage > 450V, increase brake torque proportionally to:
+// - Dissipate more power (brake_power = V × I)
+// - Keep inverter voltage under control during high inertia braking
+// - Limit voltage overshoot and prevent inverter faults
+static bool s_brakeTorqueControlActive = false;  // Tracks if protection is engaged (hysteresis)
+static float s_computedBrakeTorqueNm = 0.0f;    // Output of voltage-based controller
+
+// Voltage thresholds for hysteresis
+static constexpr float kInvVoltageActivateThresholdV = 450.0f;   // Activate at 450V
+static constexpr float kInvVoltageDeactivateThresholdV = 440.0f; // Release at 440V (avoid hunting)
+static constexpr float kInvVoltageSafeMaxV = 500.0f;             // Scale ramp based on this max
+
+// Computes brake torque as a linear ramp: 4Nm @ 450V → 30Nm @ 500V+
+float computeVoltageBrakeTorque(float invVoltageV, float idleTorqueNm, float maxBrakeTorqueNm)
+{
+    // Hysteresis: activate at 450V, deactivate at 440V
+    if (invVoltageV >= kInvVoltageActivateThresholdV) {
+        s_brakeTorqueControlActive = true;
+    } else if (invVoltageV < kInvVoltageDeactivateThresholdV) {
+        s_brakeTorqueControlActive = false;
+    }
+    
+    // When active and above activate threshold, ramp torque
+    if (s_brakeTorqueControlActive && invVoltageV >= kInvVoltageActivateThresholdV) {
+        const float voltageOverage = invVoltageV - kInvVoltageActivateThresholdV;
+        const float voltageRampMax = kInvVoltageSafeMaxV - kInvVoltageActivateThresholdV;
+        const float rampFraction = constrain(voltageOverage / voltageRampMax, 0.0f, 1.0f);
+        const float torqueDelta = maxBrakeTorqueNm - idleTorqueNm;
+        return idleTorqueNm + (torqueDelta * rampFraction);
+    }
+    
+    // Return idle torque otherwise
+    return idleTorqueNm;
+}
+
 #ifndef METASENSE_LEAF_VCM_CHECKLIST_MODE
 #define METASENSE_LEAF_VCM_CHECKLIST_MODE 1
 #endif
@@ -6115,6 +6153,7 @@ void loop()
         // Check hardware state: INIT always sends 0 Nm, IDLE/MOTOR can send manual/auto value
         const char* hwState = MetaSense::HardwareOutputStateMachine::stateName();
         const bool isInitState = (hwState != nullptr) && (strcmp(hwState, "INIT") == 0);
+        const bool isIdleState = MetaSense::HardwareOutputStateMachine::isIdleState();
         
         // Safety: Auto-reset manual torque when entering INIT state
         if (isInitState && s_lastHardwareState != hwState) {
@@ -6126,8 +6165,18 @@ void loop()
         if (isInitState) {
             // INIT state: force torque demand to 0 Nm during startup (safety critical)
             torqueToSend = 0.0f;
+        } else if (isIdleState) {
+            // IDLE state: Apply voltage-based brake torque controller for inverter overvoltage protection
+            // When inverter voltage > 450V, increase brake torque to dissipate more power (V × I)
+            const float invVoltageV = MetaSense::CANBus::feedback().input_voltage;
+            const float appliedBrakeTorque = computeVoltageBrakeTorque(
+                invVoltageV,                               // Inverter voltage from CAN
+                MetaSense::Settings::idleTorqueNm,         // Base idle torque (4Nm default)
+                MetaSense::Settings::brakeMaxTorqueNm      // Max brake torque (30Nm default)
+            );
+            torqueToSend = appliedBrakeTorque;
         } else {
-            // IDLE/MOTOR states: apply manual/auto torque selection
+            // MOTOR state: apply manual/auto torque selection
             const bool manualCommandActive = s_leafCanPartnerSeen && !s_leafSimFeedbackActive &&
                                             (fabsf(uiTorqueDemandNm) > 0.001f);
             const bool torqueCommandUnlocked = safetyOk &&
