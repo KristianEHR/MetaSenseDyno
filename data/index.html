@@ -824,51 +824,6 @@
   text-transform: uppercase;
 }
 
-.can-monitor-controls {
-  display: flex;
-  justify-self: end;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 6px;
-  width: var(--can-value-col-width);
-  min-width: var(--can-value-col-width);
-  max-width: var(--can-value-col-width);
-  box-sizing: border-box;
-}
-
-.can-control-btn {
-  border: 1px solid #486b7d;
-  background: #132028;
-  color: #d9f6ff;
-  border-radius: 6px;
-  padding: 2px 8px;
-  min-width: 42px;
-  cursor: pointer;
-  font-weight: 700;
-}
-
-.can-control-btn.active {
-  background: #1d4f31;
-  border-color: #7dff95;
-  color: #dfffe7;
-}
-
-.can-control-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.can-step-input {
-  width: 70px;
-  border: 1px solid #486b7d;
-  background: #0f171c;
-  color: #e9f9ff;
-  border-radius: 6px;
-  padding: 2px 6px;
-  text-align: right;
-  font-weight: 700;
-}
-
 .can-monitor-section-value {
   color: #9cf0b0;
   text-align: right;
@@ -1090,29 +1045,6 @@
 
       <span class="can-monitor-label can-sec-11a">TX Raw B0..B7</span>
       <span id="canMon11aTxRaw" class="can-monitor-value can-monitor-value-raw can-sec-11a">---</span>
-
-      <span class="can-monitor-label can-monitor-subtitle can-sec-1d4tx">TX 0x1D4 Control</span>
-      <span class="can-monitor-value can-monitor-subtitle can-sec-1d4tx">Command</span>
-
-      <span class="can-monitor-label can-sec-1d4tx">1D4 Mode</span>
-      <span class="can-monitor-controls can-sec-1d4tx">
-        <button id="leaf1d4ModeManualBtn" class="can-control-btn" type="button">Manual</button>
-        <button id="leaf1d4ModeAutoBtn" class="can-control-btn" type="button">Auto</button>
-      </span>
-
-      <span class="can-monitor-label can-sec-1d4tx">Target Torque (Nm)</span>
-      <span id="leaf1d4TargetNm" class="can-monitor-value can-sec-1d4tx">0.00</span>
-
-      <span class="can-monitor-label can-sec-1d4tx">Torque Adjust</span>
-      <span class="can-monitor-controls can-sec-1d4tx">
-        <button id="leaf1d4TorqueDownBtn" class="can-control-btn" type="button">-</button>
-        <button id="leaf1d4TorqueUpBtn" class="can-control-btn" type="button">+</button>
-      </span>
-
-      <span class="can-monitor-label can-sec-1d4tx">Step (Nm)</span>
-      <span class="can-monitor-controls can-sec-1d4tx">
-        <input id="leaf1d4TorqueStep" class="can-step-input" type="number" min="0.25" max="0.25" step="0.25" value="0.25" readonly>
-      </span>
 
       <span class="can-monitor-label can-monitor-section can-monitor-section-toggle" data-section="1d4tx" data-title="0x1D4 TX" role="button" tabindex="0" aria-expanded="true">0x1D4 TX:</span>
       <span class="can-monitor-value can-monitor-section-value" data-section="1d4tx" role="button" tabindex="0" aria-expanded="true">[-]</span>
@@ -1548,13 +1480,9 @@
     const canMonitorPrefKey = "metasense.canMonitorVisible";
     const canMonitorSectionPrefKey = "metasense.canMonitorSections";
     const canMonitorSectionDefaults = { "1da": true, "55a": true, "11a": false, "1d4tx": true };
-    const leaf1d4TorqueMinNm = -300;
-    const leaf1d4TorqueMaxNm = 300;
-    const leaf1d4TorqueDefaultStepNm = 0.25;
     const autoButtonIdleLabel = "Auto Run (F8)";
     const autoButtonActiveLabel = "🔴 Auto Run ACTIVE (F8 to cancel)";
     let canMonitorSections = { ...canMonitorSectionDefaults };
-    let leaf1d4ControlState = { mode: "manual", targetNm: 0 };
     let can11aControlState = { gear: 4, carOnOff: 2 };
 	
   // Run summary values used for history export.
@@ -1902,102 +1830,6 @@
       setText("canMon11aSignals", `HB:0x${fmtHexByte(id11aHeartbeat)} BTN:0x${fmtHexByte(id11aButton)}`);
       setText("canMon11aRaw", id11aRaw);
       setText("canMon11aTxRaw", id11aTxRaw);
-    }
-
-    function wsIsOpen() {
-      return ws && ws.readyState === WebSocket.OPEN;
-    }
-
-    function clampLeaf1d4TorqueNm(v) {
-      if (!Number.isFinite(v)) return 0;
-      return Math.max(leaf1d4TorqueMinNm, Math.min(leaf1d4TorqueMaxNm, v));
-    }
-
-    function readLeaf1d4StepNm() {
-      const stepInput = document.getElementById("leaf1d4TorqueStep");
-      if (stepInput) {
-        stepInput.value = leaf1d4TorqueDefaultStepNm.toFixed(2);
-      }
-      return leaf1d4TorqueDefaultStepNm;
-    }
-
-    function sendSetSingleCommand(key, value) {
-      if (!wsIsOpen()) {
-        showToast("Not connected. Command not sent.");
-        return false;
-      }
-      ws.send(`SET_SINGLE:${key}=${value}`);
-      return true;
-    }
-
-    function refreshLeaf1d4ControlUi() {
-      const modeManualBtn = document.getElementById("leaf1d4ModeManualBtn");
-      const modeAutoBtn = document.getElementById("leaf1d4ModeAutoBtn");
-      const downBtn = document.getElementById("leaf1d4TorqueDownBtn");
-      const upBtn = document.getElementById("leaf1d4TorqueUpBtn");
-      const targetEl = document.getElementById("leaf1d4TargetNm");
-
-      // Sync local state with telemetry
-      const modeFromTelem = cachedTelemetry.leaf_torque_mode || "auto";
-      const isAuto = modeFromTelem === "auto";
-      
-      if (modeManualBtn) modeManualBtn.classList.toggle("active", !isAuto);
-      if (modeAutoBtn) modeAutoBtn.classList.toggle("active", isAuto);
-      if (downBtn) downBtn.disabled = isAuto;
-      if (upBtn) upBtn.disabled = isAuto;
-      
-      // Display manual torque demand from telemetry
-      if (targetEl) {
-        const manualTorque = cachedTelemetry.leaf_torque_demand_manual || 0;
-        targetEl.textContent = Number.isFinite(manualTorque)
-          ? manualTorque.toFixed(2)
-          : "0.00";
-      }
-    }
-
-    function setLeaf1d4Mode(mode) {
-      const normalized = (mode === "auto") ? "auto" : "manual";
-      if (!sendSetSingleCommand("leaf1d4Mode", normalized)) {
-        return;
-      }
-      leaf1d4ControlState.mode = normalized;
-      refreshLeaf1d4ControlUi();
-      showToast(`1D4 mode: ${normalized.toUpperCase()}`);
-    }
-
-    function adjustLeaf1d4TargetTorque(sign) {
-      const step = readLeaf1d4StepNm();
-      const current = Number.isFinite(leaf1d4ControlState.targetNm)
-        ? leaf1d4ControlState.targetNm
-        : 0;
-      const next = clampLeaf1d4TorqueNm(current + (sign >= 0 ? step : -step));
-      if (!sendSetSingleCommand("leaf1d4TorqueNm", next.toFixed(2))) {
-        return;
-      }
-      leaf1d4ControlState.targetNm = next;
-      refreshLeaf1d4ControlUi();
-      showToast(`1D4 target: ${next.toFixed(2)} Nm`);
-    }
-
-    function bindLeaf1d4Controls() {
-      const modeManualBtn = document.getElementById("leaf1d4ModeManualBtn");
-      const modeAutoBtn = document.getElementById("leaf1d4ModeAutoBtn");
-      const downBtn = document.getElementById("leaf1d4TorqueDownBtn");
-      const upBtn = document.getElementById("leaf1d4TorqueUpBtn");
-      const stepInput = document.getElementById("leaf1d4TorqueStep");
-
-      if (modeManualBtn) modeManualBtn.onclick = () => setLeaf1d4Mode("manual");
-      if (modeAutoBtn) modeAutoBtn.onclick = () => setLeaf1d4Mode("auto");
-      if (downBtn) downBtn.onclick = () => adjustLeaf1d4TargetTorque(-1);
-      if (upBtn) upBtn.onclick = () => adjustLeaf1d4TargetTorque(1);
-      if (stepInput) {
-        stepInput.onchange = () => {
-          const step = readLeaf1d4StepNm();
-          stepInput.value = step.toFixed(2);
-        };
-      }
-
-      refreshLeaf1d4ControlUi();
     }
 
     function showToast(message, durationMs = 2200) {
@@ -3847,7 +3679,6 @@ else if (msg.type === "info" || msg.type === "status") {
       loadCanMonitorPreference();
       bindCanMonitorSectionToggles();
       loadCanMonitorSectionPreferences();
-      bindLeaf1d4Controls();
       createTicks();
       createHPTicks();
       createTorqueTicks();
