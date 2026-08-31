@@ -55,7 +55,13 @@ bool ensureReady(uint32_t nowMs)
         return true;
     }
 
-    if ((nowMs - s_stats.lastInitAttemptMs) < s_config.initRetryMs) {
+    // Allow the very first init attempt immediately (lastInitAttemptMs == 0
+    // means "never attempted yet"); only gate subsequent retries by
+    // initRetryMs. Without this exception, an early boot-time call (when
+    // millis() is still small) would be starved until the clock reaches
+    // initRetryMs, needlessly delaying CAN bring-up by ~2 seconds.
+    if (s_stats.lastInitAttemptMs != 0U &&
+        (nowMs - s_stats.lastInitAttemptMs) < s_config.initRetryMs) {
         return false;
     }
 

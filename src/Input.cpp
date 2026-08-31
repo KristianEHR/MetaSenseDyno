@@ -4029,6 +4029,7 @@ void begin()
     lastCanTorqueFrameMs = 0;
     lastCanTempsFrameMs = 0;
     lastCanStatusFrameMs = 0;
+
     zeroOffset = 0.0f;
     calibrationFactor = 0.01f;
     filteredAdc = 0.0f;
@@ -4167,6 +4168,17 @@ void begin()
         }
     }
 
+    // CAN bus init: configure + let the control-loop poll() start the TWAI
+    // driver, then start the TX pacer task. 0x1D4 (torque demand) and 0x11A
+    // (keep-alive) begin transmitting every 10ms with template payloads
+    // (torque demand=0, gear=4, car=2, charge status=1, manual mode) as soon
+    // as the driver comes up. It is not mandatory for CAN to be the first
+    // thing initialized at boot, but the HWSM INIT gate (relayInverterStatusReady
+    // / canTelemetryReadyForStart, computed from MetaSense::CANBus::feedback()/
+    // stats() every control loop) will not allow INIT to conclude until the
+    // CAN bus is actually ready and the inverter is responding.
+    MetaSense::CANBus::configure(kLeafCanConfig);
+
     if (leafTxPacerTaskHandle == nullptr) {
         // Prime the cached frame with a valid initial state before TX task starts
         uint8_t initData[8] = {
@@ -4184,7 +4196,7 @@ void begin()
         initData[7] = computeLeaf1d4CrcConformant(initData);
         memcpy(s_leaf1d4PayloadCachedFrameData, initData, sizeof(s_leaf1d4PayloadCachedFrameData));
         s_leaf1d4RollingCounter = 0U;
-        
+
         BaseType_t txTaskCreated = xTaskCreatePinnedToCore(
             leafTxPacerTask,
             "leafTxPacer",
@@ -4962,6 +4974,28 @@ void loop()
         MetaSense::TelnetSerialBridge::telnetBridgePrintf("[HEARTBEAT] RPM=%.0f Leaf_RPM=%.0f Temps: Inv=%.1f Stator=%.1f Coolant=%.1f IP=%d.%d.%d.%d RSSI=%ld dBm ms=%lu\n",
                       tele.rpm, tele.leaf_rpm, tele.leaf_invTempC, tele.leaf_statorTempC, tele.leaf_coolantTempC,
                       ip[0], ip[1], ip[2], ip[3], rssi, nowMs);
+
+        // CAN bus health, visible over telnet (driver ready state + RX frame
+        // counts + TX pacer loop iterations + TWAI controller health, since
+        // there is no longer a dedicated TX-sent counter after the metrics
+        // cleanup). twai_tx_q/tx_err/bus_err help distinguish "not
+        // transmitting at all" from "transmitting but never ACKed".
+        const MetaSense::CANBus::Stats& canStatsHb = MetaSense::CANBus::stats();
+        MetaSense::TelnetSerialBridge::telnetBridgePrintf(
+            "[CAN-STATUS] ready=%d rx_1da=%lu rx_55a=%lu bus_off=%lu status_fail=%lu tx_loops=%lu twai(state=%u tx_q=%lu rx_q=%lu tx_err=%lu rx_err=%lu bus_err=%lu arb_lost=%lu)\n",
+            canStatsHb.ready ? 1 : 0,
+            static_cast<unsigned long>(canStatsHb.rx1daFrames),
+            static_cast<unsigned long>(canStatsHb.rx55aFrames),
+            static_cast<unsigned long>(canStatsHb.busOffEvents),
+            static_cast<unsigned long>(canStatsHb.statusQueryFailures),
+            static_cast<unsigned long>(s_leaf1d4TxFrameCount),
+            static_cast<unsigned>(canStatsHb.lastTwaiState),
+            static_cast<unsigned long>(canStatsHb.twaiTxQueued),
+            static_cast<unsigned long>(canStatsHb.twaiRxQueued),
+            static_cast<unsigned long>(canStatsHb.twaiTxErrorCounter),
+            static_cast<unsigned long>(canStatsHb.twaiRxErrorCounter),
+            static_cast<unsigned long>(canStatsHb.twaiBusError),
+            static_cast<unsigned long>(canStatsHb.twaiArbLost));
         
         // Print 1D4 frame debug info (read directly from cached frame - simple Serial.print approach)
         static uint32_t lastPrintedTxCount = 0xFFFFFFFFUL;
