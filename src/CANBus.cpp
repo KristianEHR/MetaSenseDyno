@@ -671,44 +671,10 @@ void poll(uint32_t nowMs)
 bool send(uint32_t id, const uint8_t* data, uint8_t len)
 {
     if (!s_stats.ready) {
-        if (!s_stats.txWhileNotReadyLatched) {
-            ++s_stats.txWhileNotReady;
-            s_stats.txWhileNotReadyLatched = true;
-        }
         return false;
     }
 
-    s_stats.txWhileNotReadyLatched = false;
-
-    const bool sent = s_canHal.send(id, data, len);
-    if (sent) {
-        ++s_stats.txFrames;
-        if (id == 0x11AU && data != nullptr) {
-            ++s_stats.tx11aFrames;
-            s_stats.last11aTxMs = millis();
-            s_stats.last11aTxLen = (len <= sizeof(s_stats.last11aTxData))
-                ? len
-                : static_cast<uint8_t>(sizeof(s_stats.last11aTxData));
-            memset(s_stats.last11aTxData, 0, sizeof(s_stats.last11aTxData));
-            memcpy(s_stats.last11aTxData, data, s_stats.last11aTxLen);
-        }
-        if (id == 0x1D4U && data != nullptr) {
-            ++s_stats.tx1d4Frames;
-            s_stats.last1d4TxMs = millis();
-            s_stats.last1d4TxLen = (len <= sizeof(s_stats.last1d4TxData))
-                ? len
-                : static_cast<uint8_t>(sizeof(s_stats.last1d4TxData));
-            memset(s_stats.last1d4TxData, 0, sizeof(s_stats.last1d4TxData));
-            memcpy(s_stats.last1d4TxData, data, s_stats.last1d4TxLen);
-        }
-        s_stats.txFailureLatched = false;
-    } else {
-        if (!s_stats.txFailureLatched) {
-            ++s_stats.txFailures;
-            s_stats.txFailureLatched = true;
-        }
-    }
-    return sent;
+    return s_canHal.send(id, data, len);
 }
 
 bool isReady()

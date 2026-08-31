@@ -27,8 +27,6 @@ struct Stats {
 	uint32_t rx120Frames = 0;
 	uint32_t rx1d4CmdFrames = 0;
 	uint32_t rx1d4SniffFrames = 0;
-	uint32_t tx1d4Frames = 0;
-	uint32_t tx11aFrames = 0;
 	uint32_t rx1dbFrames = 0;
 	uint32_t rx11aFrames = 0;
 	uint32_t rx50bFrames = 0;
@@ -43,8 +41,6 @@ struct Stats {
 	uint32_t last120Ms = 0;
 	uint32_t last1d4CmdMs = 0;
 	uint32_t last1d4SniffMs = 0;
-	uint32_t last1d4TxMs = 0;
-	uint32_t last11aTxMs = 0;
 	uint32_t last1daMs = 0;
 	uint8_t lastUnknownLen = 0;
 	uint8_t last55aLen = 0;
@@ -52,8 +48,6 @@ struct Stats {
 	uint8_t last120Len = 0;
 	uint8_t last1d4CmdLen = 0;
 	uint8_t last1d4SniffLen = 0;
-	uint8_t last1d4TxLen = 0;
-	uint8_t last11aTxLen = 0;
 	uint8_t last1daLen = 0;
 	int8_t last1daWireCrcOk = -1;
 	uint8_t last1daWireCrcCalc = 0;
@@ -70,16 +64,9 @@ struct Stats {
 	uint8_t last120Data[8] = {0};
 	uint8_t last1d4CmdData[8] = {0};
 	uint8_t last1d4SniffData[8] = {0};
-	uint8_t last1d4TxData[8] = {0};
-	uint8_t last11aTxData[8] = {0};
 	uint32_t byteChg11a[8] = {0};
 	uint32_t byteChg120[8] = {0};
 	uint32_t lastRxId = 0;
-	uint32_t txFrames = 0;
-	uint32_t txFailures = 0;
-	uint32_t txWhileNotReady = 0;
-	bool txFailureLatched = false;
-	bool txWhileNotReadyLatched = false;
 	uint32_t recoveries = 0;
 	uint32_t busOffEvents = 0;
 	uint32_t statusQueryFailures = 0;

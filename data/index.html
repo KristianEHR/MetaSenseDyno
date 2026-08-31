@@ -1025,9 +1025,6 @@
       <span class="can-monitor-label can-sec-11a">Source frames/age(ms)</span>
       <span id="canMon11aSource" class="can-monitor-value can-sec-11a">---</span>
 
-      <span class="can-monitor-label can-sec-11a">TX frames/age(ms)</span>
-      <span id="canMon11aTx" class="can-monitor-value can-sec-11a">---</span>
-
       <span class="can-monitor-label can-sec-11a">Gear / CarOn / ECO</span>
       <span id="canMon11aDrive" class="can-monitor-value can-sec-11a">---</span>
 
@@ -1042,39 +1039,6 @@
 
       <span class="can-monitor-label can-sec-11a">RX Raw B0..B7</span>
       <span id="canMon11aRaw" class="can-monitor-value can-monitor-value-raw can-sec-11a">---</span>
-
-      <span class="can-monitor-label can-sec-11a">TX Raw B0..B7</span>
-      <span id="canMon11aTxRaw" class="can-monitor-value can-monitor-value-raw can-sec-11a">---</span>
-
-      <span class="can-monitor-label can-monitor-section can-monitor-section-toggle" data-section="1d4tx" data-title="0x1D4 TX" role="button" tabindex="0" aria-expanded="true">0x1D4 TX:</span>
-      <span class="can-monitor-value can-monitor-section-value" data-section="1d4tx" role="button" tabindex="0" aria-expanded="true">[-]</span>
-
-      <span class="can-monitor-label can-sec-1d4tx">TX frames/age(ms)</span>
-      <span id="canMon1d4Tx" class="can-monitor-value can-sec-1d4tx">---</span>
-
-      <span class="can-monitor-label can-sec-1d4tx">Torque TX (Nm)</span>
-      <span id="canMon1d4TxTorque" class="can-monitor-value can-sec-1d4tx">---</span>
-
-      <span class="can-monitor-label can-sec-1d4tx">Torque RAW TX</span>
-      <span id="canMon1d4TxTorqueRaw" class="can-monitor-value can-sec-1d4tx">---</span>
-
-      <span class="can-monitor-label can-sec-1d4tx">HV Status TX</span>
-      <span id="canMon1d4TxHv" class="can-monitor-value can-sec-1d4tx">---</span>
-
-      <span class="can-monitor-label can-sec-1d4tx">Relay+ TX</span>
-      <span id="canMon1d4TxRelay" class="can-monitor-value can-sec-1d4tx">---</span>
-
-      <span class="can-monitor-label can-sec-1d4tx">Charge TX</span>
-      <span id="canMon1d4TxCharge" class="can-monitor-value can-sec-1d4tx">---</span>
-
-      <span class="can-monitor-label can-sec-1d4tx">Clock TX</span>
-      <span id="canMon1d4TxClock" class="can-monitor-value can-sec-1d4tx">---</span>
-
-      <span class="can-monitor-label can-sec-1d4tx">CRC TX / Calc / OK</span>
-      <span id="canMon1d4TxCrc" class="can-monitor-value can-sec-1d4tx">---</span>
-
-      <span class="can-monitor-label can-sec-1d4tx">TX Raw B0..B7</span>
-      <span id="canMon1d4TxRaw" class="can-monitor-value can-monitor-value-raw can-sec-1d4tx">---</span>
 
       <span class="can-monitor-label can-monitor-section">DYNO:</span>
       <span class="can-monitor-value can-monitor-section-value">.</span>
@@ -1479,7 +1443,7 @@
     const autoReportPrefKey = "metasense.autoGenerateReport";
     const canMonitorPrefKey = "metasense.canMonitorVisible";
     const canMonitorSectionPrefKey = "metasense.canMonitorSections";
-    const canMonitorSectionDefaults = { "1da": true, "55a": true, "11a": false, "1d4tx": true };
+    const canMonitorSectionDefaults = { "1da": true, "55a": true, "11a": false };
     const autoButtonIdleLabel = "Auto Run (F8)";
     const autoButtonActiveLabel = "🔴 Auto Run ACTIVE (F8 to cancel)";
     let canMonitorSections = { ...canMonitorSectionDefaults };
@@ -1732,26 +1696,10 @@
       const id1daCrcWireOkFrames = Number(telemetry.leaf_1da_crc_wire_ok_frames);
       const id1daCrcWireBadFrames = Number(telemetry.leaf_1da_crc_wire_bad_frames);
 
-      // Extract 0x1D4 TX fields
-      const id1d4TxTorqueNm = Number(telemetry.leaf_1d4_tx_torque_nm);
-      const metricsEnabled = (telemetry.leaf_1d4_tx_frames !== undefined);
-      const id1d4TxFrames = metricsEnabled ? Number(telemetry.leaf_1d4_tx_frames) : 0;
-      const id1d4TxAgeMs = metricsEnabled ? Number(telemetry.leaf_1d4_tx_age_ms) : 0;
-      const id1d4TxTorqueRaw = Number(telemetry.leaf_1d4_tx_torque_raw);
-      const id1d4HvStatus = Number(telemetry.leaf_1d4_tx_hv_status);
-      const id1d4RelayPlus = Number(telemetry.leaf_1d4_tx_relay_plus);
-      const id1d4ChargeTx = Number(telemetry.leaf_1d4_tx_charge_status);
-      const id1d4ClockTx = Number(telemetry.leaf_1d4_tx_clock);
-      const id1d4TxCrcRx = Number(telemetry.leaf_1d4_tx_crc);
-      const id1d4TxCrcCalc = Number(telemetry.leaf_1d4_tx_crc_calc);
-      const id1d4TxCrcOk = Number(telemetry.leaf_1d4_tx_crc_ok);
-      const id1d4TxRaw = String(telemetry.leaf_1d4_tx_raw_b0b7 || "-- -- -- -- -- -- -- --");
-
       // Extract 0x11A RX fields
+      const metricsEnabled = (telemetry.leaf_11a_frames !== undefined);
       const id11aFrames = metricsEnabled ? Number(telemetry.leaf_11a_frames) : 0;
       const id11aAgeMs = metricsEnabled ? Number(telemetry.leaf_11a_age_ms) : 0;
-      const id11aTxFrames = metricsEnabled ? Number(telemetry.leaf_11a_tx_frames) : 0;
-      const id11aTxAgeMs = metricsEnabled ? Number(telemetry.leaf_11a_tx_age_ms) : 0;
       const id11aGear = Number(telemetry.leaf_11a_gear);
       const id11aCarOnOff = Number(telemetry.leaf_11a_car_onoff);
       const id11aEco = Number(telemetry.leaf_11a_eco);
@@ -1759,7 +1707,6 @@
       const id11aMux = Number(telemetry.leaf_11a_mux);
       const id11aButton = Number(telemetry.leaf_11a_button);
       const id11aRaw = String(telemetry.leaf_11a_raw_b0b7 || "-- -- -- -- -- -- -- --");
-      const id11aTxRaw = String(telemetry.leaf_11a_tx_raw_b0b7 || "-- -- -- -- -- -- -- --");
 
       const setText = (id, text) => {
         const el = document.getElementById(id);
@@ -1797,39 +1744,14 @@
       setText("canMonStatorTemp", fmt(stat, 1));
       setText("canMonCoolantTemp", fmt(cool, 1));
 
-      // Display 0x1D4 TX fields
-      const fmtRaw8 = (bytes) => {
-        if (!bytes || typeof bytes !== 'string') return "-- -- -- -- -- -- -- --";
-        return bytes;
-      };
-      const fmtTriState = (v) => {
-        if (v === 1 || v === true) return "OK";
-        if (v === 0 || v === false) return "BAD";
-        return "---";
-      };
-      
-      if (metricsEnabled) {
-        setText("canMon1d4Tx", `${fmtInt(id1d4TxFrames)} / ${fmtInt(id1d4TxAgeMs)}`);
-      }
-      setText("canMon1d4TxTorque", fmt(id1d4TxTorqueNm, 2));
-      setText("canMon1d4TxTorqueRaw", fmtInt(id1d4TxTorqueRaw));
-      setText("canMon1d4TxHv", fmtYesNo(id1d4HvStatus));
-      setText("canMon1d4TxRelay", fmtYesNo(id1d4RelayPlus));
-      setText("canMon1d4TxCharge", `0x${fmtHexByte(id1d4ChargeTx)}`);
-      setText("canMon1d4TxClock", fmtInt(id1d4ClockTx));
-      setText("canMon1d4TxCrc", `0x${fmtHexByte(id1d4TxCrcRx)} / 0x${fmtHexByte(id1d4TxCrcCalc)} / ${fmtTriState(id1d4TxCrcOk)}`);
-      setText("canMon1d4TxRaw", fmtRaw8(id1d4TxRaw));
-
       // Update 0x11A display fields
       if (metricsEnabled) {
         setText("canMon11aSource", `rx ${fmtInt(id11aFrames)} / ${fmtInt(id11aAgeMs)}`);
-        setText("canMon11aTx", `${fmtInt(id11aTxFrames)} / ${fmtInt(id11aTxAgeMs)}`);
       }
       setText("canMon11aDrive", `G${fmtInt(id11aGear)} / CO${fmtInt(id11aCarOnOff)} / E${fmtInt(id11aEco)}`);
       setText("canMon11aMuxSel", `MUX ${fmtInt(id11aMux)}/4`);
       setText("canMon11aSignals", `HB:0x${fmtHexByte(id11aHeartbeat)} BTN:0x${fmtHexByte(id11aButton)}`);
       setText("canMon11aRaw", id11aRaw);
-      setText("canMon11aTxRaw", id11aTxRaw);
     }
 
     function showToast(message, durationMs = 2200) {

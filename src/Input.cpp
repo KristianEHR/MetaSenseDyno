@@ -1,4 +1,4 @@
-#include "Input.h"
+﻿#include "Input.h"
 
 #include <Arduino.h>
 #include <ESPAsyncWebServer.h>
@@ -168,8 +168,6 @@ static uint32_t s_leaf1d4PayloadMs = 0;
 static bool s_leaf1d4TorqueSourceAutomatic = true;
 static bool s_leaf1d4TxUsedRingBase = false;
 static uint8_t s_leaf1d4TxRingBaseLen = 0U;
-static uint8_t s_leaf1d4TxRingSourceAge = 0xFFU;
-static uint32_t s_leaf1d4TxRingFallbackCount = 0U;
 static uint32_t s_leafTorqueTrackStartMs = 0;
 static uint16_t s_leafTorqueTrackLatencyMs = 0;
 static bool s_leafTorqueTrackPending = false;
@@ -190,37 +188,6 @@ static uint8_t s_leaf11aMuxTemplateBySel[4][8] = {{0U}};
 static uint8_t s_leaf11aUiGear = METASENSE_LEAF_11A_FORCE_GEAR;
 static uint8_t s_leaf11aUiCarOnOff = METASENSE_LEAF_11A_FORCE_CARONOFF;
 static uint32_t lastLeaf1d4MonitorSampleMs = 0;
-static bool lastCanDiagInitialized = false;
-static bool lastCanDiagReady = false;
-static uint8_t lastCanDiagState = 0xFF;
-static uint32_t lastCanDiagTxFrames = 0;
-static uint32_t lastCanDiagTx1d4Frames = 0;
-static uint32_t lastCanDiagTx11aFrames = 0;
-static uint32_t lastCanDiagTxFailures = 0;
-static uint32_t lastCanDiagTxWhileNotReady = 0;
-static uint32_t lastCanDiagRecoveries = 0;
-static uint32_t lastCanDiagBusOff = 0;
-static uint32_t lastCanDiagStatusQueryFailures = 0;
-static uint32_t lastCanDiagTwaiRxQueued = 0;
-static uint32_t lastCanDiagTwaiTxQueued = 0;
-static uint32_t lastCanDiagTwaiRxMissed = 0;
-static uint32_t lastCanDiagTwaiRxOverrun = 0;
-static uint32_t lastCanDiagTwaiArbLost = 0;
-static uint32_t lastCanDiagTwaiBusError = 0;
-static uint32_t lastCanDiagTwaiTxErr = 0;
-static uint32_t lastCanDiagTwaiRxErr = 0;
-static uint32_t lastCanEventLogMs = 0;
-static uint8_t lastCanDiag1d4TxData[8] = {0U};
-static uint8_t lastCanDiag11aTxData[8] = {0U};
-static uint8_t lastCanDiag1d4TxLen = 0U;
-static uint8_t lastCanDiag11aTxLen = 0U;
-static uint32_t s_leaf1d4FreshLastLogMs = 0U;
-static uint32_t s_leaf1d4FreshLastTxCount = 0U;
-static uint8_t s_leaf1d4FreshPrevData[8] = {0U};
-static uint8_t s_leaf1d4FreshPrevLen = 0U;
-static uint32_t s_leaf1d4FreshStaticRun = 0U;
-// Production: CRC proof-testing removed (METASENSE_LEAF_VCM_DIAGNOSTICS=0)
-// Production: all CRC diagnostics removed (METASENSE_LEAF_VCM_DIAGNOSTICS=0)
 static uint32_t lastCanBusOffSeen = 0;
 static uint32_t lastCanStatusQueryFailuresSeen = 0;
 
@@ -236,14 +203,13 @@ static const uint32_t LEAF_1D4_MONITOR_SAMPLE_PERIOD_MS = 100;
 static const uint32_t CAN_RX_CHECK_PERIOD_MS = 20;
 static const uint32_t CAN_RX_TARGET_MAX_AGE_MS = 250;
 static const uint32_t CAN_RX_MISSING_LOG_PERIOD_MS = 5000;
-static const uint32_t CAN_EVENT_LOG_MIN_PERIOD_MS = 5000;
 static const uint32_t CAN_1DA_CRC_BAD_STREAK_LIMIT = 10;
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Voltage-based brake torque controller (overvoltage protection)
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // When inverter voltage > 450V, increase brake torque proportionally to:
-// - Dissipate more power (brake_power = V × I)
+// - Dissipate more power (brake_power = V Ã— I)
 // - Keep inverter voltage under control during high inertia braking
 // - Limit voltage overshoot and prevent inverter faults
 static bool s_brakeTorqueControlActive = false;  // Tracks if protection is engaged (hysteresis)
@@ -254,7 +220,7 @@ static constexpr float kInvVoltageActivateThresholdV = 450.0f;   // Activate at 
 static constexpr float kInvVoltageDeactivateThresholdV = 440.0f; // Release at 440V (avoid hunting)
 static constexpr float kInvVoltageSafeMaxV = 500.0f;             // Scale ramp based on this max
 
-// Computes brake torque as a linear ramp: 4Nm @ 450V → 30Nm @ 500V+
+// Computes brake torque as a linear ramp: 4Nm @ 450V â†’ 30Nm @ 500V+
 float computeVoltageBrakeTorque(float invVoltageV, float idleTorqueNm, float maxBrakeTorqueNm)
 {
     // Hysteresis: activate at 450V, deactivate at 440V
@@ -1988,7 +1954,7 @@ constexpr uint8_t kKpPotPin = 6;       // swapped with massflow per latest wirin
 constexpr uint8_t kMassflowPin = 8;    // kept off GPIO5 to avoid CAN RX conflict
 constexpr uint8_t kLambdaPin = 7;      // ADC1_CH6
 constexpr uint8_t kLoadCellPin = 32;   // Load-cell analog input
-// Drum RPM is derived from tachogen × (1/virtGearRatio)
+// Drum RPM is derived from tachogen Ã— (1/virtGearRatio)
 
 static float kpPotFilteredAdc = -1.0f;
 static float lastAppliedKp = -1.0f;
@@ -2574,7 +2540,7 @@ float computeAirDensityKgM3(float tempC, float pressureHpa, float humidityPct)
     const float Pv   = (humidityPct / 100.0f) * Psat;  // partial vapour pressure, hPa
     const float Pd   = pressureHpa - Pv;               // dry-air partial pressure, hPa
     const float T_K  = tempC + 273.15f;
-    // Ideal gas: ρ = Pd/(Rd*T) + Pv/(Rv*T)
+    // Ideal gas: Ï = Pd/(Rd*T) + Pv/(Rv*T)
     const float Pd_Pa = Pd * 100.0f;
     const float Pv_Pa = Pv * 100.0f;
     const float rho = (Pd_Pa / (287.058f * T_K)) + (Pv_Pa / (461.495f * T_K));
@@ -2929,7 +2895,7 @@ void updateDyno(MetaSense::Telemetry& t, float dtSec)
             ? MetaSense::Settings::virtGearRatio
             : 1.0f;
 
-        // Angular acceleration α = dω/dt, lightly filtered
+        // Angular acceleration Î± = dÏ‰/dt, lightly filtered
         float alpha = 0.0f;
         if (dtSec > 0.001f) {
             alpha = lpFilter(0.0f, (omegaDrum - omegaPrev) / dtSec,
@@ -2980,14 +2946,14 @@ void updateDyno(MetaSense::Telemetry& t, float dtSec)
         t.brakeTorqueNm = rawBrakeTorqueNm;
 
         // --- Climate correction: normalise torque/power to standard conditions ---
-        // Reference: 1013.25 hPa, 20 °C, 0 % RH  (ρ_ref ≈ 1.2041 kg/m³)
+        // Reference: 1013.25 hPa, 20 Â°C, 0 % RH  (Ï_ref â‰ˆ 1.2041 kg/mÂ³)
         const float rhoActual = computeAirDensityKgM3(ambientTempC, ambientPressureHpa, ambientHumidityPct);
         const float rhoRef    = computeAirDensityKgM3(20.0f, 1013.25f, 0.0f);
         t.climateCF = (rhoActual > 0.3f) ? (rhoRef / rhoActual) : 1.0f;
         t.torqueNm      *= t.climateCF;
         t.brakeTorqueNm *= t.climateCF;
 
-        // P(W) = T(Nm) * ω(rad/s) = T * rpm * 2π / 60
+        // P(W) = T(Nm) * Ï‰(rad/s) = T * rpm * 2Ï€ / 60
         // Correct for drivetrain losses to get crank power.
         const float eff = MetaSense::Settings::drivetrainEff / 100.0f;
         const float omegaEngine = t.rpm * (2.0f * 3.14159265f / 60.0f);
@@ -3164,12 +3130,6 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         const uint8_t leaf1daCrcCalc = canStats.last1daWireCrcCalc;  // CRC Calc from same reception
         const int leaf1daCrcOk = (canStats.last1daWireCrcOk > 0) ? 1 : 0;  // Match result from same reception
         
-        // Capture 0x1D4 TX CRC atomically from the cached frame data
-        // This ensures CRC RX, Calc, and OK are from the SAME frame being sent
-        const uint8_t leaf1d4CrcRx = s_leaf1d4PayloadCachedFrameData[7];  // CRC TX from cached frame
-        const uint8_t leaf1d4CrcCalc = computeLeaf1d4CrcConformant(s_leaf1d4PayloadCachedFrameData);  // CRC Calc from same frame
-        const int leaf1d4CrcOk = (leaf1d4CrcRx == leaf1d4CrcCalc) ? 1 : 0;  // Match result from same frame
-        
         // Build JSON with full CAN metrics using snprintf for robust numeric formatting
         pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos,
             "{\"type\":\"data\","
@@ -3246,32 +3206,15 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             "\"hw_rb_minus\":%d,"
             "\"hw_ssr\":%d,"
             "\"hw_state\":\"%s\","
-            "\"leaf_1d4_tx_frames\":%d,"
-            "\"leaf_1d4_tx_age_ms\":%lu,"
-            "\"leaf_1d4_tx_torque_nm\":%.2f,"
-            "\"leaf_1d4_tx_torque_raw\":%d,"
-            "\"leaf_1d4_tx_hv_status\":%d,"
-            "\"leaf_1d4_tx_relay_plus\":%d,"
-            "\"leaf_1d4_tx_charge_status\":%d,"
-            "\"leaf_1d4_tx_clock\":%d,"
-            "\"leaf_1d4_tx_crc\":%d,"
-            "\"leaf_1d4_tx_crc_calc\":%d,"
-            "\"leaf_1d4_tx_crc_ok\":%d,"
-            "\"leaf_1d4_tx_ring_source_age\":%d,"
-            "\"leaf_1d4_tx_ring_fallback_total\":%lu,"
-            "\"leaf_1d4_tx_raw_b0b7\":\"%02X %02X %02X %02X %02X %02X %02X %02X\","
             "\"leaf_11a_frames\":%d,"
             "\"leaf_11a_age_ms\":%lu,"
-            "\"leaf_11a_tx_frames\":%d,"
-            "\"leaf_11a_tx_age_ms\":%lu,"
             "\"leaf_11a_gear\":%d,"
             "\"leaf_11a_car_onoff\":%d,"
             "\"leaf_11a_eco\":%d,"
             "\"leaf_11a_heartbeat\":%d,"
             "\"leaf_11a_mux\":%d,"
             "\"leaf_11a_button\":%d,"
-            "\"leaf_11a_raw_b0b7\":\"%02X %02X %02X %02X %02X %02X %02X %02X\","
-            "\"leaf_11a_tx_raw_b0b7\":\"%02X %02X %02X %02X %02X %02X %02X %02X\""
+            "\"leaf_11a_raw_b0b7\":\"%02X %02X %02X %02X %02X %02X %02X %02X\""
             "}",
             data.rpm,
             data.drumRpm,
@@ -3341,32 +3284,9 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             MetaSense::HardwareOutputStateMachine::isRbMinusActive() ? 1 : 0,
             MetaSense::HardwareOutputStateMachine::isSsrActive() ? 1 : 0,
             MetaSense::HardwareOutputStateMachine::stateName(),  // hw_state (INIT/START/IDLE/MOTOR/DYNO)
-            (int)MetaSense::CANBus::stats().tx1d4Frames,  // leaf_1d4_tx_frames
-            now - MetaSense::CANBus::stats().last1d4TxMs,  // leaf_1d4_tx_age_ms
-            s_leaf1d4PayloadTorqueNm,  // leaf_1d4_tx_torque_nm
-            (int)s_leaf1d4PayloadTorqueRaw,  // leaf_1d4_tx_torque_raw
-            s_leaf1d4PayloadHvStatus ? 1 : 0,  // leaf_1d4_tx_hv_status
-            s_leaf1d4PayloadRelayPlus ? 1 : 0,  // leaf_1d4_tx_relay_plus
-            (int)s_leaf1d4PayloadChargeStatus,  // leaf_1d4_tx_charge_status
-            (int)s_leaf1d4PayloadClock,  // leaf_1d4_tx_clock
-            (int)leaf1d4CrcRx,  // leaf_1d4_tx_crc (from actual cached frame)
-            (int)leaf1d4CrcCalc,  // leaf_1d4_tx_crc_calc (calculated from cached frame)
-            leaf1d4CrcOk,  // leaf_1d4_tx_crc_ok
-            (int)s_leaf1d4TxRingSourceAge,  // leaf_1d4_tx_ring_source_age
-            s_leaf1d4TxRingFallbackCount,  // leaf_1d4_tx_ring_fallback_total
-            s_leaf1d4PayloadCachedFrameData[0],  // leaf_1d4_tx_raw_b0
-            s_leaf1d4PayloadCachedFrameData[1],  // leaf_1d4_tx_raw_b1
-            s_leaf1d4PayloadCachedFrameData[2],  // leaf_1d4_tx_raw_b2
-            s_leaf1d4PayloadCachedFrameData[3],  // leaf_1d4_tx_raw_b3
-            s_leaf1d4PayloadCachedFrameData[4],  // leaf_1d4_tx_raw_b4
-            s_leaf1d4PayloadCachedFrameData[5],  // leaf_1d4_tx_raw_b5
-            s_leaf1d4PayloadCachedFrameData[6],  // leaf_1d4_tx_raw_b6
-            s_leaf1d4PayloadCachedFrameData[7],  // leaf_1d4_tx_raw_b7
             // 0x11A RX frame data
             (int)MetaSense::CANBus::stats().rx11aFrames,  // leaf_11a_frames
             now - MetaSense::CANBus::stats().last11aMs,  // leaf_11a_age_ms
-            (int)MetaSense::CANBus::stats().tx11aFrames,  // leaf_11a_tx_frames
-            now - MetaSense::CANBus::stats().last11aTxMs,  // leaf_11a_tx_age_ms
             (int)((MetaSense::CANBus::stats().last11aData[0] >> 4U) & 0x0FU),  // leaf_11a_gear
             (int)((MetaSense::CANBus::stats().last11aData[1] >> 5U) & 0x07U),  // leaf_11a_car_onoff
             (int)((MetaSense::CANBus::stats().last11aData[1] >> 4U) & 0x01U),  // leaf_11a_eco
@@ -3380,15 +3300,7 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             MetaSense::CANBus::stats().last11aData[4],  // leaf_11a_raw_b4
             MetaSense::CANBus::stats().last11aData[5],  // leaf_11a_raw_b5
             MetaSense::CANBus::stats().last11aData[6],  // leaf_11a_raw_b6
-            MetaSense::CANBus::stats().last11aData[7],  // leaf_11a_raw_b7
-            MetaSense::CANBus::stats().last11aTxData[0],  // leaf_11a_tx_raw_b0
-            MetaSense::CANBus::stats().last11aTxData[1],  // leaf_11a_tx_raw_b1
-            MetaSense::CANBus::stats().last11aTxData[2],  // leaf_11a_tx_raw_b2
-            MetaSense::CANBus::stats().last11aTxData[3],  // leaf_11a_tx_raw_b3
-            MetaSense::CANBus::stats().last11aTxData[4],  // leaf_11a_tx_raw_b4
-            MetaSense::CANBus::stats().last11aTxData[5],  // leaf_11a_tx_raw_b5
-            MetaSense::CANBus::stats().last11aTxData[6],  // leaf_11a_tx_raw_b6
-            MetaSense::CANBus::stats().last11aTxData[7]   // leaf_11a_tx_raw_b7
+            MetaSense::CANBus::stats().last11aData[7]   // leaf_11a_raw_b7
         );
 #endif  // METASENSE_CAN_MONITOR_MODE
         
@@ -3410,13 +3322,13 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             Serial.printf("[WARNING] MG error codes: 0x%02X\n", leafFb.mg_error_codes);
         }
         if (data.leaf_invTempC > 80.0f) {
-            Serial.printf("[WARNING] Inverter temperature high: %.1f°C\n", data.leaf_invTempC);
+            Serial.printf("[WARNING] Inverter temperature high: %.1fÂ°C\n", data.leaf_invTempC);
         }
         if (data.leaf_statorTempC > 150.0f) {
-            Serial.printf("[WARNING] Stator temperature high: %.1f°C\n", data.leaf_statorTempC);
+            Serial.printf("[WARNING] Stator temperature high: %.1fÂ°C\n", data.leaf_statorTempC);
         }
         if (data.leaf_coolantTempC > 95.0f) {
-            Serial.printf("[WARNING] Coolant temperature high: %.1f°C\n", data.leaf_coolantTempC);
+            Serial.printf("[WARNING] Coolant temperature high: %.1fÂ°C\n", data.leaf_coolantTempC);
         }
     }
 }
@@ -4571,7 +4483,7 @@ void leafTxPacerTask(void* /*param*/)
         s_leaf1d4RollingCounter = static_cast<uint8_t>((s_leaf1d4RollingCounter + 1U) & 0x03U);
 
         // Update byte 4 with rolling counter - lookup table based on DBC HCM_CLOCK signal
-        // Counter values 0,1,2,3 → upper nibbles 8,C,0,4 → byte values 0x87, 0xC7, 0x07, 0x47
+        // Counter values 0,1,2,3 â†’ upper nibbles 8,C,0,4 â†’ byte values 0x87, 0xC7, 0x07, 0x47
         const uint8_t hcmClock = static_cast<uint8_t>(s_leaf1d4RollingCounter & 0x03U);
         static const uint8_t COUNTER_NIBBLE_MAP[] = {0x8U, 0xCU, 0x0U, 0x4U};
         s_leaf1d4PayloadCachedFrameData[4] = static_cast<uint8_t>((COUNTER_NIBBLE_MAP[hcmClock] << 4) | 0x7U);
@@ -4695,8 +4607,6 @@ void begin()
     s_leaf1d4PayloadMs = 0;
     s_leaf1d4TxUsedRingBase = false;
     s_leaf1d4TxRingBaseLen = 0U;
-    s_leaf1d4TxRingSourceAge = 0xFFU;
-    s_leaf1d4TxRingFallbackCount = 0U;
     s_leafTorqueTrackStartMs = 0;
     s_leafTorqueTrackLatencyMs = 0;
     s_leafTorqueTrackPending = false;
@@ -4756,9 +4666,9 @@ void begin()
     }
 
     // Digital inputs
-    pinMode(MetaSense::Globals::kRampSwitchPin, INPUT_PULLDOWN);  // SW switch – active HIGH
-    pinMode(MetaSense::Globals::kStartRequestPin, INPUT_PULLDOWN); // Start-request switch – active HIGH
-    pinMode(MetaSense::Globals::kRbPlusInputPin, INPUT_PULLDOWN); // VCU ready – active HIGH
+    pinMode(MetaSense::Globals::kRampSwitchPin, INPUT_PULLDOWN);  // SW switch â€“ active HIGH
+    pinMode(MetaSense::Globals::kStartRequestPin, INPUT_PULLDOWN); // Start-request switch â€“ active HIGH
+    pinMode(MetaSense::Globals::kRbPlusInputPin, INPUT_PULLDOWN); // VCU ready â€“ active HIGH
     prevSwState = (digitalRead(MetaSense::Globals::kRampSwitchPin) == HIGH);
     prevStartRequestState = (digitalRead(MetaSense::Globals::kStartRequestPin) == HIGH);
     const int vcuRbPlusLevel = digitalRead(MetaSense::Globals::kRbPlusInputPin);
@@ -6169,7 +6079,7 @@ void loop()
             torqueToSend = 0.0f;
         } else if (isIdleState) {
             // IDLE state: Apply voltage-based brake torque controller for inverter overvoltage protection
-            // When inverter voltage > 450V, increase brake torque to dissipate more power (V × I)
+            // When inverter voltage > 450V, increase brake torque to dissipate more power (V Ã— I)
             const float invVoltageV = MetaSense::CANBus::feedback().input_voltage;
             const float appliedBrakeTorque = computeVoltageBrakeTorque(
                 invVoltageV,                               // Inverter voltage from CAN
@@ -6231,236 +6141,6 @@ void loop()
         }
     }
 
-    {
-        const MetaSense::CANBus::Stats& canStats = MetaSense::CANBus::stats();
-        const bool canDiagChanged = !lastCanDiagInitialized ||
-                                    (canStats.ready != lastCanDiagReady) ||
-                                    (canStats.lastTwaiState != lastCanDiagState) ||
-                                    (canStats.txFrames != lastCanDiagTxFrames) ||
-                                    (canStats.tx1d4Frames != lastCanDiagTx1d4Frames) ||
-                                    (canStats.tx11aFrames != lastCanDiagTx11aFrames) ||
-                                    (canStats.txFailures != lastCanDiagTxFailures) ||
-                                    (canStats.txWhileNotReady != lastCanDiagTxWhileNotReady) ||
-                                    (canStats.recoveries != lastCanDiagRecoveries) ||
-                                    (canStats.busOffEvents != lastCanDiagBusOff) ||
-                                    (canStats.statusQueryFailures != lastCanDiagStatusQueryFailures) ||
-                                    (canStats.twaiRxOverrun != lastCanDiagTwaiRxOverrun) ||
-                                    (canStats.twaiArbLost != lastCanDiagTwaiArbLost) ||
-                                    (canStats.twaiBusError != lastCanDiagTwaiBusError) ||
-                                    (canStats.twaiTxErrorCounter != lastCanDiagTwaiTxErr) ||
-                                    (canStats.twaiRxErrorCounter != lastCanDiagTwaiRxErr);
-
-        const bool canEventLogDue = (lastCanEventLogMs == 0U) ||
-                                    ((now - lastCanEventLogMs) >= CAN_EVENT_LOG_MIN_PERIOD_MS);
-
-        if (canDiagChanged && canEventLogDue) {
-            uint8_t tx1d4ChangeMask = 0U;
-            const uint8_t tx1d4Len = canStats.last1d4TxLen;
-            const uint8_t tx1d4CmpLen = (tx1d4Len < lastCanDiag1d4TxLen) ? tx1d4Len : lastCanDiag1d4TxLen;
-            for (uint8_t bi = 0U; bi < tx1d4CmpLen; ++bi) {
-                if (canStats.last1d4TxData[bi] != lastCanDiag1d4TxData[bi]) {
-                    tx1d4ChangeMask |= static_cast<uint8_t>(1U << bi);
-                }
-            }
-            if (tx1d4Len != lastCanDiag1d4TxLen) {
-                tx1d4ChangeMask = static_cast<uint8_t>((tx1d4Len >= 8U) ? 0xFFU : ((1U << tx1d4Len) - 1U));
-            }
-
-            uint8_t tx11aChangeMask = 0U;
-            const uint8_t tx11aLen = canStats.last11aTxLen;
-            const uint8_t tx11aCmpLen = (tx11aLen < lastCanDiag11aTxLen) ? tx11aLen : lastCanDiag11aTxLen;
-            for (uint8_t bi = 0U; bi < tx11aCmpLen; ++bi) {
-                if (canStats.last11aTxData[bi] != lastCanDiag11aTxData[bi]) {
-                    tx11aChangeMask |= static_cast<uint8_t>(1U << bi);
-                }
-            }
-            if (tx11aLen != lastCanDiag11aTxLen) {
-                tx11aChangeMask = static_cast<uint8_t>((tx11aLen >= 8U) ? 0xFFU : ((1U << tx11aLen) - 1U));
-            }
-
-            // Log CAN-EVENT to USB for diagnostics (always), but to telnet only on errors
-            Serial.printf("[CAN-EVENT] ready=%d state=%u tx_total=%lu tx_1d4=%lu tx_11a=%lu tx1d4_chg=0x%02X tx11a_chg=0x%02X tx1d4_b6=0x%02X tx1d4_b7=0x%02X tx11a_b6=0x%02X tx11a_b7=0x%02X tx_fail=%lu tx_not_ready=%lu recov=%lu bus_off=%lu status_q_fail=%lu twai(rxq=%lu txq=%lu rx_miss=%lu rx_ovr=%lu arb_lost=%lu bus_err=%lu tec=%lu rec=%lu)\n",
-                          canStats.ready ? 1 : 0,
-                          static_cast<unsigned>(canStats.lastTwaiState),
-                          static_cast<unsigned long>(canStats.txFrames),
-                          static_cast<unsigned long>(canStats.tx1d4Frames),
-                          static_cast<unsigned long>(canStats.tx11aFrames),
-                          static_cast<unsigned>(tx1d4ChangeMask),
-                          static_cast<unsigned>(tx11aChangeMask),
-                          static_cast<unsigned>(canStats.last1d4TxLen > 6U ? canStats.last1d4TxData[6] : 0U),
-                          static_cast<unsigned>(canStats.last1d4TxLen > 7U ? canStats.last1d4TxData[7] : 0U),
-                          static_cast<unsigned>(canStats.last11aTxLen > 6U ? canStats.last11aTxData[6] : 0U),
-                          static_cast<unsigned>(canStats.last11aTxLen > 7U ? canStats.last11aTxData[7] : 0U),
-                          static_cast<unsigned long>(canStats.txFailures),
-                          static_cast<unsigned long>(canStats.txWhileNotReady),
-                          static_cast<unsigned long>(canStats.recoveries),
-                          static_cast<unsigned long>(canStats.busOffEvents),
-                          static_cast<unsigned long>(canStats.statusQueryFailures),
-                          static_cast<unsigned long>(canStats.twaiRxQueued),
-                          static_cast<unsigned long>(canStats.twaiTxQueued),
-                          static_cast<unsigned long>(canStats.twaiRxMissed),
-                          static_cast<unsigned long>(canStats.twaiRxOverrun),
-                          static_cast<unsigned long>(canStats.twaiArbLost),
-                          static_cast<unsigned long>(canStats.twaiBusError),
-                          static_cast<unsigned long>(canStats.twaiTxErrorCounter),
-                          static_cast<unsigned long>(canStats.twaiRxErrorCounter));
-            
-            // Forward to telnet and Serial0 ONLY if there's a serious error condition
-            // (exclude transient txWhileNotReady which is normal during startup)
-            if (canStats.txFailures > 0 || canStats.recoveries > 0 ||
-                canStats.busOffEvents > 0 || canStats.statusQueryFailures > 0 || canStats.twaiBusError > 0 ||
-                canStats.twaiTxErrorCounter > 0 || canStats.twaiRxErrorCounter > 0) {
-                MetaSense::TelnetSerialBridge::telnetBridgePrintf("[CAN-EVENT-ERROR] ready=%d state=%u tx_total=%lu tx_1d4=%lu tx_11a=%lu tx_fail=%lu tx_not_ready=%lu recov=%lu bus_off=%lu status_q_fail=%lu twai(rx_miss=%lu rx_ovr=%lu arb_lost=%lu bus_err=%lu tec=%lu rec=%lu)\n",
-                          canStats.ready ? 1 : 0,
-                          static_cast<unsigned>(canStats.lastTwaiState),
-                          static_cast<unsigned long>(canStats.txFrames),
-                          static_cast<unsigned long>(canStats.tx1d4Frames),
-                          static_cast<unsigned long>(canStats.tx11aFrames),
-                          static_cast<unsigned long>(canStats.txFailures),
-                          static_cast<unsigned long>(canStats.txWhileNotReady),
-                          static_cast<unsigned long>(canStats.recoveries),
-                          static_cast<unsigned long>(canStats.busOffEvents),
-                          static_cast<unsigned long>(canStats.statusQueryFailures),
-                          static_cast<unsigned long>(canStats.twaiRxMissed),
-                          static_cast<unsigned long>(canStats.twaiRxOverrun),
-                          static_cast<unsigned long>(canStats.twaiArbLost),
-                          static_cast<unsigned long>(canStats.twaiBusError),
-                          static_cast<unsigned long>(canStats.twaiTxErrorCounter),
-                          static_cast<unsigned long>(canStats.twaiRxErrorCounter));
-                Serial0.printf("[CAN-EVENT-ERROR] ready=%d state=%u tx_total=%lu tx_1d4=%lu tx_11a=%lu tx_fail=%lu tx_not_ready=%lu recov=%lu bus_off=%lu status_q_fail=%lu twai(rx_miss=%lu rx_ovr=%lu arb_lost=%lu bus_err=%lu tec=%lu rec=%lu)\n",
-                          canStats.ready ? 1 : 0,
-                          static_cast<unsigned>(canStats.lastTwaiState),
-                          static_cast<unsigned long>(canStats.txFrames),
-                          static_cast<unsigned long>(canStats.tx1d4Frames),
-                          static_cast<unsigned long>(canStats.tx11aFrames),
-                          static_cast<unsigned long>(canStats.txFailures),
-                          static_cast<unsigned long>(canStats.txWhileNotReady),
-                          static_cast<unsigned long>(canStats.recoveries),
-                          static_cast<unsigned long>(canStats.busOffEvents),
-                          static_cast<unsigned long>(canStats.statusQueryFailures),
-                          static_cast<unsigned long>(canStats.twaiRxMissed),
-                          static_cast<unsigned long>(canStats.twaiRxOverrun),
-                          static_cast<unsigned long>(canStats.twaiArbLost),
-                          static_cast<unsigned long>(canStats.twaiBusError),
-                          static_cast<unsigned long>(canStats.twaiTxErrorCounter),
-                          static_cast<unsigned long>(canStats.twaiRxErrorCounter));
-            }
-            lastCanEventLogMs = now;
-        }
-
-        lastCanDiagInitialized = true;
-        lastCanDiagReady = canStats.ready;
-        lastCanDiagState = canStats.lastTwaiState;
-        lastCanDiagTxFrames = canStats.txFrames;
-        lastCanDiagTx1d4Frames = canStats.tx1d4Frames;
-        lastCanDiagTx11aFrames = canStats.tx11aFrames;
-        lastCanDiagTxFailures = canStats.txFailures;
-        lastCanDiagTxWhileNotReady = canStats.txWhileNotReady;
-        lastCanDiagRecoveries = canStats.recoveries;
-        lastCanDiagBusOff = canStats.busOffEvents;
-        lastCanDiagStatusQueryFailures = canStats.statusQueryFailures;
-        lastCanDiagTwaiRxQueued = canStats.twaiRxQueued;
-        lastCanDiagTwaiTxQueued = canStats.twaiTxQueued;
-        lastCanDiagTwaiRxMissed = canStats.twaiRxMissed;
-        lastCanDiagTwaiRxOverrun = canStats.twaiRxOverrun;
-        lastCanDiagTwaiArbLost = canStats.twaiArbLost;
-        lastCanDiagTwaiBusError = canStats.twaiBusError;
-        lastCanDiagTwaiTxErr = canStats.twaiTxErrorCounter;
-        lastCanDiagTwaiRxErr = canStats.twaiRxErrorCounter;
-        lastCanDiag1d4TxLen = canStats.last1d4TxLen;
-        lastCanDiag11aTxLen = canStats.last11aTxLen;
-        memset(lastCanDiag1d4TxData, 0, sizeof(lastCanDiag1d4TxData));
-        memset(lastCanDiag11aTxData, 0, sizeof(lastCanDiag11aTxData));
-        if (lastCanDiag1d4TxLen > 0U) {
-            memcpy(lastCanDiag1d4TxData, canStats.last1d4TxData,
-                   (lastCanDiag1d4TxLen <= sizeof(lastCanDiag1d4TxData)) ? lastCanDiag1d4TxLen : sizeof(lastCanDiag1d4TxData));
-        }
-        if (lastCanDiag11aTxLen > 0U) {
-            memcpy(lastCanDiag11aTxData, canStats.last11aTxData,
-                   (lastCanDiag11aTxLen <= sizeof(lastCanDiag11aTxData)) ? lastCanDiag11aTxLen : sizeof(lastCanDiag11aTxData));
-        }
-
-        if (s_leaf1d4FreshLastLogMs == 0U || (now - s_leaf1d4FreshLastLogMs) >= 1000U) {
-            uint8_t freshMask = 0U;
-            const uint8_t currLen = canStats.last1d4TxLen;
-            const uint8_t cmpLen = (currLen < s_leaf1d4FreshPrevLen) ? currLen : s_leaf1d4FreshPrevLen;
-            for (uint8_t bi = 0U; bi < cmpLen; ++bi) {
-                if (canStats.last1d4TxData[bi] != s_leaf1d4FreshPrevData[bi]) {
-                    freshMask |= static_cast<uint8_t>(1U << bi);
-                }
-            }
-            if (currLen != s_leaf1d4FreshPrevLen) {
-                freshMask = static_cast<uint8_t>((currLen >= 8U) ? 0xFFU : ((1U << currLen) - 1U));
-            }
-
-            if (freshMask == 0U) {
-                ++s_leaf1d4FreshStaticRun;
-            } else {
-                s_leaf1d4FreshStaticRun = 0U;
-            }
-
-            const Leaf1d4CommandDecode txDecoded = decodeLeaf1d4Command(canStats.last1d4TxData, currLen);
-            const bool txSemanticMatch = txDecoded.valid &&
-                                         (txDecoded.motorAmpTorqueRaw == s_leaf1d4PayloadTorqueRaw) &&
-                                         (txDecoded.hvSupplyStatus == s_leaf1d4PayloadHvStatus) &&
-                                         (txDecoded.relayPlusStatus == s_leaf1d4PayloadRelayPlus) &&
-                                         (txDecoded.chargeStatus == s_leaf1d4PayloadChargeStatus) &&
-                                         (txDecoded.hcmClock == s_leaf1d4PayloadClock) &&
-                                         (txDecoded.crc1d4 == s_leaf1d4PayloadCrc) &&
-                                         (s_leaf1d4PayloadCrc == s_leaf1d4PayloadCrcCalc);
-
-            const uint32_t tx1d4Count = canStats.tx1d4Frames;
-            const uint32_t tx1d4Delta = tx1d4Count - s_leaf1d4FreshLastTxCount;
-            const float tx1d4Hz = (s_leaf1d4FreshLastLogMs == 0U)
-                ? 0.0f
-                : (1000.0f * static_cast<float>(tx1d4Delta) /
-                   static_cast<float>(now - s_leaf1d4FreshLastLogMs));
-            const bool haveFull1d4 = currLen >= 8U;
-            const uint8_t crcCalc = haveFull1d4 ? computeLeaf1d4CrcConformant(canStats.last1d4TxData) : 0U;
-            const uint8_t crcTx = haveFull1d4 ? canStats.last1d4TxData[7] : 0U;
-
-            Serial.printf("[VCM-1D4-TX-SELF] n=%lu sem=%u tq=%.2f raw=%d hv=%u rplus=%u clk=%u charge=%u crc=0x%02X calc=0x%02X raw=%02X %02X %02X %02X %02X %02X %02X %02X\n",
-                          static_cast<unsigned long>(tx1d4Count),
-                          txSemanticMatch ? 1U : 0U,
-                          txDecoded.motorAmpTorqueNm,
-                          static_cast<int>(txDecoded.motorAmpTorqueRaw),
-                          txDecoded.hvSupplyStatus ? 1U : 0U,
-                          txDecoded.relayPlusStatus ? 1U : 0U,
-                          static_cast<unsigned>(txDecoded.hcmClock),
-                          static_cast<unsigned>(txDecoded.chargeStatus),
-                          static_cast<unsigned>(txDecoded.crc1d4),
-                          static_cast<unsigned>(computeLeaf1d4CrcConformant(canStats.last1d4TxData)),
-                          static_cast<unsigned>(currLen > 0U ? canStats.last1d4TxData[0] : 0U),
-                          static_cast<unsigned>(currLen > 1U ? canStats.last1d4TxData[1] : 0U),
-                          static_cast<unsigned>(currLen > 2U ? canStats.last1d4TxData[2] : 0U),
-                          static_cast<unsigned>(currLen > 3U ? canStats.last1d4TxData[3] : 0U),
-                          static_cast<unsigned>(currLen > 4U ? canStats.last1d4TxData[4] : 0U),
-                          static_cast<unsigned>(currLen > 5U ? canStats.last1d4TxData[5] : 0U),
-                          static_cast<unsigned>(currLen > 6U ? canStats.last1d4TxData[6] : 0U),
-                          static_cast<unsigned>(currLen > 7U ? canStats.last1d4TxData[7] : 0U));
-
-            Serial.printf("[VCM-1D4-TX-FRESH] n=%lu d=%lu hz=%.1f chg=0x%02X static_run=%lu b2=0x%02X b6=0x%02X b7=0x%02X crc_ok=%u\n",
-                          static_cast<unsigned long>(tx1d4Count),
-                          static_cast<unsigned long>(tx1d4Delta),
-                          tx1d4Hz,
-                          static_cast<unsigned>(freshMask),
-                          static_cast<unsigned long>(s_leaf1d4FreshStaticRun),
-                          static_cast<unsigned>(currLen > 2U ? canStats.last1d4TxData[2] : 0U),
-                          static_cast<unsigned>(currLen > 6U ? canStats.last1d4TxData[6] : 0U),
-                          static_cast<unsigned>(currLen > 7U ? canStats.last1d4TxData[7] : 0U),
-                          static_cast<unsigned>(haveFull1d4 && (crcTx == crcCalc) ? 1U : 0U));
-
-            s_leaf1d4FreshLastLogMs = now;
-            s_leaf1d4FreshLastTxCount = tx1d4Count;
-            s_leaf1d4FreshPrevLen = currLen;
-            memset(s_leaf1d4FreshPrevData, 0, sizeof(s_leaf1d4FreshPrevData));
-            if (currLen > 0U) {
-                memcpy(s_leaf1d4FreshPrevData,
-                       canStats.last1d4TxData,
-                       (currLen <= sizeof(s_leaf1d4FreshPrevData)) ? currLen : sizeof(s_leaf1d4FreshPrevData));
-            }
-        }
-    }
 
     if (tele.recording) {
         appendFallbackRunLogSample(now);
