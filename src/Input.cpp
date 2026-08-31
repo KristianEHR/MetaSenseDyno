@@ -180,9 +180,6 @@ static uint32_t lastLeafTxMs = 0;
 static uint32_t lastLeaf11aTxMs = 0;
 static uint8_t s_leaf11aMuxTxSeq = 0U;
 static uint8_t s_leaf11aMuxSeenMask = 0U;
-static uint8_t s_leaf11aMuxRxSeenMask = 0U;
-static bool s_leaf11aMuxTemplatesLocked = false;
-static uint32_t s_leaf11aMuxTemplateLastRxFrames = 0U;
 static uint8_t s_leaf11aMuxTemplateBySel[4][8] = {{0U}};
 // UI-controlled values for 0x11A frame (initialized with defaults from CanConfig.h)
 static uint8_t s_leaf11aUiGear = METASENSE_LEAF_11A_FORCE_GEAR;
@@ -205,11 +202,11 @@ static const uint32_t CAN_RX_TARGET_MAX_AGE_MS = 250;
 static const uint32_t CAN_RX_MISSING_LOG_PERIOD_MS = 5000;
 static const uint32_t CAN_1DA_CRC_BAD_STREAK_LIMIT = 10;
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 // Voltage-based brake torque controller (overvoltage protection)
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 // When inverter voltage > 450V, increase brake torque proportionally to:
-// - Dissipate more power (brake_power = V Ã— I)
+// - Dissipate more power (brake_power = V × I)
 // - Keep inverter voltage under control during high inertia braking
 // - Limit voltage overshoot and prevent inverter faults
 static bool s_brakeTorqueControlActive = false;  // Tracks if protection is engaged (hysteresis)
@@ -220,7 +217,7 @@ static constexpr float kInvVoltageActivateThresholdV = 450.0f;   // Activate at 
 static constexpr float kInvVoltageDeactivateThresholdV = 440.0f; // Release at 440V (avoid hunting)
 static constexpr float kInvVoltageSafeMaxV = 500.0f;             // Scale ramp based on this max
 
-// Computes brake torque as a linear ramp: 4Nm @ 450V â†’ 30Nm @ 500V+
+// Computes brake torque as a linear ramp: 4Nm @ 450V → 30Nm @ 500V+
 float computeVoltageBrakeTorque(float invVoltageV, float idleTorqueNm, float maxBrakeTorqueNm)
 {
     // Hysteresis: activate at 450V, deactivate at 440V
@@ -455,9 +452,6 @@ constexpr uint32_t kLeafHandshakeAttemptPeriodMs = 20;
 #ifndef METASENSE_LEAF_CAN_LISTEN_ONLY
 #define METASENSE_LEAF_CAN_LISTEN_ONLY 0
 #endif
-#ifndef METASENSE_STARTUP_SNIFF_CAPTURE_ENABLE
-#define METASENSE_STARTUP_SNIFF_CAPTURE_ENABLE 0
-#endif
 #ifndef METASENSE_LEAF_CAN_HANDSHAKE_ON_FIRST_1DA
 #define METASENSE_LEAF_CAN_HANDSHAKE_ON_FIRST_1DA 0
 #endif
@@ -473,9 +467,6 @@ constexpr uint32_t kLeafHandshakeAttemptPeriodMs = 20;
 // Conformant 0x1D4 CRC implementation:
 // CRC8 MSB poly 0x1D over [idLo + payload7], then XOR by HCM clock bin.
 #define METASENSE_LEAF_1D4_CRC_CLOCK_XOR_ENABLE 1
-#endif
-#ifndef METASENSE_LEAF_1D4_SNIFF_RX_ENABLED
-#define METASENSE_LEAF_1D4_SNIFF_RX_ENABLED 1
 #endif
 #ifndef METASENSE_LEAF_1D4_TEMPLATE_TX_MODE
 // 0: Build 0x1D4 command fields from logic.
@@ -929,38 +920,6 @@ int32_t signExtendBits(uint32_t raw, uint8_t bitLen)
     return static_cast<int32_t>(raw | ~mask);
 }
 
-uint8_t crc8MsbGeneric(const uint8_t* data, uint8_t len, uint8_t poly, uint8_t init, uint8_t xorOut)
-{
-    uint8_t crc = init;
-    for (uint8_t i = 0U; i < len; ++i) {
-        crc ^= data[i];
-        for (uint8_t bit = 0U; bit < 8U; ++bit) {
-            const bool msb = (crc & 0x80U) != 0U;
-            crc <<= 1;
-            if (msb) {
-                crc ^= poly;
-            }
-        }
-    }
-    return static_cast<uint8_t>(crc ^ xorOut);
-}
-
-uint8_t crc8LsbGeneric(const uint8_t* data, uint8_t len, uint8_t poly, uint8_t init, uint8_t xorOut)
-{
-    uint8_t crc = init;
-    for (uint8_t i = 0U; i < len; ++i) {
-        crc ^= data[i];
-        for (uint8_t bit = 0U; bit < 8U; ++bit) {
-            const bool lsb = (crc & 0x01U) != 0U;
-            crc >>= 1;
-            if (lsb) {
-                crc ^= poly;
-            }
-        }
-    }
-    return static_cast<uint8_t>(crc ^ xorOut);
-}
-
 uint8_t computeApprovedLeafFrameCrc(uint8_t idLo, const uint8_t* payload8)
 {
     if (idLo == 0xDAU) {
@@ -1136,287 +1095,6 @@ void patchLeaf1d4FrameFields(const Leaf1d4FrameFields& fields,
     out[6] = fields.chargeStatus;
     setIntelUnsigned(out, 8U, 38U, 2U, static_cast<uint32_t>(fields.cmdClock & 0x03U));
     out[7] = computeLeaf1d4CrcConformant(out);
-}
-
-uint8_t crc8Lsb(const uint8_t* data, uint8_t len, uint8_t poly, uint8_t init, uint8_t xorOut)
-{
-    uint8_t crc = init;
-    for (uint8_t i = 0U; i < len; ++i) {
-        crc ^= data[i];
-        for (uint8_t bit = 0U; bit < 8U; ++bit) {
-            const bool lsb = (crc & 0x01U) != 0U;
-            crc >>= 1;
-            if (lsb) {
-                crc ^= poly;
-            }
-        }
-    }
-    return static_cast<uint8_t>(crc ^ xorOut);
-}
-
-uint8_t crc8Msb(const uint8_t* data, uint8_t len, uint8_t poly, uint8_t init, uint8_t xorOut)
-{
-    uint8_t crc = init;
-    for (uint8_t i = 0U; i < len; ++i) {
-        crc ^= data[i];
-        for (uint8_t bit = 0U; bit < 8U; ++bit) {
-            const bool msb = (crc & 0x80U) != 0U;
-            crc <<= 1;
-            if (msb) {
-                crc ^= poly;
-            }
-        }
-    }
-    return static_cast<uint8_t>(crc ^ xorOut);
-}
-
-uint32_t computeLeafCrcCandidateMaskCommon(const uint8_t* payload,
-                                           uint8_t payloadLen,
-                                           uint8_t crcRx,
-                                           uint16_t id)
-{
-    if (payload == nullptr || payloadLen == 0U) {
-        return 0U;
-    }
-
-    uint8_t crcXor = 0U;
-    uint8_t crcSum = 0U;
-    for (uint8_t i = 0U; i < payloadLen; ++i) {
-        crcXor ^= payload[i];
-        crcSum = static_cast<uint8_t>(crcSum + payload[i]);
-    }
-    const uint8_t crcInvSum = static_cast<uint8_t>(~crcSum);
-    const uint8_t crc07Init00 = crc8Msb(payload, payloadLen, 0x07U, 0x00U, 0x00U);
-    const uint8_t crc07InitFF = crc8Msb(payload, payloadLen, 0x07U, 0xFFU, 0x00U);
-    const uint8_t crc1DInitFF = crc8Msb(payload, payloadLen, 0x1DU, 0xFFU, 0xFFU);
-    const uint8_t crc2FInitFF = crc8Msb(payload, payloadLen, 0x2FU, 0xFFU, 0xFFU);
-    const uint8_t crc1DInit00 = crc8Msb(payload, payloadLen, 0x1DU, 0x00U, 0x00U);
-    const uint8_t crc1DInitFFXor00 = crc8Msb(payload, payloadLen, 0x1DU, 0xFFU, 0x00U);
-
-    uint8_t payloadWithIdBe[10] = {0U};
-    uint8_t payloadWithIdLo[9] = {0U};
-    const uint8_t idHi = static_cast<uint8_t>((id >> 8) & 0xFFU);
-    const uint8_t idLo = static_cast<uint8_t>(id & 0xFFU);
-    payloadWithIdBe[0] = idHi;
-    payloadWithIdBe[1] = idLo;
-    payloadWithIdLo[0] = idLo;
-    memcpy(&payloadWithIdBe[2], payload, payloadLen);
-    memcpy(&payloadWithIdLo[1], payload, payloadLen);
-
-    const uint8_t crc1DIdBe = crc8Msb(payloadWithIdBe, static_cast<uint8_t>(payloadLen + 2U), 0x1DU, 0xFFU, 0xFFU);
-    const uint8_t crc1DIdLo = crc8Msb(payloadWithIdLo, static_cast<uint8_t>(payloadLen + 1U), 0x1DU, 0xFFU, 0xFFU);
-    const uint8_t crc1DRefInitFF = crc8Lsb(payload, payloadLen, 0xB8U, 0xFFU, 0xFFU);
-    const uint8_t crc1DRefInitFFXor00 = crc8Lsb(payload, payloadLen, 0xB8U, 0xFFU, 0x00U);
-    const uint8_t crc1DRefInit00 = crc8Lsb(payload, payloadLen, 0xB8U, 0x00U, 0x00U);
-    const uint8_t crc1DRefIdBe = crc8Lsb(payloadWithIdBe, static_cast<uint8_t>(payloadLen + 2U), 0xB8U, 0xFFU, 0xFFU);
-    const uint8_t crc1DRefIdLo = crc8Lsb(payloadWithIdLo, static_cast<uint8_t>(payloadLen + 1U), 0xB8U, 0xFFU, 0xFFU);
-    const uint8_t crc2FRefInitFF = crc8Lsb(payload, payloadLen, 0xF4U, 0xFFU, 0xFFU);
-
-    return static_cast<uint32_t>(
-        ((crcRx == crcXor) ? (1U << 0) : 0U) |
-        ((crcRx == crcSum) ? (1U << 1) : 0U) |
-        ((crcRx == crcInvSum) ? (1U << 2) : 0U) |
-        ((crcRx == crc07Init00) ? (1U << 3) : 0U) |
-        ((crcRx == crc07InitFF) ? (1U << 4) : 0U) |
-        ((crcRx == crc1DInitFF) ? (1U << 5) : 0U) |
-        ((crcRx == crc2FInitFF) ? (1U << 6) : 0U) |
-        ((crcRx == crc1DInit00) ? (1U << 7) : 0U) |
-        ((crcRx == crc1DInitFFXor00) ? (1U << 8) : 0U) |
-        ((crcRx == crc1DIdBe) ? (1U << 9) : 0U) |
-        ((crcRx == crc1DIdLo) ? (1U << 10) : 0U) |
-        ((crcRx == crc1DRefInitFF) ? (1U << 11) : 0U) |
-        ((crcRx == crc1DRefInitFFXor00) ? (1U << 12) : 0U) |
-        ((crcRx == crc1DRefInit00) ? (1U << 13) : 0U) |
-        ((crcRx == crc1DRefIdBe) ? (1U << 14) : 0U) |
-        ((crcRx == crc1DRefIdLo) ? (1U << 15) : 0U) |
-        ((crcRx == crc2FRefInitFF) ? (1U << 16) : 0U));
-}
-
-uint32_t computeLeaf120CrcCandidateMask(const uint8_t* data, uint8_t len)
-{
-    if (data == nullptr || len < 4U) {
-        return 0U;
-    }
-
-    return computeLeafCrcCandidateMaskCommon(data, 3U, data[3], 0x0120U);
-}
-
-uint32_t computeLeaf1daCrcCandidateMask(const uint8_t* data, uint8_t len)
-{
-    if (data == nullptr || len < 8U) {
-        return 0U;
-    }
-
-    return computeLeafCrcCandidateMaskCommon(data, 7U, data[7], 0x01DAU);
-}
-
-uint32_t computeLeaf1d4CrcCandidateMask(const uint8_t* data, uint8_t len)
-{
-    if (data == nullptr || len < 8U) {
-        return 0U;
-    }
-
-    return computeLeafCrcCandidateMaskCommon(data, 7U, data[7], 0x01D4U);
-}
-
-uint8_t countSetBitsU32(uint32_t v)
-{
-    uint8_t n = 0U;
-    while (v != 0U) {
-        n = static_cast<uint8_t>(n + static_cast<uint8_t>(v & 1U));
-        v >>= 1;
-    }
-    return n;
-}
-
-int8_t firstSetBitU32(uint32_t v)
-{
-    for (uint8_t bit = 0U; bit < 32U; ++bit) {
-        if ((v & (1UL << bit)) != 0U) {
-            return static_cast<int8_t>(bit);
-        }
-    }
-    return -1;
-}
-
-#if !(defined(METASENSE_LEAF_VCM_DIAGNOSTICS) && (METASENSE_LEAF_VCM_DIAGNOSTICS != 0))
-constexpr uint8_t kLeaf1daResidueCandidateCount = 8U;
-#endif
-
-void computeLeaf1daResidues(const uint8_t* data, uint8_t len, uint8_t (&out)[kLeaf1daResidueCandidateCount])
-{
-    for (uint8_t i = 0U; i < kLeaf1daResidueCandidateCount; ++i) {
-        out[i] = 0U;
-    }
-
-    if (data == nullptr || len < 8U) {
-        return;
-    }
-
-    out[0] = crc8Msb(data, 8U, 0x07U, 0x00U, 0x00U);
-    out[1] = crc8Msb(data, 8U, 0x07U, 0xFFU, 0x00U);
-    out[2] = crc8Msb(data, 8U, 0x1DU, 0xFFU, 0xFFU);
-    out[3] = crc8Msb(data, 8U, 0x1DU, 0xFFU, 0x00U);
-    out[4] = crc8Msb(data, 8U, 0x2FU, 0xFFU, 0xFFU);
-    out[5] = crc8Lsb(data, 8U, 0xB8U, 0xFFU, 0xFFU);
-    out[6] = crc8Lsb(data, 8U, 0xB8U, 0xFFU, 0x00U);
-    out[7] = crc8Lsb(data, 8U, 0xF4U, 0xFFU, 0xFFU);
-}
-
-uint32_t computeLeaf1daAutosarCandidateMask(const uint8_t* data, uint8_t len)
-{
-    if (data == nullptr || len < 8U) {
-        return 0U;
-    }
-
-    const uint8_t crcRx = data[7];
-    const uint8_t mgClock = static_cast<uint8_t>(data[6] & 0x03U);
-    const uint8_t d6NoClock = static_cast<uint8_t>(data[6] & 0xFCU);
-
-    const uint8_t payloadIdBe[9] = {
-        0x01U, 0xDAU,
-        data[0], data[1], data[2], data[3], data[4], data[5], data[6]
-    };
-    const uint8_t payloadD6Masked[9] = {
-        data[0], data[1], data[2], data[3], data[4], data[5], d6NoClock,
-        0x01U, 0xDAU
-    };
-    const uint8_t payloadClockInjected[10] = {
-        data[0], data[1], data[2], data[3], data[4], data[5], d6NoClock,
-        mgClock, 0x01U, 0xDAU
-    };
-
-    const uint8_t c2FIdBe = crc8Msb(payloadIdBe, 9U, 0x2FU, 0xFFU, 0xFFU);
-    const uint8_t c1DIdBe = crc8Msb(payloadIdBe, 9U, 0x1DU, 0xFFU, 0xFFU);
-    const uint8_t c2FD6Masked = crc8Msb(payloadD6Masked, 9U, 0x2FU, 0xFFU, 0xFFU);
-    const uint8_t c2FClockInjected = crc8Msb(payloadClockInjected, 10U, 0x2FU, 0xFFU, 0xFFU);
-
-    return static_cast<uint32_t>(
-        ((crcRx == c2FIdBe) ? (1U << 0) : 0U) |
-        ((crcRx == c1DIdBe) ? (1U << 1) : 0U) |
-        ((crcRx == c2FD6Masked) ? (1U << 2) : 0U) |
-        ((crcRx == c2FClockInjected) ? (1U << 3) : 0U));
-}
-
-struct Leaf120TopValue {
-    uint8_t value = 0U;
-    uint32_t count = 0U;
-};
-
-uint8_t findTopByteValue(const uint32_t* counts, uint32_t& outCount)
-{
-    uint8_t topValue = 0U;
-    outCount = 0U;
-    if (counts == nullptr) {
-        return topValue;
-    }
-
-    for (uint16_t i = 0U; i < 256U; ++i) {
-        if (counts[i] > outCount) {
-            outCount = counts[i];
-            topValue = static_cast<uint8_t>(i);
-        }
-    }
-    return topValue;
-}
-
-void findTopLeaf120Values(const uint32_t* counts, Leaf120TopValue (&top)[3])
-{
-    for (Leaf120TopValue& entry : top) {
-        entry.value = 0U;
-        entry.count = 0U;
-    }
-
-    for (uint16_t rawValue = 0U; rawValue < 256U; ++rawValue) {
-        const uint32_t count = counts[rawValue];
-        if (count == 0U) {
-            continue;
-        }
-
-        for (size_t slot = 0U; slot < 3U; ++slot) {
-            if (count > top[slot].count) {
-                for (size_t shift = 2U; shift > slot; --shift) {
-                    top[shift] = top[shift - 1U];
-                }
-                top[slot].value = static_cast<uint8_t>(rawValue);
-                top[slot].count = count;
-                break;
-            }
-        }
-    }
-}
-
-void formatLeaf120TopValues(const uint32_t* counts, char* out, size_t outSize)
-{
-    if (outSize == 0U) {
-        return;
-    }
-
-    out[0] = '\0';
-    Leaf120TopValue top[3];
-    findTopLeaf120Values(counts, top);
-    if (top[0].count == 0U) {
-        snprintf(out, outSize, "none");
-        return;
-    }
-
-    size_t used = 0U;
-    for (size_t i = 0U; i < 3U && top[i].count > 0U; ++i) {
-        const int written = snprintf(out + used,
-                                     outSize - used,
-                                     (i == 0U) ? "0x%02X:%lu" : ",0x%02X:%lu",
-                                     static_cast<unsigned>(top[i].value),
-                                     static_cast<unsigned long>(top[i].count));
-        if (written <= 0) {
-            break;
-        }
-        const size_t advanced = static_cast<size_t>(written);
-        if (advanced >= (outSize - used)) {
-            used = outSize - 1U;
-            break;
-        }
-        used += advanced;
-    }
 }
 
 void formatCanPayloadHex(const uint8_t* data, uint8_t len, char* out, size_t outSize)
@@ -1954,7 +1632,7 @@ constexpr uint8_t kKpPotPin = 6;       // swapped with massflow per latest wirin
 constexpr uint8_t kMassflowPin = 8;    // kept off GPIO5 to avoid CAN RX conflict
 constexpr uint8_t kLambdaPin = 7;      // ADC1_CH6
 constexpr uint8_t kLoadCellPin = 32;   // Load-cell analog input
-// Drum RPM is derived from tachogen Ã— (1/virtGearRatio)
+// Drum RPM is derived from tachogen × (1/virtGearRatio)
 
 static float kpPotFilteredAdc = -1.0f;
 static float lastAppliedKp = -1.0f;
@@ -2540,7 +2218,7 @@ float computeAirDensityKgM3(float tempC, float pressureHpa, float humidityPct)
     const float Pv   = (humidityPct / 100.0f) * Psat;  // partial vapour pressure, hPa
     const float Pd   = pressureHpa - Pv;               // dry-air partial pressure, hPa
     const float T_K  = tempC + 273.15f;
-    // Ideal gas: Ï = Pd/(Rd*T) + Pv/(Rv*T)
+    // Ideal gas: ρ = Pd/(Rd*T) + Pv/(Rv*T)
     const float Pd_Pa = Pd * 100.0f;
     const float Pv_Pa = Pv * 100.0f;
     const float rho = (Pd_Pa / (287.058f * T_K)) + (Pv_Pa / (461.495f * T_K));
@@ -2895,7 +2573,7 @@ void updateDyno(MetaSense::Telemetry& t, float dtSec)
             ? MetaSense::Settings::virtGearRatio
             : 1.0f;
 
-        // Angular acceleration Î± = dÏ‰/dt, lightly filtered
+        // Angular acceleration α = dω/dt, lightly filtered
         float alpha = 0.0f;
         if (dtSec > 0.001f) {
             alpha = lpFilter(0.0f, (omegaDrum - omegaPrev) / dtSec,
@@ -2946,14 +2624,14 @@ void updateDyno(MetaSense::Telemetry& t, float dtSec)
         t.brakeTorqueNm = rawBrakeTorqueNm;
 
         // --- Climate correction: normalise torque/power to standard conditions ---
-        // Reference: 1013.25 hPa, 20 Â°C, 0 % RH  (Ï_ref â‰ˆ 1.2041 kg/mÂ³)
+        // Reference: 1013.25 hPa, 20 °C, 0 % RH  (ρ_ref ≈ 1.2041 kg/m³)
         const float rhoActual = computeAirDensityKgM3(ambientTempC, ambientPressureHpa, ambientHumidityPct);
         const float rhoRef    = computeAirDensityKgM3(20.0f, 1013.25f, 0.0f);
         t.climateCF = (rhoActual > 0.3f) ? (rhoRef / rhoActual) : 1.0f;
         t.torqueNm      *= t.climateCF;
         t.brakeTorqueNm *= t.climateCF;
 
-        // P(W) = T(Nm) * Ï‰(rad/s) = T * rpm * 2Ï€ / 60
+        // P(W) = T(Nm) * ω(rad/s) = T * rpm * 2π / 60
         // Correct for drivetrain losses to get crank power.
         const float eff = MetaSense::Settings::drivetrainEff / 100.0f;
         const float omegaEngine = t.rpm * (2.0f * 3.14159265f / 60.0f);
@@ -3205,16 +2883,7 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             "\"hw_rb_plus\":%d,"
             "\"hw_rb_minus\":%d,"
             "\"hw_ssr\":%d,"
-            "\"hw_state\":\"%s\","
-            "\"leaf_11a_frames\":%d,"
-            "\"leaf_11a_age_ms\":%lu,"
-            "\"leaf_11a_gear\":%d,"
-            "\"leaf_11a_car_onoff\":%d,"
-            "\"leaf_11a_eco\":%d,"
-            "\"leaf_11a_heartbeat\":%d,"
-            "\"leaf_11a_mux\":%d,"
-            "\"leaf_11a_button\":%d,"
-            "\"leaf_11a_raw_b0b7\":\"%02X %02X %02X %02X %02X %02X %02X %02X\""
+            "\"hw_state\":\"%s\""
             "}",
             data.rpm,
             data.drumRpm,
@@ -3283,24 +2952,7 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             MetaSense::HardwareOutputStateMachine::isRbPlusActive() ? 1 : 0,
             MetaSense::HardwareOutputStateMachine::isRbMinusActive() ? 1 : 0,
             MetaSense::HardwareOutputStateMachine::isSsrActive() ? 1 : 0,
-            MetaSense::HardwareOutputStateMachine::stateName(),  // hw_state (INIT/START/IDLE/MOTOR/DYNO)
-            // 0x11A RX frame data
-            (int)MetaSense::CANBus::stats().rx11aFrames,  // leaf_11a_frames
-            now - MetaSense::CANBus::stats().last11aMs,  // leaf_11a_age_ms
-            (int)((MetaSense::CANBus::stats().last11aData[0] >> 4U) & 0x0FU),  // leaf_11a_gear
-            (int)((MetaSense::CANBus::stats().last11aData[1] >> 5U) & 0x07U),  // leaf_11a_car_onoff
-            (int)((MetaSense::CANBus::stats().last11aData[1] >> 4U) & 0x01U),  // leaf_11a_eco
-            (int)MetaSense::CANBus::stats().last11aData[3],  // leaf_11a_heartbeat
-            (int)MetaSense::CANBus::stats().last11aData[6],  // leaf_11a_mux
-            (int)MetaSense::CANBus::stats().last11aData[2],  // leaf_11a_button
-            MetaSense::CANBus::stats().last11aData[0],  // leaf_11a_raw_b0
-            MetaSense::CANBus::stats().last11aData[1],  // leaf_11a_raw_b1
-            MetaSense::CANBus::stats().last11aData[2],  // leaf_11a_raw_b2
-            MetaSense::CANBus::stats().last11aData[3],  // leaf_11a_raw_b3
-            MetaSense::CANBus::stats().last11aData[4],  // leaf_11a_raw_b4
-            MetaSense::CANBus::stats().last11aData[5],  // leaf_11a_raw_b5
-            MetaSense::CANBus::stats().last11aData[6],  // leaf_11a_raw_b6
-            MetaSense::CANBus::stats().last11aData[7]   // leaf_11a_raw_b7
+            MetaSense::HardwareOutputStateMachine::stateName()  // hw_state (INIT/START/IDLE/MOTOR/DYNO)
         );
 #endif  // METASENSE_CAN_MONITOR_MODE
         
@@ -3322,13 +2974,13 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             Serial.printf("[WARNING] MG error codes: 0x%02X\n", leafFb.mg_error_codes);
         }
         if (data.leaf_invTempC > 80.0f) {
-            Serial.printf("[WARNING] Inverter temperature high: %.1fÂ°C\n", data.leaf_invTempC);
+            Serial.printf("[WARNING] Inverter temperature high: %.1f°C\n", data.leaf_invTempC);
         }
         if (data.leaf_statorTempC > 150.0f) {
-            Serial.printf("[WARNING] Stator temperature high: %.1fÂ°C\n", data.leaf_statorTempC);
+            Serial.printf("[WARNING] Stator temperature high: %.1f°C\n", data.leaf_statorTempC);
         }
         if (data.leaf_coolantTempC > 95.0f) {
-            Serial.printf("[WARNING] Coolant temperature high: %.1fÂ°C\n", data.leaf_coolantTempC);
+            Serial.printf("[WARNING] Coolant temperature high: %.1f°C\n", data.leaf_coolantTempC);
         }
     }
 }
@@ -3842,15 +3494,6 @@ void updateCanStatus(bool ready, bool fault, bool warning, bool limp)
     lastCanLeafAnyUpdate = lastCanStatusUpdate;
 }
 
-void buildLeaf120ShadowFrame(float torqueDemandNm,
-                             bool readyBit,
-                             bool hvOkBit,
-                             bool brakeBit,
-                             bool gearDriveBit,
-                             uint8_t (&out)[4]);
-
-uint8_t crc8Lsb120(const uint8_t* data, uint8_t len);
-
 struct Leaf11aFrameFields {
     uint8_t joystickGearPosition = 0U;
     uint8_t ecoSelected = 0U;
@@ -3911,22 +3554,7 @@ bool sendLeafKeepAlive11a(uint32_t nowMs, bool forceImmediate = false, uint8_t m
         return false;
     }
 
-    const MetaSense::CANBus::Stats& canStats = MetaSense::CANBus::stats();
-    if (!s_leaf11aMuxTemplatesLocked && canStats.last11aLen >= 8U &&
-        canStats.rx11aFrames != s_leaf11aMuxTemplateLastRxFrames) {
-        const uint8_t rxMuxSel = static_cast<uint8_t>(canStats.last11aData[6] & 0x03U);
-        const uint8_t rxMuxBit = static_cast<uint8_t>(1U << rxMuxSel);
-        // While unlocked, always refresh the active slot from live TVCU RX.
-        memcpy(s_leaf11aMuxTemplateBySel[rxMuxSel], canStats.last11aData, 8U);
-        s_leaf11aMuxSeenMask |= rxMuxBit;
-        s_leaf11aMuxRxSeenMask |= rxMuxBit;
-        if (s_leaf11aMuxRxSeenMask == 0x0FU) {
-            s_leaf11aMuxTemplatesLocked = true;
-        }
-        s_leaf11aMuxTemplateLastRxFrames = canStats.rx11aFrames;
-    }
-
-    if (!s_leaf11aMuxTemplatesLocked && s_leaf11aMuxSeenMask == 0U) {
+    if (s_leaf11aMuxSeenMask == 0U) {
         return false;
     }
 
@@ -3977,11 +3605,11 @@ void initLeaf11aBootstrapTemplates()
         }
     }
 
-    // Bootstrap is a fallback seed. Keep learning enabled so live TVCU frames
-    // can replace templates slot-by-slot and then lock after all 4 are seen.
+    // Bootstrap seeds all 4 mux template slots with fixed defaults from CanConfig.h.
+    // (Previously these could be refined by learning from received TVCU 0x11A
+    // frames, but 0x11A is no longer a processed RX frame, so templates are
+    // fixed at bootstrap.)
     s_leaf11aMuxSeenMask = 0x0FU;
-    s_leaf11aMuxRxSeenMask = 0U;
-    s_leaf11aMuxTemplatesLocked = false;
 }
 
 bool sendLeafTorqueCommand1d4(float torqueDemandNm,
@@ -4027,23 +3655,13 @@ bool sendLeafTorqueCommand1d4(float torqueDemandNm,
         METASENSE_LEAF_1D4_TEMPLATE_B6,
         METASENSE_LEAF_1D4_TEMPLATE_B7
     };
-    uint8_t ringBaseData[8] = {0U};
-    uint8_t ringBaseLen = 0U;
-    bool usedRingBase = false;
-    if (MetaSense::CANBus::get1d4RingFrame(0U, ringBaseData, &ringBaseLen) && ringBaseLen >= 8U) {
-        memcpy(data, ringBaseData, 8U);
-        usedRingBase = true;
-    }
-
     patchLeaf1d4TorqueFieldMotorola23_12(data, fields.torqueDemandRaw);
     setIntelUnsigned(data, 8U, 34U, 1U, fields.hvStatus ? 1U : 0U);
     setIntelUnsigned(data, 8U, 46U, 1U, fields.rbPlus ? 1U : 0U);
     setIntelUnsigned(data, 8U, 38U, 2U, static_cast<uint32_t>(fields.cmdClock & 0x03U));
-    // Keep fixed template header bytes explicit only for template fallback mode.
-    if (!usedRingBase) {
-        data[0] = METASENSE_LEAF_1D4_TEMPLATE_B0;
-        data[1] = METASENSE_LEAF_1D4_TEMPLATE_B1;
-    }
+    // Fixed template header bytes (0x1D4 ring buffer subsystem was removed - always template mode).
+    data[0] = METASENSE_LEAF_1D4_TEMPLATE_B0;
+    data[1] = METASENSE_LEAF_1D4_TEMPLATE_B1;
     data[7] = computeLeaf1d4CrcConformant(data);
 
     const int16_t torqueRaw = fields.torqueDemandRaw;
@@ -4108,211 +3726,6 @@ bool sendLeafTorqueCommand1d4AndKeepAlive11a(float torqueDemandNm,
 bool sendLeafTorqueCommand1d4FinalZero()
 {
     return sendLeafTorqueCommand1d4(0.0f, false, false, false, false);
-}
-
-uint8_t crc8Lsb120(const uint8_t* data, uint8_t len)
-{
-    uint8_t crc = 0x00U;
-    for (uint8_t i = 0U; i < len; ++i) {
-        crc ^= data[i];
-        for (uint8_t bit = 0U; bit < 8U; ++bit) {
-            const bool lsb = (crc & 0x01U) != 0U;
-            crc >>= 1;
-            if (lsb) {
-                crc ^= 0xB8U;
-            }
-        }
-    }
-    return crc;
-}
-
-enum class Leaf120ShadowStateClass : uint8_t {
-    Neutral = 0,
-    Idle = 1,
-    Motor = 2,
-    Brake = 3,
-    Reverse = 4,
-};
-
-const char* leaf120ShadowStateClassName(Leaf120ShadowStateClass stateClass)
-{
-    switch (stateClass) {
-    case Leaf120ShadowStateClass::Neutral:
-        return "NEUTRAL";
-    case Leaf120ShadowStateClass::Idle:
-        return "IDLE";
-    case Leaf120ShadowStateClass::Motor:
-        return "MOTOR";
-    case Leaf120ShadowStateClass::Brake:
-        return "BRAKE";
-    case Leaf120ShadowStateClass::Reverse:
-        return "REVERSE";
-    }
-    return "IDLE";
-}
-
-constexpr uint8_t kLeaf120StateClassCount = 5U;
-constexpr uint8_t kLeaf120SlopeClassCount = 4U;
-
-uint8_t leaf120ShadowStateClassIndex(Leaf120ShadowStateClass stateClass)
-{
-    switch (stateClass) {
-    case Leaf120ShadowStateClass::Neutral:
-        return 0U;
-    case Leaf120ShadowStateClass::Idle:
-        return 1U;
-    case Leaf120ShadowStateClass::Motor:
-        return 2U;
-    case Leaf120ShadowStateClass::Brake:
-        return 3U;
-    case Leaf120ShadowStateClass::Reverse:
-        return 4U;
-    }
-    return 1U;
-}
-
-uint8_t topByteFromCounts(const uint32_t* counts, uint32_t& outCount)
-{
-    uint8_t topValue = 0U;
-    outCount = 0U;
-    if (counts == nullptr) {
-        return topValue;
-    }
-
-    for (uint16_t i = 0U; i < 256U; ++i) {
-        if (counts[i] > outCount) {
-            outCount = counts[i];
-            topValue = static_cast<uint8_t>(i);
-        }
-    }
-    return topValue;
-}
-
-const char* leaf120ShadowStrategyName()
-{
-#if METASENSE_LEAF_120_SHADOW_STATE_STRATEGY == 1
-    return "torque_sign";
-#elif METASENSE_LEAF_120_SHADOW_STATE_STRATEGY == 2
-    return "quadrant";
-#else
-    return "brake_flag";
-#endif
-}
-
-Leaf120ShadowStateClass resolveLeaf120ShadowState(float torqueDemandNm,
-                                                  float rpm,
-                                                  bool brakeIn,
-                                                  bool gearIn,
-                                                  bool& brakeOut,
-                                                  bool& gearOut)
-{
-    if (METASENSE_LEAF_120_SHADOW_NEUTRAL_STARTUP_MS > 0U &&
-        millis() < METASENSE_LEAF_120_SHADOW_NEUTRAL_STARTUP_MS) {
-        brakeOut = false;
-        gearOut = false;
-        return Leaf120ShadowStateClass::Neutral;
-    }
-
-    // Global neutral rule: zero/near-zero torque is a valid Neutral command.
-    const float tqDeadband = METASENSE_LEAF_120_SHADOW_TORQUE_DEADBAND_NM;
-    if (fabsf(torqueDemandNm) <= tqDeadband) {
-        brakeOut = false;
-        gearOut = false;
-        return Leaf120ShadowStateClass::Neutral;
-    }
-
-#if METASENSE_LEAF_120_SHADOW_STATE_STRATEGY == 1
-    if (torqueDemandNm > tqDeadband) {
-        brakeOut = false;
-        gearOut = true;
-        return Leaf120ShadowStateClass::Motor;
-    }
-    if (torqueDemandNm < -tqDeadband) {
-        brakeOut = true;
-        gearOut = true;
-        return Leaf120ShadowStateClass::Brake;
-    }
-
-    brakeOut = false;
-    gearOut = false;
-    return Leaf120ShadowStateClass::Neutral;
-#elif METASENSE_LEAF_120_SHADOW_STATE_STRATEGY == 2
-    const float rpmDeadband = METASENSE_LEAF_120_SHADOW_REVERSE_RPM_DEADBAND;
-
-    if (torqueDemandNm > tqDeadband) {
-        brakeOut = false;
-        gearOut = true;
-        return Leaf120ShadowStateClass::Motor;
-    }
-
-    // Negative torque branch.
-    if (rpm < -rpmDeadband) {
-        // Provisional reverse mapping candidate: BRAKE=1, GEAR=0.
-        brakeOut = true;
-        gearOut = false;
-        return Leaf120ShadowStateClass::Reverse;
-    }
-
-    // Regen/brake branch when rpm is positive or near zero.
-    brakeOut = true;
-    gearOut = true;
-    return Leaf120ShadowStateClass::Brake;
-#else
-    brakeOut = brakeIn;
-    gearOut = gearIn;
-    if (!gearOut) {
-        return Leaf120ShadowStateClass::Neutral;
-    }
-    if (brakeOut) {
-        return Leaf120ShadowStateClass::Brake;
-    }
-
-    return Leaf120ShadowStateClass::Motor;
-#endif
-}
-
-void buildLeaf120ShadowFrame(float torqueDemandNm,
-                             bool readyBit,
-                             bool hvOkBit,
-                             bool brakeBit,
-                             bool gearDriveBit,
-                             uint8_t (&out)[4])
-{
-    const float torqueClamped = constrain(torqueDemandNm, -300.0f, 300.0f);
-    const float rawFloat = (torqueClamped - METASENSE_LEAF_120_CMD_BASE_OFFSET_NM) /
-                           METASENSE_LEAF_120_CMD_BASE_SLOPE;
-    long rawLong = lroundf(rawFloat);
-    if (rawLong > 32767L) {
-        rawLong = 32767L;
-    } else if (rawLong < -32768L) {
-        rawLong = -32768L;
-    }
-    const int16_t torqueRawBe = static_cast<int16_t>(rawLong);
-    out[0] = static_cast<uint8_t>((static_cast<uint16_t>(torqueRawBe) >> 8) & 0xFFU);
-    out[1] = static_cast<uint8_t>(static_cast<uint16_t>(torqueRawBe) & 0xFFU);
-
-    // Encode control-state bits into the low nibble so the outbound 0x120 frame
-    // carries live readiness/HV/brake/gear context instead of a constant state.
-    uint8_t stateNibble = 0U;
-    if (readyBit) {
-        stateNibble |= 0x01U;
-    }
-    if (hvOkBit) {
-        stateNibble |= 0x02U;
-    }
-    if (brakeBit) {
-        stateNibble |= 0x04U;
-    }
-    if (gearDriveBit) {
-        stateNibble |= 0x08U;
-    }
-    out[2] = static_cast<uint8_t>(stateNibble & 0x0FU);
-
-    static const uint8_t k120ResidueByState8[8] = {
-        0x00U, 0xE1U, 0x47U, 0xA6U, 0x7AU, 0x9BU, 0x3DU, 0xDCU
-    };
-    const uint8_t baseCrc = crc8Lsb120(out, 3U);
-    out[3] = static_cast<uint8_t>(baseCrc ^ k120ResidueByState8[out[2] & 0x07U]);
 }
 
 void logLeaf1d4ShadowFrame(uint32_t nowMs,
@@ -4394,15 +3807,8 @@ static void updateLeaf1d4PayloadStateMachine(uint32_t nowMs)
         METASENSE_LEAF_1D4_TEMPLATE_B7
     };
 
-    // Prefer live sniffed 0x1D4 frame as base to maintain inverter alignment
-    uint8_t ringBaseData[8] = {0U};
-    uint8_t ringBaseLen = 0U;
-    bool usedRingBase = false;
-    if (MetaSense::CANBus::get1d4RingFrame(0U, ringBaseData, &ringBaseLen) && ringBaseLen >= 8U) {
-        memcpy(data, ringBaseData, 8U);
-        usedRingBase = true;
-    }
-
+    // Frame base always uses fixed template header bytes (0x1D4 ring buffer
+    // subsystem, which sniffed a live frame as base, was removed as dead code).
     // Encode selected torque value into frame
     const int16_t torqueRaw = encodeLeaf1d4TorqueRaw(torqueClamped);
     patchLeaf1d4TorqueFieldMotorola23_12(data, torqueRaw);
@@ -4418,11 +3824,10 @@ static void updateLeaf1d4PayloadStateMachine(uint32_t nowMs)
     // Note: Clock bits (38-39) and CRC will be updated by the 10ms TX task before sending
     // This ensures CRC and clock are fresh for EVERY transmission, not just every 100ms
     
-    // Keep template header bytes only if not using live sniffed frame
-    if (!usedRingBase) {
-        data[0] = METASENSE_LEAF_1D4_TEMPLATE_B0;
-        data[1] = METASENSE_LEAF_1D4_TEMPLATE_B1;
-    }
+    // Keep template header bytes explicit (data[] was already seeded with
+    // template values above, this reasserts bytes 0-1 for clarity).
+    data[0] = METASENSE_LEAF_1D4_TEMPLATE_B0;
+    data[1] = METASENSE_LEAF_1D4_TEMPLATE_B1;
 
     // Force bytes 5 and 6 to always use template values (static fields)
     // Byte 4 (counter) is updated dynamically every frame in leafTxPacerTask
@@ -4483,7 +3888,7 @@ void leafTxPacerTask(void* /*param*/)
         s_leaf1d4RollingCounter = static_cast<uint8_t>((s_leaf1d4RollingCounter + 1U) & 0x03U);
 
         // Update byte 4 with rolling counter - lookup table based on DBC HCM_CLOCK signal
-        // Counter values 0,1,2,3 â†’ upper nibbles 8,C,0,4 â†’ byte values 0x87, 0xC7, 0x07, 0x47
+        // Counter values 0,1,2,3 → upper nibbles 8,C,0,4 → byte values 0x87, 0xC7, 0x07, 0x47
         const uint8_t hcmClock = static_cast<uint8_t>(s_leaf1d4RollingCounter & 0x03U);
         static const uint8_t COUNTER_NIBBLE_MAP[] = {0x8U, 0xCU, 0x0U, 0x4U};
         s_leaf1d4PayloadCachedFrameData[4] = static_cast<uint8_t>((COUNTER_NIBBLE_MAP[hcmClock] << 4) | 0x7U);
@@ -4572,9 +3977,6 @@ void begin()
     lastLeaf11aTxMs = 0;
     s_leaf11aMuxTxSeq = 0U;
     s_leaf11aMuxSeenMask = 0U;
-    s_leaf11aMuxRxSeenMask = 0U;
-    s_leaf11aMuxTemplatesLocked = false;
-    s_leaf11aMuxTemplateLastRxFrames = 0U;
     memset(s_leaf11aMuxTemplateBySel, 0, sizeof(s_leaf11aMuxTemplateBySel));
 #if METASENSE_LEAF_11A_TEMPLATE_BOOTSTRAP_ENABLE
     initLeaf11aBootstrapTemplates();
@@ -4666,9 +4068,9 @@ void begin()
     }
 
     // Digital inputs
-    pinMode(MetaSense::Globals::kRampSwitchPin, INPUT_PULLDOWN);  // SW switch â€“ active HIGH
-    pinMode(MetaSense::Globals::kStartRequestPin, INPUT_PULLDOWN); // Start-request switch â€“ active HIGH
-    pinMode(MetaSense::Globals::kRbPlusInputPin, INPUT_PULLDOWN); // VCU ready â€“ active HIGH
+    pinMode(MetaSense::Globals::kRampSwitchPin, INPUT_PULLDOWN);  // SW switch – active HIGH
+    pinMode(MetaSense::Globals::kStartRequestPin, INPUT_PULLDOWN); // Start-request switch – active HIGH
+    pinMode(MetaSense::Globals::kRbPlusInputPin, INPUT_PULLDOWN); // VCU ready – active HIGH
     prevSwState = (digitalRead(MetaSense::Globals::kRampSwitchPin) == HIGH);
     prevStartRequestState = (digitalRead(MetaSense::Globals::kStartRequestPin) == HIGH);
     const int vcuRbPlusLevel = digitalRead(MetaSense::Globals::kRbPlusInputPin);
@@ -5232,634 +4634,6 @@ void loop()
     const bool prechargeActiveForLeafTx = MetaSense::HardwareOutputStateMachine::isPrechargeActive();
     const bool prechargeSucceededForLeafTx = MetaSense::HardwareOutputStateMachine::isPrechargeSucceeded();
     const LeafInvFeedback& leafFbDiag = MetaSense::CANBus::feedback();
-#if defined(METASENSE_LEAF_VCM_DIAGNOSTICS) && (METASENSE_LEAF_VCM_DIAGNOSTICS != 0)
-    struct CorrAcc {
-        uint32_t n;
-        double sx;
-        double sy;
-        double sxx;
-        double syy;
-        double sxy;
-    };
-    auto corrUpdate = [](CorrAcc& c, double x, double y) {
-        c.n += 1U;
-        c.sx += x;
-        c.sy += y;
-        c.sxx += x * x;
-        c.syy += y * y;
-        c.sxy += x * y;
-    };
-    auto corrValue = [](const CorrAcc& c) -> float {
-        if (c.n < 8U) {
-            return 0.0f;
-        }
-        const double n = static_cast<double>(c.n);
-        const double num = (n * c.sxy) - (c.sx * c.sy);
-        const double denX = (n * c.sxx) - (c.sx * c.sx);
-        const double denY = (n * c.syy) - (c.sy * c.sy);
-        if (denX <= 1e-9 || denY <= 1e-9) {
-            return 0.0f;
-        }
-        const double den = sqrt(denX * denY);
-        if (den <= 1e-9) {
-            return 0.0f;
-        }
-        return static_cast<float>(num / den);
-    };
-    auto linSlope = [](const CorrAcc& c) -> float {
-        if (c.n < 8U) {
-            return 0.0f;
-        }
-        const double n = static_cast<double>(c.n);
-        const double denX = (n * c.sxx) - (c.sx * c.sx);
-        if (fabs(denX) <= 1e-9) {
-            return 0.0f;
-        }
-        const double num = (n * c.sxy) - (c.sx * c.sy);
-        return static_cast<float>(num / denX);
-    };
-    auto linIntercept = [](const CorrAcc& c, float slope) -> float {
-        if (c.n == 0U) {
-            return 0.0f;
-        }
-        return static_cast<float>((c.sy - static_cast<double>(slope) * c.sx) /
-                                  static_cast<double>(c.n));
-    };
-
-    static CorrAcc s_corr120Be01Torque = {0U, 0.0, 0.0, 0.0, 0.0, 0.0};
-    static CorrAcc s_corr120Le01Torque = {0U, 0.0, 0.0, 0.0, 0.0, 0.0};
-    static uint32_t s_corrLast120Frames = 0U;
-    static bool s_corrTorqueEmaInit = false;
-    static float s_corrTorqueEmaNm = 0.0f;
-    static uint32_t s_corrFitAcceptedN = 0U;
-    static uint32_t s_corrFitZeroHoldSkipN = 0U;
-    static bool s_corrFitFrozenNow = false;
-    static uint32_t s_corrLast1daFrames = 0U;
-    static uint32_t s_corrLast1d4SniffFrames = 0U;
-    static uint32_t s_tqCmpAllN = 0U;
-    static double s_tqCmpAllAbsErrSum = 0.0;
-    static double s_tqCmpAllErrSqSum = 0.0;
-    static uint32_t s_tqCmpLowN = 0U;
-    static double s_tqCmpLowAbsErrSum = 0.0;
-    static double s_tqCmpLowErrSqSum = 0.0;
-    static uint32_t s_tqCmpAllClipN = 0U;
-    static double s_tqCmpAllClipAbsErrSum = 0.0;
-    static double s_tqCmpAllClipErrSqSum = 0.0;
-    static uint32_t s_tqCmpLowClipN = 0U;
-    static double s_tqCmpLowClipAbsErrSum = 0.0;
-    static double s_tqCmpLowClipErrSqSum = 0.0;
-    static uint32_t s_tqCmpStateN[3] = {0U, 0U, 0U};
-    static double s_tqCmpStateAbsErrSum[3] = {0.0, 0.0, 0.0};
-    static double s_tqCmpStateErrSqSum[3] = {0.0, 0.0, 0.0};
-    static uint32_t s_tqCmpStateClipN[3] = {0U, 0U, 0U};
-    static double s_tqCmpStateClipAbsErrSum[3] = {0.0, 0.0, 0.0};
-    static double s_tqCmpStateClipErrSqSum[3] = {0.0, 0.0, 0.0};
-    static bool s_cmdZeroBiasInit = false;
-    static float s_cmdZeroBiasNm = 0.0f;
-    static uint32_t s_cmdZeroBiasN = 0U;
-
-    const MetaSense::CANBus::Stats& canStatsDiag = MetaSense::CANBus::stats();
-
-    if (canStatsDiag.rx1daFrames != s_corrLast1daFrames) {
-        const uint32_t crc1daCandidateMask = computeLeaf1daCrcCandidateMask(leafFbDiag.id1da_raw, 8U);
-        ++leaf1daCrcSamples;
-        for (uint8_t bit = 0U; bit < kLeaf1daCrcCandidateCount; ++bit) {
-            if ((crc1daCandidateMask & static_cast<uint32_t>(1U << bit)) != 0U) {
-                ++leaf1daCrcCandidateMatches[bit];
-            }
-        }
-
-        uint8_t crc1daResidues[kLeaf1daResidueCandidateCount] = {0U};
-        computeLeaf1daResidues(leafFbDiag.id1da_raw, 8U, crc1daResidues);
-        const uint8_t crc1daClock = static_cast<uint8_t>(leafFbDiag.id1da_raw[6] & 0x03U);
-        ++leaf1daResidueSamples;
-        ++leaf1daClockSamples[crc1daClock];
-        for (uint8_t candidate = 0U; candidate < kLeaf1daResidueCandidateCount; ++candidate) {
-            ++leaf1daResidueCounts[candidate][crc1daResidues[candidate]];
-            ++leaf1daResidueByClock[candidate][crc1daClock][crc1daResidues[candidate]];
-        }
-
-        const uint8_t crc1daRx = leafFbDiag.id1da_raw[7];
-        const uint8_t crc1daIdLo = MetaSense::LeafCRC::computeBaseIdLo(0xDAU, leafFbDiag.id1da_raw);
-        const uint8_t crc1daIdLoResidue = static_cast<uint8_t>(crc1daRx ^ crc1daIdLo);
-        const uint32_t idLoResidueCount = ++leaf1daIdLoResidueByClock[crc1daClock][crc1daIdLoResidue];
-        if (idLoResidueCount > leaf1daIdLoTopResidueCountByClock[crc1daClock]) {
-            leaf1daIdLoTopResidueCountByClock[crc1daClock] = idLoResidueCount;
-            leaf1daIdLoTopResidueByClock[crc1daClock] = crc1daIdLoResidue;
-        }
-        const uint8_t crc1daClockCorrected = computeApprovedLeafFrameCrc(0xDAU, leafFbDiag.id1da_raw);
-        if (crc1daClockCorrected == crc1daRx) {
-            ++leaf1daIdLoClockCorrectedMatches;
-        }
-
-        const uint32_t autosar1daMask = computeLeaf1daAutosarCandidateMask(leafFbDiag.id1da_raw, 8U);
-        ++leaf1daAutosarSamples;
-        for (uint8_t bit = 0U; bit < kLeaf1daAutosarCandidateCount; ++bit) {
-            if ((autosar1daMask & static_cast<uint32_t>(1U << bit)) != 0U) {
-                ++leaf1daAutosarCandidateMatches[bit];
-            }
-        }
-
-        s_corrLast1daFrames = canStatsDiag.rx1daFrames;
-    }
-
-    #if !METASENSE_LEAF_1D4_RAW_SNIFF_ONLY
-    if (canStatsDiag.rx1d4SniffFrames != s_corrLast1d4SniffFrames && canStatsDiag.last1d4SniffLen >= 8U) {
-        const uint8_t crc1d4Clock = static_cast<uint8_t>(extractIntelUnsigned(canStatsDiag.last1d4SniffData,
-                                                                              7U,
-                                                                              38U,
-                                                                              2U) & 0x03U);
-        const uint8_t crc1d4Rx = canStatsDiag.last1d4SniffData[7];
-        const uint8_t crc1d4IdLo = MetaSense::LeafCRC::computeBaseIdLo(0xD4U, canStatsDiag.last1d4SniffData);
-        const uint8_t crc1d4IdLoResidue = static_cast<uint8_t>(crc1d4Rx ^ crc1d4IdLo);
-        const uint32_t idLoResidueCount = ++leaf1d4IdLoResidueByClock[crc1d4Clock][crc1d4IdLoResidue];
-        if (idLoResidueCount > leaf1d4IdLoTopResidueCountByClock[crc1d4Clock]) {
-            leaf1d4IdLoTopResidueCountByClock[crc1d4Clock] = idLoResidueCount;
-            leaf1d4IdLoTopResidueByClock[crc1d4Clock] = crc1d4IdLoResidue;
-        }
-        const uint8_t crc1d4ClockCorrected = static_cast<uint8_t>(crc1d4IdLo ^ leaf1d4IdLoTopResidueByClock[crc1d4Clock]);
-        if (crc1d4ClockCorrected == crc1d4Rx) {
-            ++leaf1d4IdLoClockCorrectedMatches;
-        }
-
-        ++leaf1d4CrcSamples;
-
-        s_corrLast1d4SniffFrames = canStatsDiag.rx1d4SniffFrames;
-    }
-    #endif
-
-    if (s_leafPreStatusLastMs == 0U || (now - s_leafPreStatusLastMs) >= CAN_PRE_DIAG_LOG_PERIOD_MS) {
-        const unsigned long feedbackAgeMs = static_cast<unsigned long>(elapsedMsSafe(now, lastCanLeafAnyUpdate));
-        const unsigned long id1daAgeMs = static_cast<unsigned long>(elapsedMsSafe(now, leafFbDiag.rpm_update_ms));
-        const unsigned long id1d4CmdAgeMs = static_cast<unsigned long>(elapsedMsSafe(now, canStatsDiag.last1d4CmdMs));
-        const unsigned long id1dbAgeMs = static_cast<unsigned long>(elapsedMsSafe(now, leafFbDiag.torque_update_ms));
-        const unsigned long id1dcAgeMs = static_cast<unsigned long>(elapsedMsSafe(now, leafFbDiag.temps_update_ms));
-        const unsigned long raw11aAgeMs = static_cast<unsigned long>(elapsedMsSafe(now, canStatsDiag.last11aMs));
-        const unsigned long raw120AgeMs = static_cast<unsigned long>(elapsedMsSafe(now, canStatsDiag.last120Ms));
-        const unsigned long unkAgeMs = static_cast<unsigned long>(elapsedMsSafe(now, canStatsDiag.lastUnknownMs));
-        const unsigned long legacy55xCompat120Count = static_cast<unsigned long>(canStatsDiag.rx120Frames);
-        const unsigned long legacy55xCompat120AgeMs = raw120AgeMs;
-        const Leaf120CommandDecode id120Decoded = decodeLeaf120Command(canStatsDiag.last120Data,
-                                        canStatsDiag.last120Len);
-        const Leaf1d4CommandDecode id1d4Cmd = decodeLeaf1d4Command(canStatsDiag.last1d4CmdData,
-                                                                    canStatsDiag.last1d4CmdLen);
-    #if METASENSE_LEAF_1D4_SNIFF_RX_ENABLED
-        const Leaf1d4CommandDecode id1d4Sniff = decodeLeaf1d4Command(canStatsDiag.last1d4SniffData,
-                                                                      canStatsDiag.last1d4SniffLen);
-        if (id1d4Sniff.valid) {
-            Serial.printf("[VCM-1D4-SNIFF] n=%lu age=%lu tqReq=%.2fNm(raw=%d) hv=%u rplus=%u clk=%u crc=0x%02X data=%02X %02X %02X %02X %02X %02X %02X %02X\n",
-                          static_cast<unsigned long>(canStatsDiag.rx1d4SniffFrames),
-                          static_cast<unsigned long>(elapsedMsSafe(now, canStatsDiag.last1d4SniffMs)),
-                          id1d4Sniff.motorAmpTorqueNm,
-                          static_cast<int>(id1d4Sniff.motorAmpTorqueRaw),
-                          id1d4Sniff.hvSupplyStatus ? 1U : 0U,
-                          id1d4Sniff.relayPlusStatus ? 1U : 0U,
-                          static_cast<unsigned>(id1d4Sniff.hcmClock),
-                          static_cast<unsigned>(id1d4Sniff.crc1d4),
-                          static_cast<unsigned>(canStatsDiag.last1d4SniffData[0]),
-                          static_cast<unsigned>(canStatsDiag.last1d4SniffData[1]),
-                          static_cast<unsigned>(canStatsDiag.last1d4SniffData[2]),
-                          static_cast<unsigned>(canStatsDiag.last1d4SniffData[3]),
-                          static_cast<unsigned>(canStatsDiag.last1d4SniffData[4]),
-                          static_cast<unsigned>(canStatsDiag.last1d4SniffData[5]),
-                          static_cast<unsigned>(canStatsDiag.last1d4SniffData[6]),
-                          static_cast<unsigned>(canStatsDiag.last1d4SniffData[7]));
-            Serial0.printf("[VCM-1D4-SNIFF] n=%lu age=%lu tqReq=%.2fNm(raw=%d) hv=%u rplus=%u clk=%u crc=0x%02X data=%02X %02X %02X %02X %02X %02X %02X %02X\n",
-                           static_cast<unsigned long>(canStatsDiag.rx1d4SniffFrames),
-                           static_cast<unsigned long>(elapsedMsSafe(now, canStatsDiag.last1d4SniffMs)),
-                           id1d4Sniff.motorAmpTorqueNm,
-                           static_cast<int>(id1d4Sniff.motorAmpTorqueRaw),
-                           id1d4Sniff.hvSupplyStatus ? 1U : 0U,
-                           id1d4Sniff.relayPlusStatus ? 1U : 0U,
-                           static_cast<unsigned>(id1d4Sniff.hcmClock),
-                           static_cast<unsigned>(id1d4Sniff.crc1d4),
-                           static_cast<unsigned>(canStatsDiag.last1d4SniffData[0]),
-                           static_cast<unsigned>(canStatsDiag.last1d4SniffData[1]),
-                           static_cast<unsigned>(canStatsDiag.last1d4SniffData[2]),
-                           static_cast<unsigned>(canStatsDiag.last1d4SniffData[3]),
-                           static_cast<unsigned>(canStatsDiag.last1d4SniffData[4]),
-                           static_cast<unsigned>(canStatsDiag.last1d4SniffData[5]),
-                           static_cast<unsigned>(canStatsDiag.last1d4SniffData[6]),
-                           static_cast<unsigned>(canStatsDiag.last1d4SniffData[7]));
-        } else {
-            Serial.printf("[VCM-1D4-SNIFF] n=%lu age=%lu len=%u (waiting for full 8-byte frame)\n",
-                          static_cast<unsigned long>(canStatsDiag.rx1d4SniffFrames),
-                          static_cast<unsigned long>(elapsedMsSafe(now, canStatsDiag.last1d4SniffMs)),
-                          static_cast<unsigned>(canStatsDiag.last1d4SniffLen));
-            Serial0.printf("[VCM-1D4-SNIFF] n=%lu age=%lu len=%u (waiting for full 8-byte frame)\n",
-                           static_cast<unsigned long>(canStatsDiag.rx1d4SniffFrames),
-                           static_cast<unsigned long>(elapsedMsSafe(now, canStatsDiag.last1d4SniffMs)),
-                           static_cast<unsigned>(canStatsDiag.last1d4SniffLen));
-        }
-#endif
-        const int16_t id120Sbe01ForCmd = id120Decoded.torqueDemandSignedBe;
-        const float beCorrNow = corrValue(s_corr120Be01Torque);
-        const bool useFitModelNow = (s_corr120Be01Torque.n >= METASENSE_LEAF_120_CMD_MIN_FIT_SAMPLES);
-        const float beSlopeNow = useFitModelNow
-                     ? linSlope(s_corr120Be01Torque)
-                     : METASENSE_LEAF_120_CMD_BASE_SLOPE;
-        const float beOffsetNow = useFitModelNow
-                      ? linIntercept(s_corr120Be01Torque, beSlopeNow)
-                      : METASENSE_LEAF_120_CMD_BASE_OFFSET_NM;
-        const float id120CmdEstNmNow = beOffsetNow + (beSlopeNow * static_cast<float>(id120Sbe01ForCmd));
-        const bool zeroCmdSample = (id120Sbe01ForCmd == 0) &&
-                                   (fabsf(leafFbDiag.rpm) <= 100.0f) &&
-                                   (fabsf(leafFbDiag.torque_nm) <= 0.10f);
-        if (zeroCmdSample) {
-            if (!s_cmdZeroBiasInit) {
-                s_cmdZeroBiasNm = id120CmdEstNmNow;
-                s_cmdZeroBiasInit = true;
-            } else {
-                const float biasDeltaNm = fabsf(id120CmdEstNmNow - s_cmdZeroBiasNm);
-                if (s_cmdZeroBiasN < 5U || biasDeltaNm > 0.50f) {
-                    // Fast-lock bias when entering a stable zero-command hold.
-                    s_cmdZeroBiasNm = id120CmdEstNmNow;
-                } else {
-                    const float kZeroBiasAlpha = 0.20f;
-                    s_cmdZeroBiasNm += kZeroBiasAlpha * (id120CmdEstNmNow - s_cmdZeroBiasNm);
-                }
-            }
-            s_cmdZeroBiasN += 1U;
-        }
-        const bool applyZeroBiasNow = s_corrFitFrozenNow || zeroCmdSample;
-        const float id120CmdAdjNmNow = applyZeroBiasNow
-                         ? (id120CmdEstNmNow - s_cmdZeroBiasNm)
-                         : id120CmdEstNmNow;
-        const float tqEffNmNow = leafFbDiag.torque_nm;
-        const float tqErrNmNow = tqEffNmNow - id120CmdEstNmNow;
-        const float tqAbsErrNmNow = fabsf(tqErrNmNow);
-        const float tqErrAdjNmNow = tqEffNmNow - id120CmdAdjNmNow;
-        const float tqAbsErrAdjNmNow = fabsf(tqErrAdjNmNow);
-        const float tqClipAbsNm = METASENSE_LEAF_120_NOISE_OUTLIER_ABS_NM;
-        const bool tqErrAdjClipped = tqAbsErrAdjNmNow <= tqClipAbsNm;
-        constexpr uint8_t kTqCmpStateZero = 0U;
-        constexpr uint8_t kTqCmpStateMotor = 1U;
-        constexpr uint8_t kTqCmpStateRegen = 2U;
-        uint8_t tqCmpState = kTqCmpStateZero;
-        if (id120CmdAdjNmNow > METASENSE_LEAF_120_NOISE_DB_NM) {
-            tqCmpState = kTqCmpStateMotor;
-        } else if (id120CmdAdjNmNow < -METASENSE_LEAF_120_NOISE_DB_NM) {
-            tqCmpState = kTqCmpStateRegen;
-        }
-
-        // Track agreement quality between estimated 0x120 command and effective torque.
-        s_tqCmpAllN += 1U;
-        s_tqCmpAllAbsErrSum += static_cast<double>(tqAbsErrAdjNmNow);
-        s_tqCmpAllErrSqSum += static_cast<double>(tqErrAdjNmNow) * static_cast<double>(tqErrAdjNmNow);
-        s_tqCmpStateN[tqCmpState] += 1U;
-        s_tqCmpStateAbsErrSum[tqCmpState] += static_cast<double>(tqAbsErrAdjNmNow);
-        s_tqCmpStateErrSqSum[tqCmpState] += static_cast<double>(tqErrAdjNmNow) * static_cast<double>(tqErrAdjNmNow);
-        if (tqErrAdjClipped) {
-            s_tqCmpAllClipN += 1U;
-            s_tqCmpAllClipAbsErrSum += static_cast<double>(tqAbsErrAdjNmNow);
-            s_tqCmpAllClipErrSqSum += static_cast<double>(tqErrAdjNmNow) * static_cast<double>(tqErrAdjNmNow);
-            s_tqCmpStateClipN[tqCmpState] += 1U;
-            s_tqCmpStateClipAbsErrSum[tqCmpState] += static_cast<double>(tqAbsErrAdjNmNow);
-            s_tqCmpStateClipErrSqSum[tqCmpState] += static_cast<double>(tqErrAdjNmNow) * static_cast<double>(tqErrAdjNmNow);
-        }
-
-        const bool lowTorqueWindow = (fabsf(tqEffNmNow) <= 5.0f) && (fabsf(id120CmdAdjNmNow) <= 5.0f);
-        if (lowTorqueWindow) {
-            s_tqCmpLowN += 1U;
-            s_tqCmpLowAbsErrSum += static_cast<double>(tqAbsErrAdjNmNow);
-            s_tqCmpLowErrSqSum += static_cast<double>(tqErrAdjNmNow) * static_cast<double>(tqErrAdjNmNow);
-            if (tqErrAdjClipped) {
-                s_tqCmpLowClipN += 1U;
-                s_tqCmpLowClipAbsErrSum += static_cast<double>(tqAbsErrAdjNmNow);
-                s_tqCmpLowClipErrSqSum += static_cast<double>(tqErrAdjNmNow) * static_cast<double>(tqErrAdjNmNow);
-            }
-        }
-
-        const float tqMaeAllNm = (s_tqCmpAllN > 0U)
-                                     ? static_cast<float>(s_tqCmpAllAbsErrSum / static_cast<double>(s_tqCmpAllN))
-                                     : 0.0f;
-        const float tqRmseAllNm = (s_tqCmpAllN > 0U)
-                                      ? static_cast<float>(sqrt(s_tqCmpAllErrSqSum / static_cast<double>(s_tqCmpAllN)))
-                                      : 0.0f;
-        const float tqMaeLowNm = (s_tqCmpLowN > 0U)
-                                     ? static_cast<float>(s_tqCmpLowAbsErrSum / static_cast<double>(s_tqCmpLowN))
-                                     : 0.0f;
-        const float tqRmseLowNm = (s_tqCmpLowN > 0U)
-                                      ? static_cast<float>(sqrt(s_tqCmpLowErrSqSum / static_cast<double>(s_tqCmpLowN)))
-                                      : 0.0f;
-        const float tqMaeAllClipNm = (s_tqCmpAllClipN > 0U)
-                         ? static_cast<float>(s_tqCmpAllClipAbsErrSum / static_cast<double>(s_tqCmpAllClipN))
-                         : 0.0f;
-        const float tqRmseAllClipNm = (s_tqCmpAllClipN > 0U)
-                          ? static_cast<float>(sqrt(s_tqCmpAllClipErrSqSum / static_cast<double>(s_tqCmpAllClipN)))
-                          : 0.0f;
-        const float tqMaeLowClipNm = (s_tqCmpLowClipN > 0U)
-                         ? static_cast<float>(s_tqCmpLowClipAbsErrSum / static_cast<double>(s_tqCmpLowClipN))
-                         : 0.0f;
-        const float tqRmseLowClipNm = (s_tqCmpLowClipN > 0U)
-                          ? static_cast<float>(sqrt(s_tqCmpLowClipErrSqSum / static_cast<double>(s_tqCmpLowClipN)))
-                          : 0.0f;
-        const float tqMaeStateZeroClipNm = (s_tqCmpStateClipN[kTqCmpStateZero] > 0U)
-                 ? static_cast<float>(s_tqCmpStateClipAbsErrSum[kTqCmpStateZero] / static_cast<double>(s_tqCmpStateClipN[kTqCmpStateZero]))
-                 : 0.0f;
-        const float tqRmseStateZeroClipNm = (s_tqCmpStateClipN[kTqCmpStateZero] > 0U)
-                  ? static_cast<float>(sqrt(s_tqCmpStateClipErrSqSum[kTqCmpStateZero] / static_cast<double>(s_tqCmpStateClipN[kTqCmpStateZero])))
-                  : 0.0f;
-        const float tqMaeStateMotorClipNm = (s_tqCmpStateClipN[kTqCmpStateMotor] > 0U)
-                  ? static_cast<float>(s_tqCmpStateClipAbsErrSum[kTqCmpStateMotor] / static_cast<double>(s_tqCmpStateClipN[kTqCmpStateMotor]))
-                  : 0.0f;
-        const float tqRmseStateMotorClipNm = (s_tqCmpStateClipN[kTqCmpStateMotor] > 0U)
-                   ? static_cast<float>(sqrt(s_tqCmpStateClipErrSqSum[kTqCmpStateMotor] / static_cast<double>(s_tqCmpStateClipN[kTqCmpStateMotor])))
-                   : 0.0f;
-        const float tqMaeStateRegenClipNm = (s_tqCmpStateClipN[kTqCmpStateRegen] > 0U)
-                  ? static_cast<float>(s_tqCmpStateClipAbsErrSum[kTqCmpStateRegen] / static_cast<double>(s_tqCmpStateClipN[kTqCmpStateRegen]))
-                  : 0.0f;
-        const float tqRmseStateRegenClipNm = (s_tqCmpStateClipN[kTqCmpStateRegen] > 0U)
-                   ? static_cast<float>(sqrt(s_tqCmpStateClipErrSqSum[kTqCmpStateRegen] / static_cast<double>(s_tqCmpStateClipN[kTqCmpStateRegen])))
-                   : 0.0f;
-        if (lastCanAltDiagMs == 0U || (now - lastCanAltDiagMs) >= CAN_ALT_DIAG_LOG_PERIOD_MS) {
-            char posTop[64];
-            char negTop[64];
-            char zeroTop[64];
-            char brakeTop[64];
-            formatLeaf120TopValues(leaf120B2PosCounts, posTop, sizeof(posTop));
-            formatLeaf120TopValues(leaf120B2NegCounts, negTop, sizeof(negTop));
-            formatLeaf120TopValues(leaf120B2ZeroCounts, zeroTop, sizeof(zeroTop));
-            formatLeaf120TopValues(leaf120B2BrakeCounts, brakeTop, sizeof(brakeTop));
-
-            if (canStatsDiag.rx120Frames > 0U) {
-                Serial.printf("[VCM-120-DISC] frames=%lu dB2 pos(n=%lu top=%s) neg(n=%lu top=%s) zero(n=%lu top=%s) brake(n=%lu top=%s)\n",
-                              static_cast<unsigned long>(canStatsDiag.rx120Frames),
-                              static_cast<unsigned long>(leaf120B2PosSamples),
-                              posTop,
-                              static_cast<unsigned long>(leaf120B2NegSamples),
-                              negTop,
-                              static_cast<unsigned long>(leaf120B2ZeroSamples),
-                              zeroTop,
-                              static_cast<unsigned long>(leaf120B2BrakeSamples),
-                              brakeTop);
-                Serial0.printf("[VCM-120-DISC] frames=%lu dB2 pos(n=%lu top=%s) neg(n=%lu top=%s) zero(n=%lu top=%s) brake(n=%lu top=%s)\n",
-                               static_cast<unsigned long>(canStatsDiag.rx120Frames),
-                               static_cast<unsigned long>(leaf120B2PosSamples),
-                               posTop,
-                               static_cast<unsigned long>(leaf120B2NegSamples),
-                               negTop,
-                               static_cast<unsigned long>(leaf120B2ZeroSamples),
-                               zeroTop,
-                               static_cast<unsigned long>(leaf120B2BrakeSamples),
-                               brakeTop);
-            }
-            const float crc120StateFixPctAll = (leaf120CrcSamples > 0U)
-                ? (100.0f * static_cast<float>(leaf120Ref00StateCorrectedMatches) / static_cast<float>(leaf120CrcSamples))
-                : 0.0f;
-            const float crc120Fixed8PctAll = (leaf120CrcSamples > 0U)
-                ? (100.0f * static_cast<float>(leaf120Ref00Fixed8Matches) / static_cast<float>(leaf120CrcSamples))
-                : 0.0f;
-            if (leaf120CrcSamples > 0U) {
-                Serial.printf("[VCM-120-CRC-OK] stateFix=%lu/%lu(%.1f%%) fixed8=%lu/%lu(%.1f%%)\n",
-                              static_cast<unsigned long>(leaf120Ref00StateCorrectedMatches),
-                              static_cast<unsigned long>(leaf120CrcSamples),
-                              crc120StateFixPctAll,
-                              static_cast<unsigned long>(leaf120Ref00Fixed8Matches),
-                              static_cast<unsigned long>(leaf120CrcSamples),
-                              crc120Fixed8PctAll);
-                Serial0.printf("[VCM-120-CRC-OK] stateFix=%lu/%lu(%.1f%%) fixed8=%lu/%lu(%.1f%%)\n",
-                               static_cast<unsigned long>(leaf120Ref00StateCorrectedMatches),
-                               static_cast<unsigned long>(leaf120CrcSamples),
-                               crc120StateFixPctAll,
-                               static_cast<unsigned long>(leaf120Ref00Fixed8Matches),
-                               static_cast<unsigned long>(leaf120CrcSamples),
-                               crc120Fixed8PctAll);
-            }
-            const float txExpExactPct = (leaf120TxExpSamples > 0U)
-                ? (100.0f * static_cast<float>(leaf120TxExpExactCrcMatches) / static_cast<float>(leaf120TxExpSamples))
-                : 0.0f;
-            const float txExpHiCtrCrcPct = (leaf120TxExpSamples > 0U)
-                ? (100.0f * static_cast<float>(leaf120TxExpHiCtrCrcMatches) / static_cast<float>(leaf120TxExpSamples))
-                : 0.0f;
-            const float txExpLoCtrCrcPct = (leaf120TxExpSamples > 0U)
-                ? (100.0f * static_cast<float>(leaf120TxExpLoCtrCrcMatches) / static_cast<float>(leaf120TxExpSamples))
-                : 0.0f;
-            const float txExpHiCtrB2Pct = (leaf120TxExpSamples > 0U)
-                ? (100.0f * static_cast<float>(leaf120TxExpHiCtrB2Matches) / static_cast<float>(leaf120TxExpSamples))
-                : 0.0f;
-            const float txExpLoCtrB2Pct = (leaf120TxExpSamples > 0U)
-                ? (100.0f * static_cast<float>(leaf120TxExpLoCtrB2Matches) / static_cast<float>(leaf120TxExpSamples))
-                : 0.0f;
-            if (leaf120TxExpSamples > 0U) {
-                Serial.printf("[VCM-120-TX-EXP] n=%lu exact_crc=%.1f%% hiCtr(crc=%.1f%%,b2=%.1f%%) loCtr(crc=%.1f%%,b2=%.1f%%)\n",
-                              static_cast<unsigned long>(leaf120TxExpSamples),
-                              txExpExactPct,
-                              txExpHiCtrCrcPct,
-                              txExpHiCtrB2Pct,
-                              txExpLoCtrCrcPct,
-                              txExpLoCtrB2Pct);
-                Serial0.printf("[VCM-120-TX-EXP] n=%lu exact_crc=%.1f%% hiCtr(crc=%.1f%%,b2=%.1f%%) loCtr(crc=%.1f%%,b2=%.1f%%)\n",
-                               static_cast<unsigned long>(leaf120TxExpSamples),
-                               txExpExactPct,
-                               txExpHiCtrCrcPct,
-                               txExpHiCtrB2Pct,
-                               txExpLoCtrCrcPct,
-                               txExpLoCtrB2Pct);
-            }
-        #if !METASENSE_LEAF_1D4_RAW_SNIFF_ONLY
-            const float crc1daClockFixPct = (leaf1daCrcSamples > 0U)
-                ? (100.0f * static_cast<float>(leaf1daIdLoClockCorrectedMatches) / static_cast<float>(leaf1daCrcSamples))
-                : 0.0f;
-            Serial.printf("[VCM-1DA-CRC-OK] clockFix=%lu/%lu(%.1f%%)\n",
-                          static_cast<unsigned long>(leaf1daIdLoClockCorrectedMatches),
-                          static_cast<unsigned long>(leaf1daCrcSamples),
-                          crc1daClockFixPct);
-            Serial0.printf("[VCM-1DA-CRC-OK] clockFix=%lu/%lu(%.1f%%)\n",
-                           static_cast<unsigned long>(leaf1daIdLoClockCorrectedMatches),
-                           static_cast<unsigned long>(leaf1daCrcSamples),
-                           crc1daClockFixPct);
-            const float crc1d4ClockFixPct = (leaf1d4CrcSamples > 0U)
-                ? (100.0f * static_cast<float>(leaf1d4IdLoClockCorrectedMatches) / static_cast<float>(leaf1d4CrcSamples))
-                : 0.0f;
-            Serial.printf("[VCM-1D4-CRC-STATS] frames=%lu match(c1D_id1d4lo=%lu)\n",
-                          static_cast<unsigned long>(leaf1d4CrcSamples),
-                          static_cast<unsigned long>(leaf1d4CrcCandidateMatches[15]));
-            Serial0.printf("[VCM-1D4-CRC-STATS] frames=%lu match(c1D_id1d4lo=%lu)\n",
-                           static_cast<unsigned long>(leaf1d4CrcSamples),
-                           static_cast<unsigned long>(leaf1d4CrcCandidateMatches[15]));
-            Serial.printf("[VCM-1D4-CRC-OK] clockFix=%lu/%lu(%.1f%%)\n",
-                          static_cast<unsigned long>(leaf1d4IdLoClockCorrectedMatches),
-                          static_cast<unsigned long>(leaf1d4CrcSamples),
-                          crc1d4ClockFixPct);
-            Serial0.printf("[VCM-1D4-CRC-OK] clockFix=%lu/%lu(%.1f%%)\n",
-                           static_cast<unsigned long>(leaf1d4IdLoClockCorrectedMatches),
-                           static_cast<unsigned long>(leaf1d4CrcSamples),
-                           crc1d4ClockFixPct);
-            Serial.printf("[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=%lu/%lu c0=0x%02X:%lu c1=0x%02X:%lu c2=0x%02X:%lu c3=0x%02X:%lu)\n",
-                          static_cast<unsigned long>(leaf1d4IdLoClockCorrectedMatches),
-                          static_cast<unsigned long>(leaf1d4CrcSamples),
-                          static_cast<unsigned>(leaf1d4IdLoTopResidueByClock[0]),
-                          static_cast<unsigned long>(leaf1d4IdLoTopResidueCountByClock[0]),
-                          static_cast<unsigned>(leaf1d4IdLoTopResidueByClock[1]),
-                          static_cast<unsigned long>(leaf1d4IdLoTopResidueCountByClock[1]),
-                          static_cast<unsigned>(leaf1d4IdLoTopResidueByClock[2]),
-                          static_cast<unsigned long>(leaf1d4IdLoTopResidueCountByClock[2]),
-                          static_cast<unsigned>(leaf1d4IdLoTopResidueByClock[3]),
-                          static_cast<unsigned long>(leaf1d4IdLoTopResidueCountByClock[3]));
-            Serial0.printf("[VCM-1D4-CRC4-STATS] idlo_clock_fix(match=%lu/%lu c0=0x%02X:%lu c1=0x%02X:%lu c2=0x%02X:%lu c3=0x%02X:%lu)\n",
-                           static_cast<unsigned long>(leaf1d4IdLoClockCorrectedMatches),
-                           static_cast<unsigned long>(leaf1d4CrcSamples),
-                           static_cast<unsigned>(leaf1d4IdLoTopResidueByClock[0]),
-                           static_cast<unsigned long>(leaf1d4IdLoTopResidueCountByClock[0]),
-                           static_cast<unsigned>(leaf1d4IdLoTopResidueByClock[1]),
-                           static_cast<unsigned long>(leaf1d4IdLoTopResidueCountByClock[1]),
-                           static_cast<unsigned>(leaf1d4IdLoTopResidueByClock[2]),
-                           static_cast<unsigned long>(leaf1d4IdLoTopResidueCountByClock[2]),
-                           static_cast<unsigned>(leaf1d4IdLoTopResidueByClock[3]),
-                           static_cast<unsigned long>(leaf1d4IdLoTopResidueCountByClock[3]));
-        #endif
-            lastCanAltDiagMs = now;
-            lastCanAlt120FramesLogged = canStatsDiag.rx120Frames;
-        }
-        const uint16_t id120Le01 = static_cast<uint16_t>(canStatsDiag.last120Data[0]) |
-                                   (static_cast<uint16_t>(canStatsDiag.last120Data[1]) << 8);
-        const uint16_t id120Le23 = static_cast<uint16_t>(canStatsDiag.last120Data[2]) |
-                                   (static_cast<uint16_t>(canStatsDiag.last120Data[3]) << 8);
-        const uint16_t id120Be01 = id120Decoded.torqueDemandRawBe;
-        const uint16_t id120Be23 = (static_cast<uint16_t>(canStatsDiag.last120Data[2]) << 8) |
-                                   static_cast<uint16_t>(canStatsDiag.last120Data[3]);
-        const uint16_t id11aTail = (static_cast<uint16_t>(canStatsDiag.last11aData[6]) << 8) |
-                                  static_cast<uint16_t>(canStatsDiag.last11aData[7]);
-        const int16_t id120Sbe01 = static_cast<int16_t>(id120Be01);
-        const int16_t id120Sle01 = static_cast<int16_t>(id120Le01);
-        const uint8_t id120Ctr = id120Decoded.unknown120_2;
-        const uint8_t id120Crc = id120Decoded.crc120;
-        const uint8_t id120Xor = static_cast<uint8_t>(canStatsDiag.last120Data[0] ^
-                                  canStatsDiag.last120Data[1] ^
-                                  canStatsDiag.last120Data[2]);
-
-    #if METASENSE_LEAF_MONITOR_SIMPLE_LOGS
-        static uint32_t s_simpleLogDecimator = 0U;
-        const char* tqModeStr = (tqCmpState == kTqCmpStateMotor) ? "MOTOR" :
-                                ((tqCmpState == kTqCmpStateRegen) ? "REGEN" : "ZERO");
-        const bool emitSimpleLine = (METASENSE_LEAF_MONITOR_SIMPLE_DECIMATE <= 1U) ||
-                                    ((++s_simpleLogDecimator % METASENSE_LEAF_MONITOR_SIMPLE_DECIMATE) == 0U);
-        if (emitSimpleLine) {
-            Serial.printf("[VCM-SIMPLE] mode=%s fb1da=%.2fNm ageMs(tq=%lu)\n",
-                          tqModeStr,
-                          tqEffNmNow,
-                          id1dbAgeMs);
-            Serial0.printf("[VCM-SIMPLE] mode=%s fb1da=%.2fNm ageMs(tq=%lu)\n",
-                           tqModeStr,
-                           tqEffNmNow,
-                           id1dbAgeMs);
-        }
-    #else
-        Serial.printf("[VCM-MAP] id120(cmd_raw=%d cmd120_est_nm=%.2f cmd120_adj_nm=%.2f fb1da_nm=%.2f delta_nm=%.2f unknown_120_2=%u crc_120=0x%02X xor=0x%02X model=%s corr=%.3f n=%lu compat_le01_s=%d compat_le01_u=%u compat_be23=%u compat_le23=%u compat11a_tail=0x%04X)\n",
-                  static_cast<int>(id120Sbe01),
-                  id120CmdEstNmNow,
-                  id120CmdAdjNmNow,
-                  tqEffNmNow,
-                  tqErrAdjNmNow,
-                  static_cast<unsigned>(id120Ctr),
-                  static_cast<unsigned>(id120Crc),
-                  static_cast<unsigned>(id120Xor),
-                  useFitModelNow ? "fit" : "base",
-                  beCorrNow,
-                  static_cast<unsigned long>(s_corr120Be01Torque.n),
-                  static_cast<int>(id120Sle01),
-                  static_cast<unsigned>(id120Le01),
-                  static_cast<unsigned>(id120Be23),
-                  static_cast<unsigned>(id120Le23),
-                  static_cast<unsigned>(id11aTail));
-        Serial0.printf("[VCM-MAP] id120(cmd_raw=%d cmd120_est_nm=%.2f cmd120_adj_nm=%.2f fb1da_nm=%.2f delta_nm=%.2f unknown_120_2=%u crc_120=0x%02X xor=0x%02X model=%s corr=%.3f n=%lu compat_le01_s=%d compat_le01_u=%u compat_be23=%u compat_le23=%u compat11a_tail=0x%04X)\n",
-                   static_cast<int>(id120Sbe01),
-                   id120CmdEstNmNow,
-                   id120CmdAdjNmNow,
-                   tqEffNmNow,
-                   tqErrAdjNmNow,
-                   static_cast<unsigned>(id120Ctr),
-                   static_cast<unsigned>(id120Crc),
-                   static_cast<unsigned>(id120Xor),
-                   useFitModelNow ? "fit" : "base",
-                   beCorrNow,
-                   static_cast<unsigned long>(s_corr120Be01Torque.n),
-                   static_cast<int>(id120Sle01),
-                   static_cast<unsigned>(id120Le01),
-                   static_cast<unsigned>(id120Be23),
-                   static_cast<unsigned>(id120Le23),
-                   static_cast<unsigned>(id11aTail));
-
-
-                                                                Serial.printf("[VCM-TQ-CMP] fb1da_nm=%.2f cmd120_est_nm=%.2f cmd120_adj_nm=%.2f biasMode=%d delta_est_nm=%.2f delta_adj_nm=%.2f absDelta_est_nm=%.2f absDelta_adj_nm=%.2f clipThr=%.2f inClip=%d maeAll=%.2f rmseAll=%.2f nAll=%lu maeAllClip=%.2f rmseAllClip=%.2f nAllClip=%lu maeLow=%.2f rmseLow=%.2f nLow=%lu maeLowClip=%.2f rmseLowClip=%.2f nLowClip=%lu stateClip(z=%lu %.2f/%.2f,m=%lu %.2f/%.2f,r=%lu %.2f/%.2f) lowWin=%d zeroBiasNm=%.2f nBias=%lu ageMs(tq=%lu,120=%lu)\n",
-                              tqEffNmNow,
-                              id120CmdEstNmNow,
-                              id120CmdAdjNmNow,
-                              applyZeroBiasNow ? 1 : 0,
-                              tqErrNmNow,
-                              tqErrAdjNmNow,
-                              tqAbsErrNmNow,
-                              tqAbsErrAdjNmNow,
-                                                            tqClipAbsNm,
-                                                            tqErrAdjClipped ? 1 : 0,
-                              tqMaeAllNm,
-                              tqRmseAllNm,
-                              static_cast<unsigned long>(s_tqCmpAllN),
-                                                            tqMaeAllClipNm,
-                                                            tqRmseAllClipNm,
-                                                            static_cast<unsigned long>(s_tqCmpAllClipN),
-                              tqMaeLowNm,
-                              tqRmseLowNm,
-                              static_cast<unsigned long>(s_tqCmpLowN),
-                                                            tqMaeLowClipNm,
-                                                            tqRmseLowClipNm,
-                                                            static_cast<unsigned long>(s_tqCmpLowClipN),
-                                                            static_cast<unsigned long>(s_tqCmpStateClipN[kTqCmpStateZero]),
-                                                            tqMaeStateZeroClipNm,
-                                                            tqRmseStateZeroClipNm,
-                                                            static_cast<unsigned long>(s_tqCmpStateClipN[kTqCmpStateMotor]),
-                                                            tqMaeStateMotorClipNm,
-                                                            tqRmseStateMotorClipNm,
-                                                            static_cast<unsigned long>(s_tqCmpStateClipN[kTqCmpStateRegen]),
-                                                            tqMaeStateRegenClipNm,
-                                                            tqRmseStateRegenClipNm,
-                              lowTorqueWindow ? 1 : 0,
-                              s_cmdZeroBiasNm,
-                              static_cast<unsigned long>(s_cmdZeroBiasN),
-                              id1dbAgeMs,
-                              raw120AgeMs);
-                                                                Serial0.printf("[VCM-TQ-CMP] fb1da_nm=%.2f cmd120_est_nm=%.2f cmd120_adj_nm=%.2f biasMode=%d delta_est_nm=%.2f delta_adj_nm=%.2f absDelta_est_nm=%.2f absDelta_adj_nm=%.2f clipThr=%.2f inClip=%d maeAll=%.2f rmseAll=%.2f nAll=%lu maeAllClip=%.2f rmseAllClip=%.2f nAllClip=%lu maeLow=%.2f rmseLow=%.2f nLow=%lu maeLowClip=%.2f rmseLowClip=%.2f nLowClip=%lu stateClip(z=%lu %.2f/%.2f,m=%lu %.2f/%.2f,r=%lu %.2f/%.2f) lowWin=%d zeroBiasNm=%.2f nBias=%lu ageMs(tq=%lu,120=%lu)\n",
-                               tqEffNmNow,
-                               id120CmdEstNmNow,
-                               id120CmdAdjNmNow,
-                               applyZeroBiasNow ? 1 : 0,
-                               tqErrNmNow,
-                               tqErrAdjNmNow,
-                               tqAbsErrNmNow,
-                               tqAbsErrAdjNmNow,
-                                                             tqClipAbsNm,
-                                                             tqErrAdjClipped ? 1 : 0,
-                               tqMaeAllNm,
-                               tqRmseAllNm,
-                               static_cast<unsigned long>(s_tqCmpAllN),
-                                                             tqMaeAllClipNm,
-                                                             tqRmseAllClipNm,
-                                                             static_cast<unsigned long>(s_tqCmpAllClipN),
-                               tqMaeLowNm,
-                               tqRmseLowNm,
-                               static_cast<unsigned long>(s_tqCmpLowN),
-                                                             tqMaeLowClipNm,
-                                                             tqRmseLowClipNm,
-                                                             static_cast<unsigned long>(s_tqCmpLowClipN),
-                                                               static_cast<unsigned long>(s_tqCmpStateClipN[kTqCmpStateZero]),
-                                                               tqMaeStateZeroClipNm,
-                                                               tqRmseStateZeroClipNm,
-                                                               static_cast<unsigned long>(s_tqCmpStateClipN[kTqCmpStateMotor]),
-                                                               tqMaeStateMotorClipNm,
-                                                               tqRmseStateMotorClipNm,
-                                                               static_cast<unsigned long>(s_tqCmpStateClipN[kTqCmpStateRegen]),
-                                                               tqMaeStateRegenClipNm,
-                                                               tqRmseStateRegenClipNm,
-                               lowTorqueWindow ? 1 : 0,
-                               s_cmdZeroBiasNm,
-                               static_cast<unsigned long>(s_cmdZeroBiasN),
-                               id1dbAgeMs,
-                               raw120AgeMs);
-    #endif
-        s_leafPreStatusLastMs = now;
-    }
-#endif
 
     if (s_leafRxDiagLastMs == 0U || (now - s_leafRxDiagLastMs) >= CAN_RX_CHECK_PERIOD_MS) {
         const bool id1daFresh = (leafFbDiag.rpm_update_ms != 0U) &&
@@ -6079,7 +4853,7 @@ void loop()
             torqueToSend = 0.0f;
         } else if (isIdleState) {
             // IDLE state: Apply voltage-based brake torque controller for inverter overvoltage protection
-            // When inverter voltage > 450V, increase brake torque to dissipate more power (V Ã— I)
+            // When inverter voltage > 450V, increase brake torque to dissipate more power (V × I)
             const float invVoltageV = MetaSense::CANBus::feedback().input_voltage;
             const float appliedBrakeTorque = computeVoltageBrakeTorque(
                 invVoltageV,                               // Inverter voltage from CAN

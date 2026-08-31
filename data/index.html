@@ -966,7 +966,7 @@
 
   <div id="canMonitor" class="can-monitor" aria-live="polite">
     <div class="can-monitor-title">CAN MONITOR</div>
-    <!-- Monitor scope: strict RX IDs (0x1DA, 0x55A) plus 0x11A command context. -->
+    <!-- Monitor scope: strict RX IDs (0x1DA, 0x55A) only. -->
     <div class="can-monitor-grid">
       <span class="can-monitor-label can-monitor-subtitle">RX Bus</span>
       <span class="can-monitor-value can-monitor-subtitle">Telemetry</span>
@@ -1018,27 +1018,6 @@
 
       <span class="can-monitor-label can-sec-55a">Coolant Temp (C)</span>
       <span id="canMonCoolantTemp" class="can-monitor-value can-sec-55a">---</span>
-
-      <span class="can-monitor-label can-monitor-section can-monitor-section-toggle" data-section="11a" data-title="0x11A" role="button" tabindex="0" aria-expanded="true">0x11A:</span>
-      <span class="can-monitor-value can-monitor-section-value" data-section="11a" role="button" tabindex="0" aria-expanded="true">[-]</span>
-
-      <span class="can-monitor-label can-sec-11a">Source frames/age(ms)</span>
-      <span id="canMon11aSource" class="can-monitor-value can-sec-11a">---</span>
-
-      <span class="can-monitor-label can-sec-11a">Gear / CarOn / ECO</span>
-      <span id="canMon11aDrive" class="can-monitor-value can-sec-11a">---</span>
-
-      <span class="can-monitor-label can-sec-11a">MUX Sel / TX Slot</span>
-      <span id="canMon11aMuxSel" class="can-monitor-value can-sec-11a">---</span>
-
-      <span class="can-monitor-label can-sec-11a">HB / BTN</span>
-      <span id="canMon11aSignals" class="can-monitor-value can-sec-11a">---</span>
-
-      <span class="can-monitor-label can-sec-11a">TX==RX / diff</span>
-      <span id="canMon11aCompare" class="can-monitor-value can-sec-11a">---</span>
-
-      <span class="can-monitor-label can-sec-11a">RX Raw B0..B7</span>
-      <span id="canMon11aRaw" class="can-monitor-value can-monitor-value-raw can-sec-11a">---</span>
 
       <span class="can-monitor-label can-monitor-section">DYNO:</span>
       <span class="can-monitor-value can-monitor-section-value">.</span>
@@ -1571,74 +1550,6 @@
       hw_ssr: 0,
       vcu_sim: 0,
       leaf_1da_raw_b0b7: "-- -- -- -- -- -- -- --",
-      leaf_id11a_source: "rx",
-      leaf_id11a_frames: 0,
-      leaf_id11a_age_ms: 0,
-      leaf_id11a_tx_frames: 0,
-      leaf_id11a_tx_age_ms: 0,
-      leaf_11a_tx_eq_rx: -1,
-      leaf_11a_tx_diff_mask_vs_rx: 0,
-      leaf_11a_gear: 0,
-      leaf_11a_car_onoff: 0,
-      leaf_11a_eco: 0,
-      leaf_11a_button: 0,
-      leaf_11a_heartbeat: 0,
-      leaf_11a_mux: 0,
-      leaf_11a_b0: 0,
-      leaf_11a_b1: 0,
-      leaf_11a_b2: 0,
-      leaf_11a_b3: 0,
-      leaf_11a_b4: 0,
-      leaf_11a_b5: 0,
-      leaf_11a_b6: 0,
-      leaf_11a_b7: 0,
-      leaf_11a_tx_b0: 0,
-      leaf_11a_tx_b1: 0,
-      leaf_11a_tx_b2: 0,
-      leaf_11a_tx_b3: 0,
-      leaf_11a_tx_b4: 0,
-      leaf_11a_tx_b5: 0,
-      leaf_11a_tx_b6: 0,
-      leaf_11a_tx_b7: 0,
-      leaf_1d4_ring_count: 0,
-      leaf_1d4_ring_newest_valid: 0,
-      leaf_1d4_ring_newest_len: 0,
-      leaf_1d4_tx_frames: 0,
-      leaf_1d4_tx_age_ms: 0,
-      leaf_1d4_tx_torque_nm: 0,
-      leaf_1d4_tx_torque_raw: 0,
-      leaf_1d4_tx_target_nm: 0,
-      leaf_1d4_tx_hv_status: 0,
-      leaf_1d4_tx_relay_plus: 0,
-      leaf_1d4_tx_charge_status: 0,
-      leaf_1d4_tx_clock: 0,
-      leaf_1d4_tx_crc: 0,
-      leaf_1d4_tx_crc_calc: 0,
-      leaf_1d4_tx_crc_ok: -1,
-      leaf_1d4_tx_source_mode: 0,
-      leaf_1d4_tx_ring_base_used: 0,
-      leaf_1d4_tx_ring_base_len: 0,
-      leaf_1d4_tx_ring_source_age: 0,
-      leaf_1d4_tx_ring_fallback_total: 0,
-      leaf_1d4_tx_eq_sniff: -1,
-      leaf_1d4_tx_diff_mask_vs_sniff: 0,
-      leaf_1d4_tx_b0: 0,
-      leaf_1d4_tx_b1: 0,
-      leaf_1d4_tx_b2: 0,
-      leaf_1d4_tx_b3: 0,
-      leaf_1d4_tx_b4: 0,
-      leaf_1d4_tx_b5: 0,
-      leaf_1d4_tx_b6: 0,
-      leaf_1d4_tx_b7: 0,
-      leaf_120_tx_age_ms: 0,
-      leaf_120_tx_b0: 0,
-      leaf_120_tx_b1: 0,
-      leaf_120_tx_b2: 0,
-      leaf_120_tx_b3: 0,
-      leaf_120_tx_b4: 0,
-      leaf_120_tx_b5: 0,
-      leaf_120_tx_b6: 0,
-      leaf_120_tx_b7: 0,
       leaf_1da_inv_temp: 0,
       leaf_1da_stator_temp: 0,
       leaf_coolant_temp: 0,
@@ -1696,18 +1607,6 @@
       const id1daCrcWireOkFrames = Number(telemetry.leaf_1da_crc_wire_ok_frames);
       const id1daCrcWireBadFrames = Number(telemetry.leaf_1da_crc_wire_bad_frames);
 
-      // Extract 0x11A RX fields
-      const metricsEnabled = (telemetry.leaf_11a_frames !== undefined);
-      const id11aFrames = metricsEnabled ? Number(telemetry.leaf_11a_frames) : 0;
-      const id11aAgeMs = metricsEnabled ? Number(telemetry.leaf_11a_age_ms) : 0;
-      const id11aGear = Number(telemetry.leaf_11a_gear);
-      const id11aCarOnOff = Number(telemetry.leaf_11a_car_onoff);
-      const id11aEco = Number(telemetry.leaf_11a_eco);
-      const id11aHeartbeat = Number(telemetry.leaf_11a_heartbeat);
-      const id11aMux = Number(telemetry.leaf_11a_mux);
-      const id11aButton = Number(telemetry.leaf_11a_button);
-      const id11aRaw = String(telemetry.leaf_11a_raw_b0b7 || "-- -- -- -- -- -- -- --");
-
       const setText = (id, text) => {
         const el = document.getElementById(id);
         if (el) el.textContent = text;
@@ -1743,15 +1642,6 @@
       setText("canMonInvTemp", fmt(inv, 1));
       setText("canMonStatorTemp", fmt(stat, 1));
       setText("canMonCoolantTemp", fmt(cool, 1));
-
-      // Update 0x11A display fields
-      if (metricsEnabled) {
-        setText("canMon11aSource", `rx ${fmtInt(id11aFrames)} / ${fmtInt(id11aAgeMs)}`);
-      }
-      setText("canMon11aDrive", `G${fmtInt(id11aGear)} / CO${fmtInt(id11aCarOnOff)} / E${fmtInt(id11aEco)}`);
-      setText("canMon11aMuxSel", `MUX ${fmtInt(id11aMux)}/4`);
-      setText("canMon11aSignals", `HB:0x${fmtHexByte(id11aHeartbeat)} BTN:0x${fmtHexByte(id11aButton)}`);
-      setText("canMon11aRaw", id11aRaw);
     }
 
     function showToast(message, durationMs = 2200) {
@@ -2976,74 +2866,6 @@
             if (msg.leaf_1da_inv_fault_map !== undefined) cachedTelemetry.leaf_1da_inv_fault_map = msg.leaf_1da_inv_fault_map;
             if (msg.leaf_1da_inv_blinky !== undefined) cachedTelemetry.leaf_1da_inv_blinky = msg.leaf_1da_inv_blinky;
             if (msg.leaf_1da_inv_fault_can_timeout !== undefined) cachedTelemetry.leaf_1da_inv_fault_can_timeout = msg.leaf_1da_inv_fault_can_timeout;
-            if (msg.leaf_id11a_source !== undefined) cachedTelemetry.leaf_id11a_source = msg.leaf_id11a_source;
-            if (msg.leaf_id11a_frames !== undefined) cachedTelemetry.leaf_id11a_frames = msg.leaf_id11a_frames;
-            if (msg.leaf_id11a_age_ms !== undefined) cachedTelemetry.leaf_id11a_age_ms = msg.leaf_id11a_age_ms;
-            if (msg.leaf_id11a_tx_frames !== undefined) cachedTelemetry.leaf_id11a_tx_frames = msg.leaf_id11a_tx_frames;
-            if (msg.leaf_id11a_tx_age_ms !== undefined) cachedTelemetry.leaf_id11a_tx_age_ms = msg.leaf_id11a_tx_age_ms;
-            if (msg.leaf_11a_tx_eq_rx !== undefined) cachedTelemetry.leaf_11a_tx_eq_rx = msg.leaf_11a_tx_eq_rx;
-            if (msg.leaf_11a_tx_diff_mask_vs_rx !== undefined) cachedTelemetry.leaf_11a_tx_diff_mask_vs_rx = msg.leaf_11a_tx_diff_mask_vs_rx;
-            if (msg.leaf_11a_gear !== undefined) cachedTelemetry.leaf_11a_gear = msg.leaf_11a_gear;
-            if (msg.leaf_11a_car_onoff !== undefined) cachedTelemetry.leaf_11a_car_onoff = msg.leaf_11a_car_onoff;
-            if (msg.leaf_11a_eco !== undefined) cachedTelemetry.leaf_11a_eco = msg.leaf_11a_eco;
-            if (msg.leaf_11a_button !== undefined) cachedTelemetry.leaf_11a_button = msg.leaf_11a_button;
-            if (msg.leaf_11a_heartbeat !== undefined) cachedTelemetry.leaf_11a_heartbeat = msg.leaf_11a_heartbeat;
-            if (msg.leaf_11a_mux !== undefined) cachedTelemetry.leaf_11a_mux = msg.leaf_11a_mux;
-            if (msg.leaf_11a_b0 !== undefined) cachedTelemetry.leaf_11a_b0 = msg.leaf_11a_b0;
-            if (msg.leaf_11a_b1 !== undefined) cachedTelemetry.leaf_11a_b1 = msg.leaf_11a_b1;
-            if (msg.leaf_11a_b2 !== undefined) cachedTelemetry.leaf_11a_b2 = msg.leaf_11a_b2;
-            if (msg.leaf_11a_b3 !== undefined) cachedTelemetry.leaf_11a_b3 = msg.leaf_11a_b3;
-            if (msg.leaf_11a_b4 !== undefined) cachedTelemetry.leaf_11a_b4 = msg.leaf_11a_b4;
-            if (msg.leaf_11a_b5 !== undefined) cachedTelemetry.leaf_11a_b5 = msg.leaf_11a_b5;
-            if (msg.leaf_11a_b6 !== undefined) cachedTelemetry.leaf_11a_b6 = msg.leaf_11a_b6;
-            if (msg.leaf_11a_b7 !== undefined) cachedTelemetry.leaf_11a_b7 = msg.leaf_11a_b7;
-            if (msg.leaf_11a_tx_b0 !== undefined) cachedTelemetry.leaf_11a_tx_b0 = msg.leaf_11a_tx_b0;
-            if (msg.leaf_11a_tx_b1 !== undefined) cachedTelemetry.leaf_11a_tx_b1 = msg.leaf_11a_tx_b1;
-            if (msg.leaf_11a_tx_b2 !== undefined) cachedTelemetry.leaf_11a_tx_b2 = msg.leaf_11a_tx_b2;
-            if (msg.leaf_11a_tx_b3 !== undefined) cachedTelemetry.leaf_11a_tx_b3 = msg.leaf_11a_tx_b3;
-            if (msg.leaf_11a_tx_b4 !== undefined) cachedTelemetry.leaf_11a_tx_b4 = msg.leaf_11a_tx_b4;
-            if (msg.leaf_11a_tx_b5 !== undefined) cachedTelemetry.leaf_11a_tx_b5 = msg.leaf_11a_tx_b5;
-            if (msg.leaf_11a_tx_b6 !== undefined) cachedTelemetry.leaf_11a_tx_b6 = msg.leaf_11a_tx_b6;
-            if (msg.leaf_11a_tx_b7 !== undefined) cachedTelemetry.leaf_11a_tx_b7 = msg.leaf_11a_tx_b7;
-            if (msg.leaf_1d4_ring_count !== undefined) cachedTelemetry.leaf_1d4_ring_count = msg.leaf_1d4_ring_count;
-            if (msg.leaf_1d4_ring_newest_valid !== undefined) cachedTelemetry.leaf_1d4_ring_newest_valid = msg.leaf_1d4_ring_newest_valid;
-            if (msg.leaf_1d4_ring_newest_len !== undefined) cachedTelemetry.leaf_1d4_ring_newest_len = msg.leaf_1d4_ring_newest_len;
-            if (msg.leaf_1d4_tx_frames !== undefined) cachedTelemetry.leaf_1d4_tx_frames = msg.leaf_1d4_tx_frames;
-            if (msg.leaf_1d4_tx_age_ms !== undefined) cachedTelemetry.leaf_1d4_tx_age_ms = msg.leaf_1d4_tx_age_ms;
-            if (msg.leaf_1d4_tx_torque_nm !== undefined) cachedTelemetry.leaf_1d4_tx_torque_nm = msg.leaf_1d4_tx_torque_nm;
-            if (msg.leaf_1d4_tx_torque_raw !== undefined) cachedTelemetry.leaf_1d4_tx_torque_raw = msg.leaf_1d4_tx_torque_raw;
-            if (msg.leaf_1d4_tx_target_nm !== undefined) cachedTelemetry.leaf_1d4_tx_target_nm = msg.leaf_1d4_tx_target_nm;
-            if (msg.leaf_1d4_tx_hv_status !== undefined) cachedTelemetry.leaf_1d4_tx_hv_status = msg.leaf_1d4_tx_hv_status;
-            if (msg.leaf_1d4_tx_relay_plus !== undefined) cachedTelemetry.leaf_1d4_tx_relay_plus = msg.leaf_1d4_tx_relay_plus;
-            if (msg.leaf_1d4_tx_charge_status !== undefined) cachedTelemetry.leaf_1d4_tx_charge_status = msg.leaf_1d4_tx_charge_status;
-            if (msg.leaf_1d4_tx_clock !== undefined) cachedTelemetry.leaf_1d4_tx_clock = msg.leaf_1d4_tx_clock;
-            if (msg.leaf_1d4_tx_crc !== undefined) cachedTelemetry.leaf_1d4_tx_crc = msg.leaf_1d4_tx_crc;
-            if (msg.leaf_1d4_tx_crc_calc !== undefined) cachedTelemetry.leaf_1d4_tx_crc_calc = msg.leaf_1d4_tx_crc_calc;
-            if (msg.leaf_1d4_tx_crc_ok !== undefined) cachedTelemetry.leaf_1d4_tx_crc_ok = msg.leaf_1d4_tx_crc_ok;
-            if (msg.leaf_1d4_tx_source_mode !== undefined) cachedTelemetry.leaf_1d4_tx_source_mode = msg.leaf_1d4_tx_source_mode;
-            if (msg.leaf_1d4_tx_ring_base_used !== undefined) cachedTelemetry.leaf_1d4_tx_ring_base_used = msg.leaf_1d4_tx_ring_base_used;
-            if (msg.leaf_1d4_tx_ring_base_len !== undefined) cachedTelemetry.leaf_1d4_tx_ring_base_len = msg.leaf_1d4_tx_ring_base_len;
-            if (msg.leaf_1d4_tx_ring_source_age !== undefined) cachedTelemetry.leaf_1d4_tx_ring_source_age = msg.leaf_1d4_tx_ring_source_age;
-            if (msg.leaf_1d4_tx_ring_fallback_total !== undefined) cachedTelemetry.leaf_1d4_tx_ring_fallback_total = msg.leaf_1d4_tx_ring_fallback_total;
-            if (msg.leaf_1d4_tx_eq_sniff !== undefined) cachedTelemetry.leaf_1d4_tx_eq_sniff = msg.leaf_1d4_tx_eq_sniff;
-            if (msg.leaf_1d4_tx_diff_mask_vs_sniff !== undefined) cachedTelemetry.leaf_1d4_tx_diff_mask_vs_sniff = msg.leaf_1d4_tx_diff_mask_vs_sniff;
-            if (msg.leaf_1d4_tx_b0 !== undefined) cachedTelemetry.leaf_1d4_tx_b0 = msg.leaf_1d4_tx_b0;
-            if (msg.leaf_1d4_tx_b1 !== undefined) cachedTelemetry.leaf_1d4_tx_b1 = msg.leaf_1d4_tx_b1;
-            if (msg.leaf_1d4_tx_b2 !== undefined) cachedTelemetry.leaf_1d4_tx_b2 = msg.leaf_1d4_tx_b2;
-            if (msg.leaf_1d4_tx_b3 !== undefined) cachedTelemetry.leaf_1d4_tx_b3 = msg.leaf_1d4_tx_b3;
-            if (msg.leaf_1d4_tx_b4 !== undefined) cachedTelemetry.leaf_1d4_tx_b4 = msg.leaf_1d4_tx_b4;
-            if (msg.leaf_1d4_tx_b5 !== undefined) cachedTelemetry.leaf_1d4_tx_b5 = msg.leaf_1d4_tx_b5;
-            if (msg.leaf_1d4_tx_b6 !== undefined) cachedTelemetry.leaf_1d4_tx_b6 = msg.leaf_1d4_tx_b6;
-            if (msg.leaf_1d4_tx_b7 !== undefined) cachedTelemetry.leaf_1d4_tx_b7 = msg.leaf_1d4_tx_b7;
-            if (msg.leaf_120_tx_age_ms !== undefined) cachedTelemetry.leaf_120_tx_age_ms = msg.leaf_120_tx_age_ms;
-            if (msg.leaf_120_tx_b0 !== undefined) cachedTelemetry.leaf_120_tx_b0 = msg.leaf_120_tx_b0;
-            if (msg.leaf_120_tx_b1 !== undefined) cachedTelemetry.leaf_120_tx_b1 = msg.leaf_120_tx_b1;
-            if (msg.leaf_120_tx_b2 !== undefined) cachedTelemetry.leaf_120_tx_b2 = msg.leaf_120_tx_b2;
-            if (msg.leaf_120_tx_b3 !== undefined) cachedTelemetry.leaf_120_tx_b3 = msg.leaf_120_tx_b3;
-            if (msg.leaf_120_tx_b4 !== undefined) cachedTelemetry.leaf_120_tx_b4 = msg.leaf_120_tx_b4;
-            if (msg.leaf_120_tx_b5 !== undefined) cachedTelemetry.leaf_120_tx_b5 = msg.leaf_120_tx_b5;
-            if (msg.leaf_120_tx_b6 !== undefined) cachedTelemetry.leaf_120_tx_b6 = msg.leaf_120_tx_b6;
-            if (msg.leaf_120_tx_b7 !== undefined) cachedTelemetry.leaf_120_tx_b7 = msg.leaf_120_tx_b7;
             if (msg.leaf_1da_inv_temp !== undefined) cachedTelemetry.leaf_1da_inv_temp = msg.leaf_1da_inv_temp;
             if (msg.leaf_1da_stator_temp !== undefined) cachedTelemetry.leaf_1da_stator_temp = msg.leaf_1da_stator_temp;
             if (msg.leaf_coolant_temp !== undefined) cachedTelemetry.leaf_coolant_temp = msg.leaf_coolant_temp;

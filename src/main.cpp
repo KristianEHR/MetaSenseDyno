@@ -72,9 +72,6 @@ constexpr uint16_t kI2cTimeoutMs = 50;
 #ifndef METASENSE_HEARTBEAT_PERIOD_MS
 #define METASENSE_HEARTBEAT_PERIOD_MS 2000
 #endif
-#ifndef METASENSE_CAN_RX_ONE_LINE_LOG
-#define METASENSE_CAN_RX_ONE_LINE_LOG 0
-#endif
 #ifndef METASENSE_FW_ID
 #define METASENSE_FW_ID "unknown"
 #endif
@@ -768,7 +765,6 @@ void networkTaskEntry(void* /*parameter*/)
             const uint32_t ts = heartbeatTimestamp();
             const LeafInvFeedback& leafFbDiag = MetaSense::CANBus::feedback();
             const MetaSense::CANBus::Stats& canStatsDiag = MetaSense::CANBus::stats();
-            const MetaSense::CANBus::StartupSniffStatus startupSniffDiag = MetaSense::CANBus::startupSniffStatus();
             const bool vcuReady = MetaSense::Input::isVcuReady();
             const char* vcuReadySource = MetaSense::Input::vcuReadySource();
             const bool hwPrestartWarn = MetaSense::HardwareOutputStateMachine::hasPrestartWarning();
@@ -792,7 +788,7 @@ void networkTaskEntry(void* /*parameter*/)
                                                     nauInternalCalAttempts);
             const int rbPlusLevel = digitalRead(MetaSense::Globals::kRbPlusInputPin);
             const bool ssrActive = MetaSense::HardwareOutputStateMachine::isSsrActive();
-            Serial.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s, vcu_mode=%s, vcu_ready=%d, vcu_ready_src=%s, prestart_warn=%d, rb_plus=%d, ssr=%d, torque=%.2f, egt_hot=%.1f, amb=%.1f, press=%.1f, rh=%.1f, rho=%.3f, cf=%.4f, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u, can_cfg_rx=%d, can_cfg_oneline=%d, sniff_en=%d, sniff_active=%d, sniff_done=%d, sniff_dumped=%d, sniff_count=%u, sniff_drop=%u, can_rx_total=%lu, can_last_id=0x%03lX, can_11a=%lu, can_50b=%lu, rpm_raw01_le=%u, rpm_raw01_be=%u, rpm_raw23_le=%u, rpm_raw23_be=%u, tq_raw01_le=%d, tq_raw01_be=%d, tq_raw23_le=%d, tq_raw23_be=%d\n",
+            Serial.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s, vcu_mode=%s, vcu_ready=%d, vcu_ready_src=%s, prestart_warn=%d, rb_plus=%d, ssr=%d, torque=%.2f, egt_hot=%.1f, amb=%.1f, press=%.1f, rh=%.1f, rho=%.3f, cf=%.4f, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u, can_cfg_rx=%d, can_rx_total=%lu, rpm_raw01_le=%u, rpm_raw01_be=%u, rpm_raw23_le=%u, rpm_raw23_be=%u, tq_raw01_le=%d, tq_raw01_be=%d, tq_raw23_le=%d, tq_raw23_be=%d\n",
                           static_cast<unsigned long>(ts),
                           wifiCredentialsConfigured() ? ssid : "<not-configured>",
                           static_cast<int>(status),
@@ -816,17 +812,7 @@ void networkTaskEntry(void* /*parameter*/)
                           nauInternalCalOk ? 1 : 0,
                           static_cast<unsigned>(nauInternalCalAttempts),
                           METASENSE_LEAF_CAN_RX_ENABLED != 0 ? 1 : 0,
-                          METASENSE_CAN_RX_ONE_LINE_LOG != 0 ? 1 : 0,
-                          startupSniffDiag.enabled ? 1 : 0,
-                          startupSniffDiag.active ? 1 : 0,
-                          startupSniffDiag.done ? 1 : 0,
-                          startupSniffDiag.dumped ? 1 : 0,
-                          static_cast<unsigned>(startupSniffDiag.count),
-                          static_cast<unsigned>(startupSniffDiag.dropped),
                           static_cast<unsigned long>(canStatsDiag.rxFrames),
-                          static_cast<unsigned long>(canStatsDiag.lastRxId),
-                          static_cast<unsigned long>(canStatsDiag.rx11aFrames),
-                          static_cast<unsigned long>(canStatsDiag.rx50bFrames),
                           static_cast<unsigned>(leafFbDiag.rpm_raw01_le),
                           static_cast<unsigned>(leafFbDiag.rpm_raw01_be),
                           static_cast<unsigned>(leafFbDiag.rpm_raw23_le),
@@ -835,7 +821,7 @@ void networkTaskEntry(void* /*parameter*/)
                           static_cast<int>(leafFbDiag.torque_raw01_be),
                           static_cast<int>(leafFbDiag.torque_raw23_le),
                           static_cast<int>(leafFbDiag.torque_raw23_be));
-            Serial0.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s, vcu_mode=%s, vcu_ready=%d, vcu_ready_src=%s, prestart_warn=%d, rb_plus=%d, ssr=%d, torque=%.2f, egt_hot=%.1f, amb=%.1f, press=%.1f, rh=%.1f, rho=%.3f, cf=%.4f, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u, can_cfg_rx=%d, can_cfg_oneline=%d, sniff_en=%d, sniff_active=%d, sniff_done=%d, sniff_dumped=%d, sniff_count=%u, sniff_drop=%u, can_rx_total=%lu, can_last_id=0x%03lX, can_11a=%lu, can_50b=%lu, rpm_raw01_le=%u, rpm_raw01_be=%u, rpm_raw23_le=%u, rpm_raw23_be=%u, tq_raw01_le=%d, tq_raw01_be=%d, tq_raw23_le=%d, tq_raw23_be=%d\n",
+            Serial0.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s, vcu_mode=%s, vcu_ready=%d, vcu_ready_src=%s, prestart_warn=%d, rb_plus=%d, ssr=%d, torque=%.2f, egt_hot=%.1f, amb=%.1f, press=%.1f, rh=%.1f, rho=%.3f, cf=%.4f, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u, can_cfg_rx=%d, can_rx_total=%lu, rpm_raw01_le=%u, rpm_raw01_be=%u, rpm_raw23_le=%u, rpm_raw23_be=%u, tq_raw01_le=%d, tq_raw01_be=%d, tq_raw23_le=%d, tq_raw23_be=%d\n",
                            static_cast<unsigned long>(ts),
                            wifiCredentialsConfigured() ? ssid : "<not-configured>",
                            static_cast<int>(status),
@@ -859,17 +845,7 @@ void networkTaskEntry(void* /*parameter*/)
                            nauInternalCalOk ? 1 : 0,
                            static_cast<unsigned>(nauInternalCalAttempts),
                            METASENSE_LEAF_CAN_RX_ENABLED != 0 ? 1 : 0,
-                           METASENSE_CAN_RX_ONE_LINE_LOG != 0 ? 1 : 0,
-                           startupSniffDiag.enabled ? 1 : 0,
-                           startupSniffDiag.active ? 1 : 0,
-                           startupSniffDiag.done ? 1 : 0,
-                           startupSniffDiag.dumped ? 1 : 0,
-                           static_cast<unsigned>(startupSniffDiag.count),
-                           static_cast<unsigned>(startupSniffDiag.dropped),
                            static_cast<unsigned long>(canStatsDiag.rxFrames),
-                           static_cast<unsigned long>(canStatsDiag.lastRxId),
-                           static_cast<unsigned long>(canStatsDiag.rx11aFrames),
-                           static_cast<unsigned long>(canStatsDiag.rx50bFrames),
                            static_cast<unsigned>(leafFbDiag.rpm_raw01_le),
                            static_cast<unsigned>(leafFbDiag.rpm_raw01_be),
                            static_cast<unsigned>(leafFbDiag.rpm_raw23_le),
