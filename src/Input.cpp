@@ -4236,12 +4236,12 @@ void loop()
     }
     alpha = constrain(alpha, 0.01f, 1.0f);
 
-    // RPM source: CAN 0x1DA e-motor RPM is the sole RPM source. Test-engine
-    // RPM = e-motor RPM * gear ratio. No tachometer fallback -- the whole
-    // control chain (VCU state machine, torque commands) already requires
-    // live CAN feedback to do anything, so a fallback RPM source has no
-    // practical meaning and risked showing a misleading "still running"
-    // reading while the system is actually inoperative.
+    // RPM source: CAN 0x1DA e-motor RPM is the sole RPM source.
+    // - RPM (dashboard, tele.rpm) = raw e-motor RPM * gear ratio ("engine
+    //   RPM" equivalent -- higher than drum RPM, matching how engine torque
+    //   in updateDyno() is derived as drum torque / gear ratio, i.e. lower).
+    // - Drum RPM (used for power calc together with the measured load-cell
+    //   torque) = raw e-motor RPM, unmanipulated.
     const MetaSense::CANBus::Stats& canStatsRpm = MetaSense::CANBus::stats();
     const bool canRpmFrameFresh = (canStatsRpm.last1daMs != 0U) &&
                                   (elapsedMsSafe(now, canStatsRpm.last1daMs) <= CAN_RX_TARGET_MAX_AGE_MS);
@@ -4252,10 +4252,10 @@ void loop()
     const float rpmRatio = (MetaSense::Settings::virtGearRatio > 0.01f)
         ? MetaSense::Settings::virtGearRatio
         : 1.45f;
-    const float canEngineRpm = emotorRpmRaw * rpmRatio;
+    const float engineRpm = emotorRpmRaw * rpmRatio;
     if (canValid) {
         // Mandatory behavior: CAN source is unfiltered.
-        rpmFilt = canEngineRpm;
+        rpmFilt = engineRpm;
     } else {
         rpmFilt = lpFilter(rpmFilt, 0.0f, alpha);
     }
@@ -4332,6 +4332,8 @@ void loop()
     tele.vcuRMinusCmd = vcuDebugRMinus;
 
     // other sensors
+    // Drum RPM = raw e-motor RPM, unmanipulated (used for power calc with
+    // the measured load-cell torque). RPM (tele.rpm) = drum RPM * gear ratio.
     float drumRaw = canValid ? emotorRpmRaw : 0.0f;
     float loadRaw = readLoadKg();
     MetaSense::RunStorage::appendFsLiveProbeSample(static_cast<uint64_t>(esp_timer_get_time()), loadRaw);
@@ -4488,7 +4490,7 @@ void loop()
         engineThrottlePercent,
         tele.rpmTarget,
         primaryBrakeSignedPercent,
-        leafFb.rpm,
+        tele.rpm,
         leafFb.input_voltage,
         inverterFaultFromCan,
         canFeedbackFreshForHwsm);

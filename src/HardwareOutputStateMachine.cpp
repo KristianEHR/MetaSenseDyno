@@ -362,7 +362,7 @@ void applyOutputs(OutputState hwState,
                   float engineThrottlePercent,
                   float primaryBrakePercent,
                   float hvVoltageFromCan,
-                  float rpmFromCan)
+                  float engineRpm)
 {
     hw::writeThrottleDutyPwm(engineThrottlePercent);
 
@@ -383,7 +383,7 @@ void applyOutputs(OutputState hwState,
         // keep-alive flips to SSR ON (which forces RB- OFF per the general
         // invariant) whenever HV sags below threshold AND RPM is low.
         const bool keepAliveNeeded = (hvVoltageFromCan < kHvKeepAliveThresholdV) &&
-                                      (rpmFromCan < kHvKeepAliveMaxRpm);
+                                      (engineRpm < kHvKeepAliveMaxRpm);
         if (keepAliveNeeded) {
             cmd = hw::makeRelayCommand(false, true, true, false);
         } else {
@@ -452,7 +452,7 @@ void writeDynoThrottle(float percent)
 void update(float engineThrottlePercent,
             float rpmSetpoint,
             float primaryBrakePercent,
-            float rpmFromCan,
+            float engineRpm,
             float hvVoltageFromCan,
             bool inverterFaultFromCan,
             bool canFeedbackFresh)
@@ -510,25 +510,25 @@ void update(float engineThrottlePercent,
     case OutputState::IDLE:
         if (motorStartByRequest) {
             state = OutputState::MOTOR;
-        } else if (rpmFromCan > kDynoEnterRpm) {
+        } else if (engineRpm > kDynoEnterRpm) {
             state = OutputState::DYNO;
-        } else if ((rpmFromCan < rpmSetpoint) && (rpmSetpoint > kMotorSetpointMinRpm)) {
+        } else if ((engineRpm < rpmSetpoint) && (rpmSetpoint > kMotorSetpointMinRpm)) {
             state = OutputState::MOTOR;
         }
         break;
 
     case OutputState::MOTOR:
-        if (!((rpmFromCan < rpmSetpoint) && (rpmSetpoint > kMotorSetpointMinRpm))) {
-            state = (rpmFromCan > kDynoEnterRpm) ? OutputState::DYNO : OutputState::IDLE;
+        if (!((engineRpm < rpmSetpoint) && (rpmSetpoint > kMotorSetpointMinRpm))) {
+            state = (engineRpm > kDynoEnterRpm) ? OutputState::DYNO : OutputState::IDLE;
         }
         break;
 
     case OutputState::DYNO:
         if (motorStartByRequest) {
             state = OutputState::MOTOR;
-        } else if (rpmFromCan < kIdleEnterRpm) {
+        } else if (engineRpm < kIdleEnterRpm) {
             state = OutputState::IDLE;
-        } else if ((rpmFromCan < rpmSetpoint) && (rpmSetpoint > kMotorSetpointMinRpm)) {
+        } else if ((engineRpm < rpmSetpoint) && (rpmSetpoint > kMotorSetpointMinRpm)) {
             state = OutputState::MOTOR;
         }
         break;
@@ -539,7 +539,7 @@ void update(float engineThrottlePercent,
         break;
     }
 
-    applyOutputs(state, engineThrottlePercent, primaryBrakePercent, hvVoltageFromCan, rpmFromCan);
+    applyOutputs(state, engineThrottlePercent, primaryBrakePercent, hvVoltageFromCan, engineRpm);
 }
 
 void requestMotorStartOverride(float rpmSetpoint)

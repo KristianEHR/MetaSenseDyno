@@ -12,11 +12,12 @@ namespace MetaSense::HardwareOutputStateMachine {
 // FAULT reachable from IDLE/MOTOR/DYNO on inverter fault or loss of live
 // 0x1DA feedback.
 //
-// All RPM/HV/fault inputs to this state machine come exclusively from the
+// All HV/fault inputs to this state machine come exclusively from the
 // decoded 0x1DA inverter feedback frame (MetaSense::CANBus::feedback()),
 // passed in explicitly by the caller -- this module does not read
 // CANBus/Input internals directly, and does not accept any bench-forced
-// "ready" override.
+// "ready" override. RPM is the gear-ratio-scaled engine RPM (same value
+// shown on the dashboard/datalog), not the raw e-motor RPM off the wire.
 // ─────────────────────────────────────────────────────────────────────────
 
 void begin();
@@ -28,7 +29,7 @@ void writeDynoThrottle(float percent);
 void update(float engineThrottlePercent,
             float rpmSetpoint,
             float primaryBrakePercent,
-            float rpmFromCan,
+            float engineRpm,
             float hvVoltageFromCan,
             bool inverterFaultFromCan,
             bool canFeedbackFresh);
