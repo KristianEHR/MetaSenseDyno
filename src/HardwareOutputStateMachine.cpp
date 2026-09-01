@@ -401,6 +401,13 @@ void applyOutputs(OutputState hwState,
         break;
 
     case OutputState::FAULT:
+        // FAULT forces SSR + Precharge OFF (stops driving/decharges the
+        // inverter's DC bus energy path) but deliberately leaves RB+/RB-
+        // frozen at whatever pattern was active immediately before the
+        // fault, rather than forcing them off.
+        cmd = hw::makeRelayCommand(hw::isRbMinusActive(), false, hw::isRbPlusActive(), false);
+        break;
+
     default:
         cmd = hw::makeRelayCommand(false, false, false, false);
         break;
