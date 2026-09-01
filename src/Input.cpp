@@ -4928,12 +4928,17 @@ void loop()
         IPAddress ip = WiFi.localIP();
         int32_t rssi = WiFi.RSSI();
         const char* vcuStateName = MetaSense::HardwareOutputStateMachine::stateName();
-        Serial.printf("[HEARTBEAT] RPM=%.0f Leaf_RPM=%.0f HV=%.1f VCU=%s Temps: Inv=%.1f Stator=%.1f Coolant=%.1f IP=%d.%d.%d.%d RSSI=%ld dBm ms=%lu\n",
-                      tele.rpm, tele.leaf_rpm, tele.vcuHvVoltage, vcuStateName, tele.leaf_invTempC, tele.leaf_statorTempC, tele.leaf_coolantTempC,
+        const auto& fbForHb = MetaSense::CANBus::feedback();
+        Serial.printf("[HEARTBEAT] RPM=%.0f Leaf_RPM=%.0f HV=%.1f VCU=%s mg_err=0x%02X inv_fault=0x%02X inv_status=%d Temps: Inv=%.1f Stator=%.1f Coolant=%.1f IP=%d.%d.%d.%d RSSI=%ld dBm ms=%lu\n",
+                      tele.rpm, tele.leaf_rpm, tele.vcuHvVoltage, vcuStateName,
+                      (unsigned)fbForHb.mg_error_codes, (unsigned)fbForHb.inv_fault_map, (int)fbForHb.inv_status_bit,
+                      tele.leaf_invTempC, tele.leaf_statorTempC, tele.leaf_coolantTempC,
                       ip[0], ip[1], ip[2], ip[3], rssi, nowMs);
         // Forward to telnet clients
-        MetaSense::TelnetSerialBridge::telnetBridgePrintf("[HEARTBEAT] RPM=%.0f Leaf_RPM=%.0f HV=%.1f VCU=%s Temps: Inv=%.1f Stator=%.1f Coolant=%.1f IP=%d.%d.%d.%d RSSI=%ld dBm ms=%lu\n",
-                      tele.rpm, tele.leaf_rpm, tele.vcuHvVoltage, vcuStateName, tele.leaf_invTempC, tele.leaf_statorTempC, tele.leaf_coolantTempC,
+        MetaSense::TelnetSerialBridge::telnetBridgePrintf("[HEARTBEAT] RPM=%.0f Leaf_RPM=%.0f HV=%.1f VCU=%s mg_err=0x%02X inv_fault=0x%02X inv_status=%d Temps: Inv=%.1f Stator=%.1f Coolant=%.1f IP=%d.%d.%d.%d RSSI=%ld dBm ms=%lu\n",
+                      tele.rpm, tele.leaf_rpm, tele.vcuHvVoltage, vcuStateName,
+                      (unsigned)fbForHb.mg_error_codes, (unsigned)fbForHb.inv_fault_map, (int)fbForHb.inv_status_bit,
+                      tele.leaf_invTempC, tele.leaf_statorTempC, tele.leaf_coolantTempC,
                       ip[0], ip[1], ip[2], ip[3], rssi, nowMs);
 
         // CAN bus health, visible over telnet (driver ready state + RX frame
