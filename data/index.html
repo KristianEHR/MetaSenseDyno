@@ -1545,8 +1545,8 @@
       leaf_ready: 0,
       hw_precharge: 0,
       vcu_precharge: 0,
-      hw_rbplus: 0,
-      hw_rbminus: 0,
+      hw_rb_plus: 0,
+      hw_rb_minus: 0,
       hw_ssr: 0,
       vcu_sim: 0,
       leaf_1da_raw_b0b7: "-- -- -- -- -- -- -- --",
@@ -1568,9 +1568,9 @@
       vcu_rminus: false,
       fw_state: "IDLE",
       hw_start_gate: "boot",
-      hw_rbplus: false,
+      hw_rb_plus: false,
       hw_precharge: false,
-      hw_rbminus: false,
+      hw_rb_minus: false,
       hw_ssr: false
     };
 
@@ -2881,9 +2881,9 @@
             if (msg.vcu_rminus !== undefined) cachedTelemetry.vcu_rminus = Number(msg.vcu_rminus) === 1;
             if (msg.fw_state !== undefined) cachedTelemetry.fw_state = msg.fw_state;
             if (msg.hw_start_gate !== undefined) cachedTelemetry.hw_start_gate = msg.hw_start_gate;
-            if (msg.hw_rbplus !== undefined) cachedTelemetry.hw_rbplus = Number(msg.hw_rbplus) === 1;
+            if (msg.hw_rb_plus !== undefined) cachedTelemetry.hw_rb_plus = Number(msg.hw_rb_plus) === 1;
             if (msg.hw_precharge !== undefined) cachedTelemetry.hw_precharge = Number(msg.hw_precharge) === 1;
-            if (msg.hw_rbminus !== undefined) cachedTelemetry.hw_rbminus = Number(msg.hw_rbminus) === 1;
+            if (msg.hw_rb_minus !== undefined) cachedTelemetry.hw_rb_minus = Number(msg.hw_rb_minus) === 1;
             if (msg.hw_ssr !== undefined) cachedTelemetry.hw_ssr = Number(msg.hw_ssr) === 1;
 
             // Create a merged view with cached data + new msg for backward compatibility
