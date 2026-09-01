@@ -635,10 +635,10 @@ void controlTaskEntry(void* /*parameter*/)
                          dynoVcu.getSSR(),
                          dynoVcu.getRMinus());
 
-    // The hardware output state machine owns the relay state. Keep the VCU relay
-    // override disabled so the HWSM remains the single enforcement point for the
-    // RSS/RB-minus interlock.
-    MetaSense::HardwareOutputStateMachine::setVcuRelayOverride(false, false, false, false, false);
+    // The hardware output state machine is the sole, highest-priority
+    // authority over relay outputs (see HardwareOutputStateMachine.cpp);
+    // the VCU relay override mechanism previously used here has been
+    // retired as an unintended bench-testing artifact.
 #if ENABLE_RUNTIME_INSTRUMENTATION
         recordTaskRuntime(controlTaskStats,
                           micros() - startedUs,
@@ -767,7 +767,7 @@ void networkTaskEntry(void* /*parameter*/)
             const MetaSense::CANBus::Stats& canStatsDiag = MetaSense::CANBus::stats();
             const bool vcuReady = MetaSense::Input::isVcuReady();
             const char* vcuReadySource = MetaSense::Input::vcuReadySource();
-            const bool hwPrestartWarn = MetaSense::HardwareOutputStateMachine::hasPrestartWarning();
+            const bool hwPrestartWarn = MetaSense::HardwareOutputStateMachine::isFaultState();
             const float torqueNm = MetaSense::Input::torqueNm();
             const float egtHotC = MetaSense::Input::egtHotC();
             float ambientC = 0.0f;

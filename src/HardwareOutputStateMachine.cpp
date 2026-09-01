@@ -1,59 +1,50 @@
 #include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
-#include <ESPAsyncWebServer.h>
 #include <driver/gpio.h>
 
 #include "HardwareOutputStateMachine.h"
 #include "globals.h"
-#include "WebSocketServer.h"
-#include "CanConfig.h"
+
+// ─────────────────────────────────────────────────────────────────────────
+// This file is split into two clearly separated levels:
+//
+//   1. HW LAYER (namespace `hw`, below): owns the physical relay pins, PWM
+//      channels, and status LED. It knows nothing about VCU states. Its
+//      only safety-relevant job is: (a) enforce the general SSR/RB-
+//      mutual-exclusion invariant, (b) enforce break-before-make (min 20ms)
+//      on every relay transition, (c) actually write the GPIO/PWM/LED
+//      hardware. It exposes a small command-based API (RelayCommand,
+//      applyRelayCommand, writeThrottleDutyPwm, writeActuatorChannel,
+//      setLedColor) plus read-back queries.
+//
+//   2. VCU LOGIC (below the `hw` namespace): the state machine itself
+//      (INIT -> START (precharge) -> IDLE <-> MOTOR / DYNO, with FAULT
+//      reachable from IDLE/MOTOR/DYNO). It decides, for the current state,
+//      what relay pattern / PWM values / LED color are *wanted*, and hands
+//      those to the HW layer to realize safely. All RPM/HV/fault inputs
+//      come exclusively from the decoded 0x1DA inverter feedback frame,
+//      passed in by the caller -- this module does not read CANBus/Input
+//      internals directly, and accepts no bench-forced "ready" bypass (a
+//      prior such mechanism, VCU_switch=0, was identified as an unintended
+//      artifact and has been retired).
+//
+// Relay table (RB+, RB-, SSR, Precharge) decided by the VCU layer:
+//   INIT:    OFF, OFF, OFF, OFF
+//   START:   OFF, OFF, ON,  ON  (2.5s precharge dwell)
+//   IDLE:    ON,  ON,  OFF, OFF   (HV keep-alive can flip SSR on / RB- off)
+//   MOTOR:   ON,  OFF, ON,  OFF
+//   DYNO:    ON,  ON,  OFF, OFF
+//   FAULT:   OFF, OFF, OFF, OFF
+// ─────────────────────────────────────────────────────────────────────────
 
 namespace {
 
-// RB+ relay always controlled by hardware state machine
+// ═══════════════════════════════════════════════════════════════════════
+// HW LAYER -- physical relay/PWM/LED drive. No knowledge of VCU states.
+// ═══════════════════════════════════════════════════════════════════════
+namespace hw {
 
-enum class OutputState {
-    INIT,
-    START,
-    IDLE,
-    MOTOR,
-    DYNO
-};
-
-OutputState state = OutputState::INIT;
-OutputState pendingState = OutputState::INIT;
-uint32_t pendingStateSinceMs = 0;
-constexpr uint32_t kRelaySwitchDelayMs = 20;
-constexpr uint32_t kStateDebounceMs = 50;
-// Keep INIT in place until the full startup stack is truly ready. With the
-// inverter silent, this prevents an early transition to START.
-constexpr uint32_t kInitPrereqStableMs = 0;
-constexpr uint32_t kInitPrechargeMinMs = 2500;
-constexpr uint32_t kStartSetpointWaitMs = 15000;
-constexpr float kHvRelayHighV = 320.0f;
-constexpr float kHvRelayLowV = 300.0f;
-constexpr float kIdleSetpointZeroThresholdRpm = 0.0f;
-constexpr float kDynoModeEntryRpm = 500.0f;
-constexpr float kIdleEntryMaxRpm = 500.0f;
-constexpr float kRpmHysteresisBandRpm = 100.0f;
-bool inverterStatusInitialized = false;
-bool hvArmedLatched = false;
-bool initPrechargeActive = false;
-bool initPrechargeCompleted = false;
-bool initPrechargeSucceeded = false;
-bool initPrechargeFailed = false;
-bool prestartWarnPrinted = false;
-uint32_t initPrechargeStartMs = 0;
-uint32_t initReadySinceMs = 0;
-uint32_t startSetpointWaitStartMs = 0;
-const char* startGateReasonText = "open";
-bool motorStartRequestPending = false;
-float motorStartRequestedRpm = 0.0f;
-bool vcuRelayOverrideEnabled = false;
-bool vcuRbPlusCommand = false;
-bool vcuPrechargeCommand = false;
-bool vcuSsrCommand = false;
-bool vcuRbMinusCommand = false;
+constexpr uint32_t kRelaySwitchDelayMs = 20;  // Break-before-make dwell.
 
 struct RelayCommand {
     bool rbMinusOn = false;
@@ -62,33 +53,21 @@ struct RelayCommand {
     bool prechargeOn = false;
 };
 
+RelayCommand makeRelayCommand(bool rbMinusOn, bool ssrOn, bool rbPlusOn, bool prechargeOn)
+{
+    RelayCommand cmd;
+    cmd.rbMinusOn = rbMinusOn;
+    cmd.ssrOn = ssrOn;
+    cmd.rbPlusOn = rbPlusOn;
+    cmd.prechargeOn = prechargeOn;
+    return cmd;
+}
+
 RelayCommand activeRelayCommand{};
-bool relayInvariantMismatchLatched = false;
-uint32_t relayInvariantLastLogMs = 0;
-uint32_t relayInvariantMismatchCount = 0;
-constexpr uint32_t kRelayInvariantLogPeriodMs = 1000;
 
 Adafruit_NeoPixel strip(MetaSense::Globals::kOnboardLedCount,
                         MetaSense::Globals::kOnboardLedPin,
                         NEO_GRB + NEO_KHZ800);
-
-const char* outputStateName(OutputState hwState)
-{
-    switch (hwState) {
-    case OutputState::INIT:
-        return "INIT";
-    case OutputState::START:
-        return "START";
-    case OutputState::IDLE:
-        return "IDLE";
-    case OutputState::MOTOR:
-        return "MOTOR";
-    case OutputState::DYNO:
-        return "DYNO";
-    }
-
-    return "IDLE";
-}
 
 int pwmMaxValue(int bits)
 {
@@ -123,7 +102,7 @@ void writeActuatorChannel(int channel, float percent)
 {
     percent = constrain(percent, 0.0f, 100.0f);
     const int maxPwm = pwmMaxValue(MetaSense::Globals::kActuatorPwmResolutionBits);
-    int pwm = static_cast<int>(percent * static_cast<float>(maxPwm) / 100.0f);
+    const int pwm = static_cast<int>(percent * static_cast<float>(maxPwm) / 100.0f);
     ledcWrite(channel, pwm);
 }
 
@@ -157,168 +136,36 @@ bool relayCommandEquals(const RelayCommand& a, const RelayCommand& b)
         a.prechargeOn == b.prechargeOn;
 }
 
-void logRelayInvariant(OutputState hwState,
-                       const RelayCommand& expected,
-                       const RelayCommand& actual,
-                       uint32_t now)
+// Applies a relay command with break-before-make (open contactors first,
+// wait the relay switch delay, then close the next set) and enforces the
+// general SSR/RB- mutual-exclusion invariant. This is the single point of
+// authority for relay outputs.
+void applyRelayCommand(RelayCommand target)
 {
-    ++relayInvariantMismatchCount;
-    Serial.printf("[HWSM][GUARD] mismatch=%lu state=%s exp(RB-=%d SSR=%d RB+=%d PRE=%d) act(RB-=%d SSR=%d RB+=%d PRE=%d)\\n",
-                  static_cast<unsigned long>(relayInvariantMismatchCount),
-                  outputStateName(hwState),
-                  expected.rbMinusOn ? 1 : 0,
-                  expected.ssrOn ? 1 : 0,
-                  expected.rbPlusOn ? 1 : 0,
-                  expected.prechargeOn ? 1 : 0,
-                  actual.rbMinusOn ? 1 : 0,
-                  actual.ssrOn ? 1 : 0,
-                  actual.rbPlusOn ? 1 : 0,
-                  actual.prechargeOn ? 1 : 0);
-    Serial0.printf("[HWSM][GUARD] mismatch=%lu state=%s exp(RB-=%d SSR=%d RB+=%d PRE=%d) act(RB-=%d SSR=%d RB+=%d PRE=%d)\\n",
-                   static_cast<unsigned long>(relayInvariantMismatchCount),
-                   outputStateName(hwState),
-                   expected.rbMinusOn ? 1 : 0,
-                   expected.ssrOn ? 1 : 0,
-                   expected.rbPlusOn ? 1 : 0,
-                   expected.prechargeOn ? 1 : 0,
-                   actual.rbMinusOn ? 1 : 0,
-                   actual.ssrOn ? 1 : 0,
-                   actual.rbPlusOn ? 1 : 0,
-                   actual.prechargeOn ? 1 : 0);
-    relayInvariantLastLogMs = now;
-}
+    // General invariant: SSR and RB- can never both be commanded ON.
+    if (target.ssrOn && target.rbMinusOn) {
+        target.rbMinusOn = false;
+    }
 
-void checkRelayInvariant(OutputState hwState, uint32_t now)
-{
-    RelayCommand expected{};
-    bool hasExpectation = false;
-
-    switch (hwState) {
-    case OutputState::INIT:
-        expected.rbMinusOn = false;
-        expected.ssrOn = false;
-        expected.rbPlusOn = false;
-        expected.prechargeOn = false;
-        hasExpectation = true;
-        break;
-    default:
-        relayInvariantMismatchLatched = false;
+    if (relayCommandEquals(activeRelayCommand, target)) {
         return;
     }
 
-    if (!hasExpectation) {
-        return;
-    }
-
-    const bool mismatch = !relayCommandEquals(activeRelayCommand, expected);
-    if (!mismatch) {
-        relayInvariantMismatchLatched = false;
-        return;
-    }
-
-    const bool logNow = !relayInvariantMismatchLatched ||
-        (now - relayInvariantLastLogMs) >= kRelayInvariantLogPeriodMs;
-    if (logNow) {
-        logRelayInvariant(hwState, expected, activeRelayCommand, now);
-    }
-    relayInvariantMismatchLatched = true;
-}
-
-bool relayInterlockPasses(const RelayCommand& cmd)
-{
-    return !(cmd.ssrOn && cmd.rbMinusOn);
-}
-
-bool relayInterlockViolationFor(OutputState hwState, bool rssOn, bool rbMinusOn)
-{
-    (void)hwState;
-    return rssOn && rbMinusOn;
-}
-
-void logRelayInterlockViolation(OutputState hwState,
-                                const RelayCommand& cmd,
-                                uint32_t now)
-{
-    static uint32_t lastLogMs = 0;
-    const bool logNow = (now - lastLogMs) >= kRelayInvariantLogPeriodMs;
-    if (!logNow) {
-        return;
-    }
-
-    Serial.printf("[HWSM][CHECK] invalid combo state=%s RSS=%d RB-=%d\n",
-                  outputStateName(hwState),
-                  cmd.ssrOn ? 1 : 0,
-                  cmd.rbMinusOn ? 1 : 0);
-    Serial0.printf("[HWSM][CHECK] invalid combo state=%s RSS=%d RB-=%d\n",
-                   outputStateName(hwState),
-                   cmd.ssrOn ? 1 : 0,
-                   cmd.rbMinusOn ? 1 : 0);
-    lastLogMs = now;
-}
-
-void logAllInvalidRelayInterlockCombos()
-{
-    static bool logged = false;
-    if (logged) {
-        return;
-    }
-
-    const OutputState states[] = {
-        OutputState::INIT,
-        OutputState::START,
-        OutputState::IDLE,
-        OutputState::MOTOR,
-        OutputState::DYNO
-    };
-
-    for (const OutputState hwState : states) {
-        for (int rssOn = 0; rssOn <= 1; ++rssOn) {
-            for (int rbMinusOn = 0; rbMinusOn <= 1; ++rbMinusOn) {
-                const RelayCommand cmd{};
-                (void)cmd;
-                if ((rssOn != 0) && (rbMinusOn != 0)) {
-                    Serial.printf("[HWSM][CHECK] invalid combo state=%s RSS=%d RB-=%d\n",
-                                  outputStateName(hwState),
-                                  rssOn,
-                                  rbMinusOn);
-                    Serial0.printf("[HWSM][CHECK] invalid combo state=%s RSS=%d RB-=%d\n",
-                                   outputStateName(hwState),
-                                   rssOn,
-                                   rbMinusOn);
-                }
-            }
-        }
-    }
-
-    logged = true;
-}
-
-void applyRelayCommand(const RelayCommand& target)
-{
-    RelayCommand normalized = target;
-    if (!relayInterlockPasses(normalized)) {
-        logRelayInterlockViolation(state, normalized, millis());
-        normalized.ssrOn = false;
-        normalized.rbMinusOn = false;
-    }
-
-    if (relayCommandEquals(activeRelayCommand, normalized)) {
-        return;
-    }
-
-    const bool rbMinusGoingLow = activeRelayCommand.rbMinusOn && !normalized.rbMinusOn;
-    const bool rbMinusGoingHigh = !activeRelayCommand.rbMinusOn && normalized.rbMinusOn;
-    const bool ssrGoingLow = activeRelayCommand.ssrOn && !normalized.ssrOn;
-    const bool ssrGoingHigh = !activeRelayCommand.ssrOn && normalized.ssrOn;
-    const bool rbPlusGoingLow = activeRelayCommand.rbPlusOn && !normalized.rbPlusOn;
-    const bool rbPlusGoingHigh = !activeRelayCommand.rbPlusOn && normalized.rbPlusOn;
-    const bool prechargeGoingLow = activeRelayCommand.prechargeOn && !normalized.prechargeOn;
-    const bool prechargeGoingHigh = !activeRelayCommand.prechargeOn && normalized.prechargeOn;
+    const bool rbMinusGoingLow = activeRelayCommand.rbMinusOn && !target.rbMinusOn;
+    const bool rbMinusGoingHigh = !activeRelayCommand.rbMinusOn && target.rbMinusOn;
+    const bool ssrGoingLow = activeRelayCommand.ssrOn && !target.ssrOn;
+    const bool ssrGoingHigh = !activeRelayCommand.ssrOn && target.ssrOn;
+    const bool rbPlusGoingLow = activeRelayCommand.rbPlusOn && !target.rbPlusOn;
+    const bool rbPlusGoingHigh = !activeRelayCommand.rbPlusOn && target.rbPlusOn;
+    const bool prechargeGoingLow = activeRelayCommand.prechargeOn && !target.prechargeOn;
+    const bool prechargeGoingHigh = !activeRelayCommand.prechargeOn && target.prechargeOn;
 
     const bool anyGoingLow = rbMinusGoingLow || ssrGoingLow || rbPlusGoingLow || prechargeGoingLow;
     const bool anyGoingHigh = rbMinusGoingHigh || ssrGoingHigh || rbPlusGoingHigh || prechargeGoingHigh;
 
-    // Enforce break-before-make: open contactors first, wait relay latency, then close the next set.
+    // Break-before-make: open contactors first, wait relay latency, then
+    // close the next set. Blocking delay is intentional here -- rotational
+    // inertia means the PI control loop will not notice a relay transition.
     if (anyGoingLow && anyGoingHigh) {
         RelayCommand breakStep = activeRelayCommand;
         if (rbMinusGoingLow) breakStep.rbMinusOn = false;
@@ -330,215 +177,22 @@ void applyRelayCommand(const RelayCommand& target)
         delay(kRelaySwitchDelayMs);
     }
 
-    writeRelayPinsImmediate(normalized);
-    activeRelayCommand = normalized;
+    writeRelayPinsImmediate(target);
+    activeRelayCommand = target;
 }
 
-void setRelayOutputs(bool rbMinusOn, bool sssrOn, bool rbPlusOn = false, bool prechargeOn = false)
+uint32_t packColor(uint8_t r, uint8_t g, uint8_t b)
 {
-    RelayCommand cmd{};
-    cmd.rbMinusOn = vcuRelayOverrideEnabled ? vcuRbMinusCommand : rbMinusOn;
-
-    const bool requestedSsrOn = vcuRelayOverrideEnabled ? vcuSsrCommand : sssrOn;
-    cmd.ssrOn = requestedSsrOn;
-
-    // New HV relay pins are owned by VCU path when override is enabled.
-    cmd.rbPlusOn = vcuRelayOverrideEnabled ? vcuRbPlusCommand : rbPlusOn;
-    cmd.prechargeOn = vcuRelayOverrideEnabled ? vcuPrechargeCommand : prechargeOn;
-
-    applyRelayCommand(cmd);
+    return strip.Color(r, g, b);
 }
 
-void writePrimaryBrakeSplit(OutputState hwState, float signedPercent)
+void setLedColor(uint32_t color)
 {
-    signedPercent = constrain(signedPercent, -100.0f, 100.0f);
-
-    switch (hwState) {
-    case OutputState::INIT:
-        writeActuatorChannel(MetaSense::Globals::kBrakePwmChannel, 0.0f);
-        writeActuatorChannel(MetaSense::Globals::kDynoThrottlePwmChannel, 0.0f);
-        break;
-    case OutputState::START:
-        writeActuatorChannel(MetaSense::Globals::kBrakePwmChannel, 0.0f);
-        writeActuatorChannel(MetaSense::Globals::kDynoThrottlePwmChannel, 0.0f);
-        break;
-    case OutputState::MOTOR:
-        writeActuatorChannel(MetaSense::Globals::kBrakePwmChannel,
-                     signedPercent > 0.0f ? signedPercent : 0.0f);
-        writeActuatorChannel(MetaSense::Globals::kDynoThrottlePwmChannel, 0.0f);
-        break;
-
-    case OutputState::DYNO:
-        writeActuatorChannel(MetaSense::Globals::kBrakePwmChannel, 0.0f);
-        writeActuatorChannel(MetaSense::Globals::kDynoThrottlePwmChannel,
-                     signedPercent < 0.0f ? -signedPercent : 0.0f);
-        break;
-
-    case OutputState::IDLE:
-        writeActuatorChannel(MetaSense::Globals::kBrakePwmChannel, 0.0f);
-        writeActuatorChannel(MetaSense::Globals::kDynoThrottlePwmChannel, 0.0f);
-        break;
-    }
-}
-
-void setStateLed(OutputState hwState)
-{
-    uint32_t color = 0;
-
-    switch (hwState) {
-    case OutputState::INIT:
-        color = strip.Color(255, 255, 255);
-        break;
-    case OutputState::START:
-        color = strip.Color(255, 200, 0);
-        break;
-    case OutputState::IDLE:
-        color = strip.Color(0, 0, 255);
-        break;
-    case OutputState::MOTOR:
-        color = strip.Color(255, 0, 0);
-        break;
-    case OutputState::DYNO:
-        color = strip.Color(0, 255, 0);
-        break;
-    }
-
     strip.setPixelColor(0, color);
     strip.show();
 }
 
-void updateStartPrechargeSequence(float setPoint,
-                                  float inverterHvVoltage,
-                                  bool inverterFault,
-                                  uint32_t now)
-{
-    if (initPrechargeFailed) {
-        initPrechargeActive = false;
-        return;
-    }
-
-    if (initPrechargeCompleted) {
-        initPrechargeActive = false;
-        return;
-    }
-
-    // Enforce START precharge only at zero setpoint.
-    const bool startCondition = setPoint <= kIdleSetpointZeroThresholdRpm;
-    if (!startCondition) {
-        initPrechargeActive = false;
-        return;
-    }
-
-    if (!initPrechargeActive) {
-        initPrechargeActive = true;
-        initPrechargeStartMs = now;
-        return;
-    }
-
-    const uint32_t elapsedMs = now - initPrechargeStartMs;
-    if (elapsedMs >= kInitPrechargeMinMs) {
-        initPrechargeActive = false;
-        initPrechargeCompleted = true;
-
-        initPrechargeSucceeded = true;
-        initPrechargeFailed = false;
-
-        if (!initPrechargeSucceeded && !prestartWarnPrinted) {
-            Serial.printf("[HWSM][PRESTART_WARN] START precharge completed without a specific HV gate: hv=%.1fV\n",
-                          inverterHvVoltage);
-            Serial0.printf("[HWSM][PRESTART_WARN] START precharge completed without a specific HV gate: hv=%.1fV\n",
-                           inverterHvVoltage);
-            prestartWarnPrinted = true;
-        }
-    }
-}
-
-void applyOutputs(OutputState nextState,
-                  OutputState prevState,
-                  float engineThrottlePercent,
-                  float primaryBrakePercent,
-                  bool inverterReady,
-                  bool inverterFault,
-                  float inverterHvVoltage)
-{
-    (void)prevState;
-    writeThrottleDutyPwm(engineThrottlePercent);
-
-    if (initPrechargeFailed) {
-        setRelayOutputs(false, false, false, false);
-        writePrimaryBrakeSplit(OutputState::START, 0.0f);
-        setStateLed(OutputState::START);
-        return;
-    }
-
-    hvArmedLatched = inverterReady;
-
-    const bool hvHigh = inverterHvVoltage >= kHvRelayHighV;
-    const bool hvLow = inverterHvVoltage < kHvRelayLowV;
-    const bool prechargeActive = initPrechargeActive;
-    const bool rbPlusHold = initPrechargeSucceeded;
-    // Keep the HV path energized in the run states so the inverter rail stays
-    // above 300 V even when no HV battery is present on the dyno bench.
-    const bool keepHvAlive = (nextState != OutputState::INIT) && !inverterFault;
-    const bool hvStayAliveEnabled = keepHvAlive || hvHigh || hvLow;
-
-    switch (nextState) {
-    case OutputState::INIT:
-        // INIT contract: firmware/hardware bring-up complete, keep relays OFF.
-        setRelayOutputs(false, false, false, false);
-        writePrimaryBrakeSplit(OutputState::INIT, 0.0f);
-        break;
-
-    case OutputState::START:
-        if (hvStayAliveEnabled) {
-            // The bench stay-alive path keeps HV present with SSR asserted and
-            // RB- released, which avoids the interlock conflict while still
-            // maintaining the HV rail above 300 V.
-            setRelayOutputs(false, true, true, true);
-        } else {
-            // When precharge completes, hold RB+ relay engaged to maintain HV path
-            setRelayOutputs(false, prechargeActive, rbPlusHold, prechargeActive);
-        }
-        writePrimaryBrakeSplit(OutputState::START, 0.0f);
-        break;
-
-    case OutputState::IDLE:
-        if (hvStayAliveEnabled) {
-            setRelayOutputs(false, true, true, true);
-        } else {
-            setRelayOutputs(true, false, rbPlusHold, false);
-        }
-        writePrimaryBrakeSplit(OutputState::IDLE, primaryBrakePercent);
-        break;
-
-    case OutputState::MOTOR:
-        if (hvStayAliveEnabled) {
-            setRelayOutputs(false, true, true, true);
-        } else {
-            setRelayOutputs(false, true, rbPlusHold, prechargeActive);
-        }
-        writePrimaryBrakeSplit(OutputState::MOTOR, primaryBrakePercent);
-        break;
-
-    case OutputState::DYNO:
-        if (hvStayAliveEnabled) {
-            setRelayOutputs(false, true, true, true);
-        } else {
-            setRelayOutputs(true, false, rbPlusHold, false);
-        }
-        writePrimaryBrakeSplit(OutputState::DYNO, primaryBrakePercent);
-        break;
-    }
-
-    setStateLed(nextState);
-}
-
-} // anonymous namespace
-
-
-namespace MetaSense::HardwareOutputStateMachine {
-
-void begin()
+void beginOutputs()
 {
     strip.begin();
     strip.clear();
@@ -561,233 +215,316 @@ void begin()
         return true;
     };
 
-    const bool rbMinusValid = configureOutputPin(MetaSense::Globals::kRbMinusFetPin);
-    const bool ssrValid = configureOutputPin(MetaSense::Globals::kSssrPin);
-    const bool rbPlusValid = configureOutputPin(MetaSense::Globals::kRbPlusRelayPin);
-    const bool prechargeValid = configureOutputPin(MetaSense::Globals::kPrechargeRelayPin);
-    (void)rbMinusValid;
-    (void)ssrValid;
-    (void)rbPlusValid;
-    (void)prechargeValid;
+    (void)configureOutputPin(MetaSense::Globals::kRbMinusFetPin);
+    (void)configureOutputPin(MetaSense::Globals::kSssrPin);
+    (void)configureOutputPin(MetaSense::Globals::kRbPlusRelayPin);
+    (void)configureOutputPin(MetaSense::Globals::kPrechargeRelayPin);
 
     activeRelayCommand = RelayCommand{};
-    logAllInvalidRelayInterlockCombos();
-    // INIT state: all 4 relays OFF (RB-, SSR, RB+, Precharge)
-    setRelayOutputs(false, false, false, false);
+    writeRelayPinsImmediate(activeRelayCommand);
+}
+
+bool isRbPlusActive()
+{
+    return digitalRead(MetaSense::Globals::kRbPlusRelayPin) == HIGH;
+}
+
+bool isRbMinusActive()
+{
+    return digitalRead(MetaSense::Globals::kRbMinusFetPin) == HIGH;
+}
+
+bool isSsrActive()
+{
+    return digitalRead(MetaSense::Globals::kSssrPin) == HIGH;
+}
+
+bool isPrechargeActive()
+{
+    return digitalRead(MetaSense::Globals::kPrechargeRelayPin) == HIGH;
+}
+
+} // namespace hw
+
+// ═══════════════════════════════════════════════════════════════════════
+// VCU LOGIC -- state machine, transitions, precharge sequencing. Only
+// talks to the `hw` namespace above via its command-based API.
+// ═══════════════════════════════════════════════════════════════════════
+
+enum class OutputState {
+    INIT,
+    START,
+    IDLE,
+    MOTOR,
+    DYNO,
+    FAULT
+};
+
+const char* outputStateName(OutputState s)
+{
+    switch (s) {
+    case OutputState::INIT:  return "INIT";
+    case OutputState::START: return "START";
+    case OutputState::IDLE:  return "IDLE";
+    case OutputState::MOTOR: return "MOTOR";
+    case OutputState::DYNO:  return "DYNO";
+    case OutputState::FAULT: return "FAULT";
+    }
+    return "INIT";
+}
+
+OutputState state = OutputState::INIT;
+
+// --- Tunables from the agreed spec ---
+constexpr uint32_t kPrechargeDurationMs = 2500;  // Fixed precharge dwell.
+constexpr uint8_t  kPrechargeMaxAttempts = 3;    // Retries before FAULT.
+constexpr float kPrechargeHvReadyV = 300.0f;     // HV must reach this to succeed.
+constexpr float kStartRpmSetpointMaxRpm = 150.0f; // INIT->START gate: setpoint must be below this.
+constexpr float kIdleDynoHystCenterRpm = 500.0f;
+constexpr float kIdleDynoHystBandRpm = 150.0f;    // Single hysteresis band: 500 +/- 150.
+constexpr float kDynoEnterRpm = kIdleDynoHystCenterRpm + kIdleDynoHystBandRpm; // 650
+constexpr float kIdleEnterRpm = kIdleDynoHystCenterRpm - kIdleDynoHystBandRpm; // 350
+constexpr float kMotorSetpointMinRpm = 150.0f;    // MOTOR entry requires setpoint above this.
+constexpr float kHvKeepAliveThresholdV = 300.0f;  // IDLE-only HV keep-alive gate.
+
+// --- Precharge sequencing state ---
+uint32_t prechargeStartMs = 0;
+uint8_t prechargeAttempt = 0;
+
+// --- Motor-start override (operator request, e.g. START-request button) ---
+bool motorStartRequestPending = false;
+float motorStartRequestedRpm = 0.0f;
+
+// Decides the desired brake/dyno-throttle PWM split for the current state
+// and hands it to the HW layer. Only this function knows which channel
+// means what per state.
+void writePrimaryBrakeSplit(OutputState hwState, float signedPercent)
+{
+    signedPercent = constrain(signedPercent, -100.0f, 100.0f);
+
+    switch (hwState) {
+    case OutputState::MOTOR:
+        hw::writeActuatorChannel(MetaSense::Globals::kBrakePwmChannel,
+                     signedPercent > 0.0f ? signedPercent : 0.0f);
+        hw::writeActuatorChannel(MetaSense::Globals::kDynoThrottlePwmChannel, 0.0f);
+        break;
+
+    case OutputState::DYNO:
+        hw::writeActuatorChannel(MetaSense::Globals::kBrakePwmChannel, 0.0f);
+        hw::writeActuatorChannel(MetaSense::Globals::kDynoThrottlePwmChannel,
+                     signedPercent < 0.0f ? -signedPercent : 0.0f);
+        break;
+
+    case OutputState::INIT:
+    case OutputState::START:
+    case OutputState::IDLE:
+    case OutputState::FAULT:
+    default:
+        hw::writeActuatorChannel(MetaSense::Globals::kBrakePwmChannel, 0.0f);
+        hw::writeActuatorChannel(MetaSense::Globals::kDynoThrottlePwmChannel, 0.0f);
+        break;
+    }
+}
+
+// Decides the desired status-LED color for the current state.
+void setStateLed(OutputState hwState)
+{
+    uint32_t color = 0;
+
+    switch (hwState) {
+    case OutputState::INIT:
+        color = hw::packColor(255, 255, 255);
+        break;
+    case OutputState::START:
+        color = hw::packColor(255, 200, 0);
+        break;
+    case OutputState::IDLE:
+        color = hw::packColor(0, 0, 255);
+        break;
+    case OutputState::MOTOR:
+        color = hw::packColor(255, 0, 0);
+        break;
+    case OutputState::DYNO:
+        color = hw::packColor(0, 255, 0);
+        break;
+    case OutputState::FAULT:
+        color = hw::packColor(255, 0, 255);
+        break;
+    }
+
+    hw::setLedColor(color);
+}
+
+// Decides the desired relay pattern and PWM/LED outputs for the current
+// state, and hands them to the HW layer to realize.
+void applyOutputs(OutputState hwState,
+                  float engineThrottlePercent,
+                  float primaryBrakePercent,
+                  float hvVoltageFromCan)
+{
+    hw::writeThrottleDutyPwm(engineThrottlePercent);
+
+    hw::RelayCommand cmd{};
+
+    switch (hwState) {
+    case OutputState::INIT:
+        cmd = hw::makeRelayCommand(false, false, false, false);
+        break;
+
+    case OutputState::START:
+        // Precharging: SSR + Precharge ON, RB+/RB- OFF.
+        cmd = hw::makeRelayCommand(false, true, false, true);
+        break;
+
+    case OutputState::IDLE: {
+        // Normal IDLE relay pattern is RB+/RB- ON, SSR/Precharge OFF. The HV
+        // keep-alive flips to SSR ON (which forces RB- OFF per the general
+        // invariant) whenever HV sags below threshold at low RPM.
+        const bool keepAliveNeeded = (hvVoltageFromCan < kHvKeepAliveThresholdV);
+        if (keepAliveNeeded) {
+            cmd = hw::makeRelayCommand(false, true, true, false);
+        } else {
+            cmd = hw::makeRelayCommand(true, false, true, false);
+        }
+        break;
+    }
+
+    case OutputState::MOTOR:
+        cmd = hw::makeRelayCommand(false, true, true, false);
+        break;
+
+    case OutputState::DYNO:
+        cmd = hw::makeRelayCommand(true, false, true, false);
+        break;
+
+    case OutputState::FAULT:
+    default:
+        cmd = hw::makeRelayCommand(false, false, false, false);
+        break;
+    }
+
+    hw::applyRelayCommand(cmd);
+    writePrimaryBrakeSplit(hwState, primaryBrakePercent);
+    setStateLed(hwState);
+}
+
+} // namespace
+
+namespace MetaSense::HardwareOutputStateMachine {
+
+void begin()
+{
+    hw::beginOutputs();
+
     state = OutputState::INIT;
-    pendingState = state;
-    pendingStateSinceMs = millis();
-    initPrechargeActive = false;
-    initPrechargeCompleted = false;
-    initPrechargeSucceeded = false;
-    initPrechargeFailed = false;
-    prestartWarnPrinted = false;
-    initPrechargeStartMs = 0;
+    prechargeStartMs = 0;
+    prechargeAttempt = 0;
+    motorStartRequestPending = false;
+    motorStartRequestedRpm = 0.0f;
     setStateLed(state);
 }
 
 void writeThrottle(float percent)
 {
-    writeThrottleDutyPwm(percent);
+    hw::writeThrottleDutyPwm(percent);
 }
 
 void writeBrake(float percent)
 {
-    writeActuatorChannel(MetaSense::Globals::kBrakePwmChannel, percent);
+    hw::writeActuatorChannel(MetaSense::Globals::kBrakePwmChannel, percent);
 }
 
 void writeDynoThrottle(float percent)
 {
-    writeActuatorChannel(MetaSense::Globals::kDynoThrottlePwmChannel, percent);
+    hw::writeActuatorChannel(MetaSense::Globals::kDynoThrottlePwmChannel, percent);
 }
 
 void update(float engineThrottlePercent,
-            float setPoint,
-            float rpm,
+            float rpmSetpoint,
             float primaryBrakePercent,
-            float inverterHvVoltage,
-            bool inverterStatusReady,
-            bool inverterReady,
-            bool inverterFault,
-            bool telemetryConnected,
-            bool canTelemetryReady,
-            bool sensorsReady)
+            float rpmFromCan,
+            float hvVoltageFromCan,
+            bool inverterFaultFromCan,
+            bool canFeedbackFresh)
 {
-    const OutputState prevState = state;
-    OutputState candidateState = state;
-    const bool idleSetpointZero = setPoint <= kIdleSetpointZeroThresholdRpm;
-    const bool startExitSetpointZero = (fabsf(setPoint) <= 0.001f);
-    // Bidirectional RPM hysteresis: use separate entry/exit thresholds to avoid chatter
-    // when crossing IDLE and DYNO boundaries in either direction.
-    const float idleEnterRpm = kIdleEntryMaxRpm - kRpmHysteresisBandRpm;
-    const float idleExitRpm = kIdleEntryMaxRpm + kRpmHysteresisBandRpm;
-    const bool idleRpmCondition = (state == OutputState::IDLE)
-        ? (rpm <= idleExitRpm)
-        : (rpm <= idleEnterRpm);
-    const bool idleCondition = idleSetpointZero && idleRpmCondition;
-
-    const float dynoEnterRpm = kDynoModeEntryRpm + kRpmHysteresisBandRpm;
-    const float dynoExitRpm = kDynoModeEntryRpm - kRpmHysteresisBandRpm;
-    const bool dynoRpmCondition = (state == OutputState::DYNO)
-        ? (rpm >= dynoExitRpm)
-        : (rpm >= dynoEnterRpm);
-    const bool dynoCondition = dynoRpmCondition;
-    const bool motorSetpointCondition = setPoint > kIdleSetpointZeroThresholdRpm;
-
-    if (inverterStatusReady || canTelemetryReady) {
-        inverterStatusInitialized = true;
-    }
-
     const uint32_t now = millis();
+
     bool motorStartByRequest = false;
     if (motorStartRequestPending) {
         motorStartRequestPending = false;
         motorStartByRequest = true;
-
-        initPrechargeActive = false;
-        initPrechargeCompleted = false;
-        initPrechargeSucceeded = false;
-        initPrechargeFailed = false;
-        prestartWarnPrinted = false;
-        initPrechargeStartMs = 0;
-        startSetpointWaitStartMs = 0;
     }
 
-    // Hardware readiness determined by actual inverter status bit from 0x1DA frame.
-    // inverterStatusReady reflects inv_status_bit = 1 (inverter is ready),
-    // which is passed from Input.cpp and provides the definitive INIT criterion.
-    const bool hardwareReady = inverterStatusReady;
-    // Telemetry is useful for the UI, but it should not keep the controller
-    // stuck in INIT/white LED during boot when the core hardware and sensors
-    // are already healthy. Poor or intermittent telemetry should not block the
-    // state machine from entering IDLE or MOTOR.
-    const bool coreBootReady = sensorsReady && hardwareReady;
-    const bool initPrereqNow = coreBootReady;
-    if (initPrereqNow) {
-        if (initReadySinceMs == 0U) {
-            initReadySinceMs = now;
+    // FAULT is reachable from IDLE/MOTOR/DYNO on inverter fault or loss of
+    // live 0x1DA feedback. It is NOT reachable this way from START -- during
+    // precharge, only the HV-not-reached-in-time condition matters (an
+    // inverterFault flag alone must not abort precharge early).
+    const bool faultConditionActive = inverterFaultFromCan || !canFeedbackFresh;
+    if (faultConditionActive &&
+        (state == OutputState::IDLE || state == OutputState::MOTOR || state == OutputState::DYNO)) {
+        state = OutputState::FAULT;
+    }
+
+    switch (state) {
+    case OutputState::INIT:
+        // Gate: live CAN feedback present AND operator setpoint is safely
+        // low before we even attempt to close any HV relay.
+        if (canFeedbackFresh && (rpmSetpoint < kStartRpmSetpointMaxRpm)) {
+            state = OutputState::START;
+            prechargeStartMs = now;
+            prechargeAttempt = 1;
         }
-    } else {
-        initReadySinceMs = 0U;
-    }
-    const bool initPrereqStable = (initReadySinceMs != 0U) &&
-                                  ((kInitPrereqStableMs == 0U) ||
-                                   ((now - initReadySinceMs) >= kInitPrereqStableMs));
+        break;
 
-    const bool allowStartPrecharge = (state == OutputState::START);
-
-    if (allowStartPrecharge) {
-        updateStartPrechargeSequence(setPoint, inverterHvVoltage, inverterFault, now);
-    } else {
-        initPrechargeActive = false;
-    }
-
-    if (motorStartByRequest) {
-        candidateState = OutputState::MOTOR;
-    } else if (state == OutputState::INIT) {
-        // INIT is the full firmware/hardware bring-up phase. Once the startup
-        // prerequisites are stable, move straight to the run state implied by
-        // the current setpoint so the LED and state stay consistent.
-        candidateState = initPrereqStable
-            ? (idleSetpointZero ? OutputState::IDLE : OutputState::MOTOR)
-            : OutputState::INIT;
-    } else if (state == OutputState::START) {
-        // Keep the startup gate short-lived. A zero setpoint returns to IDLE,
-        // while any positive setpoint should immediately progress to MOTOR.
-        startSetpointWaitStartMs = 0;
-        candidateState = motorSetpointCondition
-            ? OutputState::MOTOR
-            : OutputState::IDLE;
-    } else if (inverterFault) {
-        candidateState = OutputState::START;
-    } else if (dynoCondition) {
-        candidateState = OutputState::DYNO;
-    } else if (motorSetpointCondition) {
-        candidateState = OutputState::MOTOR;
-    } else if (idleCondition) {
-        candidateState = OutputState::IDLE;
-    } else {
-        candidateState = OutputState::IDLE;
-    }
-
-    // Operator-facing reason why START is currently held, or why run path is open.
-    if (motorStartByRequest) {
-        startGateReasonText = "motor_start_button";
-    } else if (state == OutputState::INIT) {
-        if (initPrereqStable) {
-            startGateReasonText = "init_to_start";
-        } else if (!hardwareReady) {
-            startGateReasonText = "init_wait_hw";
-        } else if (!sensorsReady) {
-            startGateReasonText = "init_wait_sensors";
-        } else {
-            startGateReasonText = "init_wait_stable";
+    case OutputState::START: {
+        const uint32_t elapsedMs = now - prechargeStartMs;
+        if (elapsedMs >= kPrechargeDurationMs) {
+            if (hvVoltageFromCan >= kPrechargeHvReadyV) {
+                state = OutputState::IDLE;
+            } else if (prechargeAttempt < kPrechargeMaxAttempts) {
+                // Retry: restart the precharge dwell.
+                ++prechargeAttempt;
+                prechargeStartMs = now;
+            } else {
+                state = OutputState::FAULT;
+            }
         }
-    } else if (inverterFault && state != OutputState::START) {
-        startGateReasonText = "fault";
-    } else if (state == OutputState::START && !initPrechargeSucceeded) {
-        if (setPoint > kIdleSetpointZeroThresholdRpm) {
-            startGateReasonText = "wait_setpoint_zero";
-        } else if (initPrechargeCompleted) {
-            startGateReasonText = "precharge_wait_hv";
-        } else if (initPrechargeActive) {
-            startGateReasonText = "precharge_active";
-        } else {
-            startGateReasonText = "precharge_pending";
+        break;
+    }
+
+    case OutputState::IDLE:
+        if (motorStartByRequest) {
+            state = OutputState::MOTOR;
+        } else if (rpmFromCan > kDynoEnterRpm) {
+            state = OutputState::DYNO;
+        } else if ((rpmFromCan < rpmSetpoint) && (rpmSetpoint > kMotorSetpointMinRpm)) {
+            state = OutputState::MOTOR;
         }
-    } else if (state == OutputState::START) {
-        startGateReasonText = startExitSetpointZero ? "start_exit_idle" : "wait_setpoint_zero";
-    } else {
-        startGateReasonText = "open";
+        break;
+
+    case OutputState::MOTOR:
+        if (!((rpmFromCan < rpmSetpoint) && (rpmSetpoint > kMotorSetpointMinRpm))) {
+            state = (rpmFromCan > kDynoEnterRpm) ? OutputState::DYNO : OutputState::IDLE;
+        }
+        break;
+
+    case OutputState::DYNO:
+        if (motorStartByRequest) {
+            state = OutputState::MOTOR;
+        } else if (rpmFromCan < kIdleEnterRpm) {
+            state = OutputState::IDLE;
+        } else if ((rpmFromCan < rpmSetpoint) && (rpmSetpoint > kMotorSetpointMinRpm)) {
+            state = OutputState::MOTOR;
+        }
+        break;
+
+    case OutputState::FAULT:
+        // Latched: recovery requires returning to INIT and re-running the
+        // full precharge sequence. No automatic exit from FAULT.
+        break;
     }
 
-    if (candidateState != pendingState) {
-        pendingState = candidateState;
-        pendingStateSinceMs = now;
-    }
-
-    if (pendingState != state && (now - pendingStateSinceMs) >= kStateDebounceMs) {
-        state = pendingState;
-        Serial.printf("[HWSM] state=%s gate=%d completed=%d active=%d start=%lu now=%lu\n",
-                      outputStateName(state),
-                      initPrechargeSucceeded ? 1 : 0,
-                      initPrechargeCompleted ? 1 : 0,
-                      initPrechargeActive ? 1 : 0,
-                      static_cast<unsigned long>(initPrechargeStartMs),
-                      static_cast<unsigned long>(now));
-        Serial0.printf("[HWSM] state=%s gate=%d completed=%d active=%d start=%lu now=%lu\n",
-                       outputStateName(state),
-                       initPrechargeSucceeded ? 1 : 0,
-                       initPrechargeCompleted ? 1 : 0,
-                       initPrechargeActive ? 1 : 0,
-                       static_cast<unsigned long>(initPrechargeStartMs),
-                       static_cast<unsigned long>(now));
-    } else if (pendingState == state) {
-        pendingStateSinceMs = now;
-    }
-
-    if (state != OutputState::START) {
-        startSetpointWaitStartMs = 0;
-    }
-
-    applyOutputs(state, prevState, engineThrottlePercent, primaryBrakePercent, inverterReady, inverterFault, inverterHvVoltage);
-    checkRelayInvariant(state, now);
-}
-
-void setStateIdle()
-{
-    state = OutputState::IDLE;
-    setRelayOutputs(false, false, true, true);
-    writeBrake(0.0f);
-    writeDynoThrottle(0.0f);
-    setStateLed(state);
-}
-
-void setStateMotorDyno()
-{
-    state = OutputState::MOTOR;
-    setRelayOutputs(false, true, initPrechargeSucceeded);
-    setStateLed(state);
+    applyOutputs(state, engineThrottlePercent, primaryBrakePercent, hvVoltageFromCan);
 }
 
 void requestMotorStartOverride(float rpmSetpoint)
@@ -806,10 +543,16 @@ bool isIdleState()
     return state == OutputState::IDLE;
 }
 
+bool isFaultState()
+{
+    return state == OutputState::FAULT;
+}
+
 void stop()
 {
     writeThrottle(0.0f);
-    setStateIdle();
+    state = OutputState::IDLE;
+    applyOutputs(state, 0.0f, 0.0f, 0.0f);
 }
 
 const char* stateName()
@@ -817,84 +560,70 @@ const char* stateName()
     return outputStateName(state);
 }
 
-const char* startGateReason()
-{
-    return startGateReasonText;
-}
-
 bool isRbPlusActive()
 {
-    return digitalRead(MetaSense::Globals::kRbPlusRelayPin) == HIGH;
+    return hw::isRbPlusActive();
 }
 
 bool isRbPlusCommandedActive()
 {
-    return activeRelayCommand.rbPlusOn;
+    return hw::activeRelayCommand.rbPlusOn;
 }
 
 void setVcuRelayOverride(bool enabled, bool rbPlus, bool precharge, bool ssr, bool rbMinus)
 {
-    vcuRelayOverrideEnabled = enabled;
-    vcuRbPlusCommand = rbPlus;
-    vcuPrechargeCommand = precharge;
-    vcuSsrCommand = ssr;
-    vcuRbMinusCommand = rbMinus;
+    // Retired: the state machine is the sole, highest-priority authority
+    // over relay outputs. A VCU override bypass was identified as an
+    // unintended artifact of past bench-testing and has been removed.
+    (void)enabled;
+    (void)rbPlus;
+    (void)precharge;
+    (void)ssr;
+    (void)rbMinus;
 }
 
 void applyVcuSimRelayOutputs(bool rbPlusOn, bool prechargeOn, bool ssrOn, bool rbMinusOn)
 {
-    RelayCommand cmd{};
-    cmd.rbMinusOn = rbMinusOn;
-    cmd.ssrOn = ssrOn;
-    cmd.rbPlusOn = rbPlusOn;
-    cmd.prechargeOn = (state == OutputState::START && initPrechargeActive) ? prechargeOn : false;
-
-    // Keep simulation path aligned with production HV relay interlock.
-    if (cmd.prechargeOn) {
-        cmd.rbPlusOn = false;
-    }
-
-    applyRelayCommand(cmd);
+    // Retired along with setVcuRelayOverride() -- see comment there.
+    (void)rbPlusOn;
+    (void)prechargeOn;
+    (void)ssrOn;
+    (void)rbMinusOn;
 }
 
 bool isRbMinusActive()
 {
-    return digitalRead(MetaSense::Globals::kRbMinusFetPin) == HIGH;
+    return hw::isRbMinusActive();
 }
 
 bool isRbMinusCommandedActive()
 {
-    return activeRelayCommand.rbMinusOn;
+    return hw::activeRelayCommand.rbMinusOn;
 }
 
 bool isSsrActive()
 {
-    return digitalRead(MetaSense::Globals::kSssrPin) == HIGH;
+    return hw::isSsrActive();
 }
 
 bool isSsrCommandedActive()
 {
-    return activeRelayCommand.ssrOn;
+    return hw::activeRelayCommand.ssrOn;
 }
 
 bool isPrechargeActive()
 {
-    return digitalRead(MetaSense::Globals::kPrechargeRelayPin) == HIGH;
+    return hw::isPrechargeActive();
 }
 
 bool isPrechargeCommandedActive()
 {
-    return activeRelayCommand.prechargeOn;
+    return hw::activeRelayCommand.prechargeOn;
 }
 
 bool isPrechargeSucceeded()
 {
-    return initPrechargeSucceeded;
-}
-
-bool hasPrestartWarning()
-{
-    return initPrechargeFailed;
+    return (state != OutputState::INIT) && (state != OutputState::START) && (state != OutputState::FAULT);
 }
 
 } // namespace MetaSense::HardwareOutputStateMachine

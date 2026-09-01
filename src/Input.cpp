@@ -1656,46 +1656,10 @@ static bool isStartControlWindow()
     }
     return (strcmp(hwState, "INIT") == 0) ||
            (strcmp(hwState, "START") == 0) ||
-           MetaSense::HardwareOutputStateMachine::hasPrestartWarning();
+           MetaSense::HardwareOutputStateMachine::isFaultState();
 }
 
-static uint32_t s_canStartRxFrames = 0U;
-static uint32_t s_canStartLeafFrames = 0U;
-static uint32_t s_canStart1daFrames = 0U;
-static bool s_canStartReadyLatched = false;
 static uint32_t s_initCanTxLastMs = 0U;
-
-static bool evaluateCanStartReadiness(uint32_t now,
-                                      const MetaSense::CANBus::Stats& canStats)
-{
-    const bool busFresh = (canStats.lastRxMs != 0U) &&
-                          (elapsedMsSafe(now, canStats.lastRxMs) <= CAN_TEMP_TIMEOUT_MS);
-    const bool counterAdvancing = (canStats.rxFrames > s_canStartRxFrames) ||
-                                   (canStats.rxLeafFrames > s_canStartLeafFrames) ||
-                                   (canStats.rx1daFrames > s_canStart1daFrames);
-    const bool hasAnyActivity = busFresh &&
-                                ((canStats.rxFrames > 0U) ||
-                                 (canStats.rxLeafFrames > 0U) ||
-                                 (canStats.last1daMs != 0U));
-
-    if (counterAdvancing) {
-        s_canStartRxFrames = canStats.rxFrames;
-        s_canStartLeafFrames = canStats.rxLeafFrames;
-        s_canStart1daFrames = canStats.rx1daFrames;
-    }
-
-    if (!busFresh) {
-        s_canStartReadyLatched = false;
-        return false;
-    }
-
-    if (counterAdvancing || s_canStartReadyLatched || hasAnyActivity) {
-        s_canStartReadyLatched = true;
-        return true;
-    }
-
-    return false;
-}
 
 float readAdcSafe(uint8_t pin)
 {
@@ -4173,10 +4137,9 @@ void begin()
     // (keep-alive) begin transmitting every 10ms with template payloads
     // (torque demand=0, gear=4, car=2, charge status=1, manual mode) as soon
     // as the driver comes up. It is not mandatory for CAN to be the first
-    // thing initialized at boot, but the HWSM INIT gate (relayInverterStatusReady
-    // / canTelemetryReadyForStart, computed from MetaSense::CANBus::feedback()/
-    // stats() every control loop) will not allow INIT to conclude until the
-    // CAN bus is actually ready and the inverter is responding.
+    // thing initialized at boot, but the VCU state machine (see
+    // HardwareOutputStateMachine.cpp) requires live 0x1DA feedback freshness
+    // before it will leave INIT and start the precharge sequence.
     MetaSense::CANBus::configure(kLeafCanConfig);
 
     if (leafTxPacerTaskHandle == nullptr) {
@@ -4610,37 +4573,23 @@ void loop()
     const float engineThrottlePercent = throttleSafetyCut ? 0.0f : readThrottlePotPercent();
     tele.throttlePercent = engineThrottlePercent;
 
-    const MetaSense::CANBus::Stats& canStatsForStart = MetaSense::CANBus::stats();
-    const bool canTelemetryReadyForStart = evaluateCanStartReadiness(now, canStatsForStart);
-    
-    // INIT state completion criterion: Use the actual inverter status bit from 0x1DA frame
-    // This is more direct and concrete than synthetic CAN readiness flags.
-    // inv_status_bit = 1 means inverter is ready; this is the real state from hardware.
+    // VCU state machine inputs: RPM/HV/fault come exclusively from the
+    // decoded 0x1DA inverter feedback frame -- no tachometer fallback, no
+    // bench-forced override. Freshness of leafFb.rpm_update_ms is the only
+    // "live CAN feedback" signal the state machine trusts.
     const LeafInvFeedback& leafFb = MetaSense::CANBus::feedback();
-    const bool inverterStatusFromFrame = (leafFb.inv_status_bit == 1);
-    
-    const bool canActivityReady = inverterStatusFromFrame || canTelemetryReadyForStart;
-    const bool relayInverterStatusReady = canActivityReady || tele.vcuReady;
-    const bool relayInverterReady = canActivityReady || tele.vcuReady;
-    const bool relayInverterFault = tele.leaf_invFault ||
-                                    tele.leaf_invLimp;
-    const bool sensorsReadyForStart = isfinite(tele.rpm) &&
-                                      isfinite(tele.loadKg) &&
-                                      isfinite(tele.lambdaValue);
+    const bool canFeedbackFreshForHwsm = (leafFb.rpm_update_ms != 0U) &&
+        (elapsedMsSafe(now, leafFb.rpm_update_ms) <= CAN_RX_TARGET_MAX_AGE_MS);
+    const bool inverterFaultFromCan = canFeedbackFreshForHwsm && (leafFb.mg_error_codes != 0U);
 
-    const bool telemetryConnectedForStart = MetaSense::WebSocketServer::socket().count() > 0U;
     MetaSense::HardwareOutputStateMachine::update(
         engineThrottlePercent,
         tele.rpmTarget,
-        tele.rpm,
         primaryBrakeSignedPercent,
-        tele.vcuHvVoltage,
-        relayInverterStatusReady,
-        relayInverterReady,
-        relayInverterFault,
-        telemetryConnectedForStart,
-        canTelemetryReadyForStart,
-        sensorsReadyForStart);
+        leafFb.rpm,
+        leafFb.input_voltage,
+        inverterFaultFromCan,
+        canFeedbackFreshForHwsm);
 
     const bool ssrActiveForLeafTx = MetaSense::HardwareOutputStateMachine::isSsrActive();
     const bool prechargeActiveForLeafTx = MetaSense::HardwareOutputStateMachine::isPrechargeActive();
@@ -4890,6 +4839,17 @@ void loop()
             }
         }
 
+        // SAFETY: Reverse-rotation guard. Applies unconditionally, after all
+        // state-specific torque selection above, regardless of which branch
+        // (INIT/IDLE/MOTOR) produced torqueToSend. Below 100 RPM, force the
+        // 0x1D4 torque demand payload to exactly 0 Nm (any sign) so the
+        // motor can never be driven into reverse rotation from near
+        // standstill -- this would not be tolerated in a real EV and must
+        // not be tolerated here either.
+        constexpr float kReverseGuardRpmThreshold = 100.0f;
+        if (tele.rpm < kReverseGuardRpmThreshold) {
+            torqueToSend = 0.0f;
+        }
 
         bool skipTxForGapTest = false;
 
@@ -4967,12 +4927,13 @@ void loop()
         lastHeartbeatMs = nowMs;
         IPAddress ip = WiFi.localIP();
         int32_t rssi = WiFi.RSSI();
-        Serial.printf("[HEARTBEAT] RPM=%.0f Leaf_RPM=%.0f Temps: Inv=%.1f Stator=%.1f Coolant=%.1f IP=%d.%d.%d.%d RSSI=%ld dBm ms=%lu\n",
-                      tele.rpm, tele.leaf_rpm, tele.leaf_invTempC, tele.leaf_statorTempC, tele.leaf_coolantTempC,
+        const char* vcuStateName = MetaSense::HardwareOutputStateMachine::stateName();
+        Serial.printf("[HEARTBEAT] RPM=%.0f Leaf_RPM=%.0f HV=%.1f VCU=%s Temps: Inv=%.1f Stator=%.1f Coolant=%.1f IP=%d.%d.%d.%d RSSI=%ld dBm ms=%lu\n",
+                      tele.rpm, tele.leaf_rpm, tele.vcuHvVoltage, vcuStateName, tele.leaf_invTempC, tele.leaf_statorTempC, tele.leaf_coolantTempC,
                       ip[0], ip[1], ip[2], ip[3], rssi, nowMs);
         // Forward to telnet clients
-        MetaSense::TelnetSerialBridge::telnetBridgePrintf("[HEARTBEAT] RPM=%.0f Leaf_RPM=%.0f Temps: Inv=%.1f Stator=%.1f Coolant=%.1f IP=%d.%d.%d.%d RSSI=%ld dBm ms=%lu\n",
-                      tele.rpm, tele.leaf_rpm, tele.leaf_invTempC, tele.leaf_statorTempC, tele.leaf_coolantTempC,
+        MetaSense::TelnetSerialBridge::telnetBridgePrintf("[HEARTBEAT] RPM=%.0f Leaf_RPM=%.0f HV=%.1f VCU=%s Temps: Inv=%.1f Stator=%.1f Coolant=%.1f IP=%d.%d.%d.%d RSSI=%ld dBm ms=%lu\n",
+                      tele.rpm, tele.leaf_rpm, tele.vcuHvVoltage, vcuStateName, tele.leaf_invTempC, tele.leaf_statorTempC, tele.leaf_coolantTempC,
                       ip[0], ip[1], ip[2], ip[3], rssi, nowMs);
 
         // CAN bus health, visible over telnet (driver ready state + RX frame
