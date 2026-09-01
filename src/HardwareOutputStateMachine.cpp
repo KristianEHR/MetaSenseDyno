@@ -489,12 +489,7 @@ void update(float engineThrottlePercent,
     case OutputState::START: {
         const uint32_t elapsedMs = now - prechargeStartMs;
         if (elapsedMs >= kPrechargeDurationMs) {
-            // BENCH TEST BYPASS: HV>=300V gate temporarily disabled below so
-            // relay sequencing/wiring can be verified with no HV applied.
-            // MUST be restored (uncomment the real check, delete the `true`
-            // override) before ever testing with real 320V HV present.
-            // if (hvVoltageFromCan >= kPrechargeHvReadyV) {
-            if (true) {
+            if (hvVoltageFromCan >= kPrechargeHvReadyV) {
                 state = OutputState::IDLE;
             } else if (prechargeAttempt < kPrechargeMaxAttempts) {
                 // Retry: restart the precharge dwell.
