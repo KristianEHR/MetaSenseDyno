@@ -286,6 +286,7 @@ constexpr float kDynoEnterRpm = kIdleDynoHystCenterRpm + kIdleDynoHystBandRpm; /
 constexpr float kIdleEnterRpm = kIdleDynoHystCenterRpm - kIdleDynoHystBandRpm; // 350
 constexpr float kMotorSetpointMinRpm = 150.0f;    // MOTOR entry requires setpoint above this.
 constexpr float kHvKeepAliveThresholdV = 300.0f;  // IDLE-only HV keep-alive gate.
+constexpr float kHvKeepAliveMaxRpm = 500.0f;      // IDLE-only HV keep-alive RPM gate.
 
 // --- Precharge sequencing state ---
 uint32_t prechargeStartMs = 0;
@@ -360,7 +361,8 @@ void setStateLed(OutputState hwState)
 void applyOutputs(OutputState hwState,
                   float engineThrottlePercent,
                   float primaryBrakePercent,
-                  float hvVoltageFromCan)
+                  float hvVoltageFromCan,
+                  float rpmFromCan)
 {
     hw::writeThrottleDutyPwm(engineThrottlePercent);
 
@@ -379,8 +381,9 @@ void applyOutputs(OutputState hwState,
     case OutputState::IDLE: {
         // Normal IDLE relay pattern is RB+/RB- ON, SSR/Precharge OFF. The HV
         // keep-alive flips to SSR ON (which forces RB- OFF per the general
-        // invariant) whenever HV sags below threshold at low RPM.
-        const bool keepAliveNeeded = (hvVoltageFromCan < kHvKeepAliveThresholdV);
+        // invariant) whenever HV sags below threshold AND RPM is low.
+        const bool keepAliveNeeded = (hvVoltageFromCan < kHvKeepAliveThresholdV) &&
+                                      (rpmFromCan < kHvKeepAliveMaxRpm);
         if (keepAliveNeeded) {
             cmd = hw::makeRelayCommand(false, true, true, false);
         } else {
@@ -529,7 +532,7 @@ void update(float engineThrottlePercent,
         break;
     }
 
-    applyOutputs(state, engineThrottlePercent, primaryBrakePercent, hvVoltageFromCan);
+    applyOutputs(state, engineThrottlePercent, primaryBrakePercent, hvVoltageFromCan, rpmFromCan);
 }
 
 void requestMotorStartOverride(float rpmSetpoint)
@@ -557,7 +560,7 @@ void stop()
 {
     writeThrottle(0.0f);
     state = OutputState::IDLE;
-    applyOutputs(state, 0.0f, 0.0f, 0.0f);
+    applyOutputs(state, 0.0f, 0.0f, 0.0f, 0.0f);
 }
 
 const char* stateName()
