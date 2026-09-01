@@ -550,14 +550,14 @@
 
       const infoDiv = document.getElementById("rpmSourceInfo");
       if (infoDiv) {
-        infoDiv.innerHTML = "🔧 <strong>LEAF CAN RPM:</strong><br>Primary source. Tachogen analog on GPIO 3 is used automatically if CAN is unavailable.";
+        infoDiv.innerHTML = "🔧 <strong>LEAF CAN 0x1DA</strong> is the sole RPM source (no tachometer fallback).";
       }
     }
 
     function rebuildRpmSourceOptions() {
       const infoDiv = document.getElementById("rpmSourceInfo");
       if (infoDiv) {
-        infoDiv.innerHTML = "🔧 <strong>LEAF CAN RPM:</strong><br>Primary source. Tachogen analog on GPIO 3 is used automatically if CAN is unavailable.";
+        infoDiv.innerHTML = "🔧 <strong>LEAF CAN 0x1DA</strong> is the sole RPM source (no tachometer fallback).";
       }
     }
 
@@ -576,6 +576,18 @@
       const parsed = Number(rawValue);
       if (!Number.isFinite(parsed) || parsed <= 0) return "1.00";
       return parsed.toFixed(2);
+    }
+
+    // Guard against the "value slips back" bug: any single field's SAVE
+    // button triggers a full settings snapshot broadcast to ALL clients,
+    // which would otherwise unconditionally overwrite every field --
+    // including a <select>/<input> the user is actively interacting with
+    // but hasn't saved yet. Skip fields that currently have focus.
+    function setFieldValueIfNotFocused(id, value) {
+      const el = document.getElementById(id);
+      if (!el || value === undefined || value === null) return;
+      if (document.activeElement === el) return;
+      el.value = value;
     }
 
     let ws = null;
@@ -663,48 +675,48 @@
         try {
           const msg = JSON.parse(evt.data);
           if (msg.type === "settings") {
-            document.getElementById("calFactor").value = msg.calFactor !== undefined ? Number(msg.calFactor).toFixed(6) : "0.000000";
+            setFieldValueIfNotFocused("calFactor", msg.calFactor !== undefined ? Number(msg.calFactor).toFixed(6) : "0.000000");
             const kpElem = document.getElementById("kp");
             const kiElem = document.getElementById("ki");
-            if (kpElem && msg.kp !== undefined) {
+            if (kpElem && msg.kp !== undefined && document.activeElement !== kpElem) {
               const kpVal = Number(msg.kp);
               if (Number.isFinite(kpVal)) {
                 kpElem.value = kpVal.toFixed(4);
               }
             }
-            if (kiElem && msg.ki !== undefined) {
+            if (kiElem && msg.ki !== undefined && document.activeElement !== kiElem) {
               const kiVal = Number(msg.ki);
               if (Number.isFinite(kiVal)) {
                 kiElem.value = kiVal.toFixed(4);
               }
             }
             setKpSourceSelection(msg.kpSource || "firmware");
-            document.getElementById("maxRPM").value = msg.maxRPM;
-            document.getElementById("maxHP").value = msg.maxHP;
-            document.getElementById("maxTorque").value = msg.maxTorque;
-            document.getElementById("armCm").value = msg.armCm;
-            document.getElementById("pulsesPerRev").value = msg.pulsesPerRev || 1.0;
-            document.getElementById("rpmFilter").value = msg.rpmFilter;
-            document.getElementById("loadAvgN").value = msg.loadAvgN !== undefined ? msg.loadAvgN : 5;
-            document.getElementById("loadAvgN2").value = msg.loadAvgN2 !== undefined ? msg.loadAvgN2 : 5;
-            document.getElementById("loadFilterMode").value = msg.loadFilterMode || "moving_avg";
-            document.getElementById("rhOffsetPct").value = msg.rhOffsetPct !== undefined ? msg.rhOffsetPct : 0.0;
-            document.getElementById("motorModeMaxRpm").value = msg.motorModeMaxRpm !== undefined ? msg.motorModeMaxRpm : 2000;
-            document.getElementById("brakeMaxTorqueNm").value = msg.brakeMaxTorqueNm !== undefined ? msg.brakeMaxTorqueNm : 30.0;
-            document.getElementById("forceVcuReadyForUiTest").value = msg.forceVcuReadyForUiTest ? "1" : "0";
-            document.getElementById("dynoMode").value = msg.mode;
-            document.getElementById("virtGearRatio").value = msg.virtGearRatio || 1.0;
-            document.getElementById("drumMass").value = msg.drumMass;
-            document.getElementById("drumCm").value = msg.drumCm;
-            document.getElementById("pulsesPerRevDrum").value = msg.pulsesPerRevDrum || 1.0;
-            document.getElementById("drumInertiaType").value = msg.drumInertiaType;
-            document.getElementById("drumWallCm").value = msg.drumWallCm;
-            document.getElementById("drumInertiaCustom").value = msg.drumInertiaCustom;
+            setFieldValueIfNotFocused("maxRPM", msg.maxRPM);
+            setFieldValueIfNotFocused("maxHP", msg.maxHP);
+            setFieldValueIfNotFocused("maxTorque", msg.maxTorque);
+            setFieldValueIfNotFocused("armCm", msg.armCm);
+            setFieldValueIfNotFocused("pulsesPerRev", msg.pulsesPerRev || 1.0);
+            setFieldValueIfNotFocused("rpmFilter", msg.rpmFilter);
+            setFieldValueIfNotFocused("loadAvgN", msg.loadAvgN !== undefined ? msg.loadAvgN : 5);
+            setFieldValueIfNotFocused("loadAvgN2", msg.loadAvgN2 !== undefined ? msg.loadAvgN2 : 5);
+            setFieldValueIfNotFocused("loadFilterMode", msg.loadFilterMode || "moving_avg");
+            setFieldValueIfNotFocused("rhOffsetPct", msg.rhOffsetPct !== undefined ? msg.rhOffsetPct : 0.0);
+            setFieldValueIfNotFocused("motorModeMaxRpm", msg.motorModeMaxRpm !== undefined ? msg.motorModeMaxRpm : 2000);
+            setFieldValueIfNotFocused("brakeMaxTorqueNm", msg.brakeMaxTorqueNm !== undefined ? msg.brakeMaxTorqueNm : 30.0);
+            setFieldValueIfNotFocused("forceVcuReadyForUiTest", msg.forceVcuReadyForUiTest ? "1" : "0");
+            setFieldValueIfNotFocused("dynoMode", msg.mode);
+            setFieldValueIfNotFocused("virtGearRatio", msg.virtGearRatio || 1.0);
+            setFieldValueIfNotFocused("drumMass", msg.drumMass);
+            setFieldValueIfNotFocused("drumCm", msg.drumCm);
+            setFieldValueIfNotFocused("pulsesPerRevDrum", msg.pulsesPerRevDrum || 1.0);
+            setFieldValueIfNotFocused("drumInertiaType", msg.drumInertiaType);
+            setFieldValueIfNotFocused("drumWallCm", msg.drumWallCm);
+            setFieldValueIfNotFocused("drumInertiaCustom", msg.drumInertiaCustom);
             const ratioFromMsg = (msg.brakeToEngineRatio !== undefined)
               ? msg.brakeToEngineRatio
               : (msg.virtGearRatio !== undefined ? msg.virtGearRatio : 1.0);
-            document.getElementById("brakeToEngineRatio").value = formatBrakeRatioTwoDigits(ratioFromMsg);
-			document.getElementById("drivetrainEff").value = msg.drivetrainEff || 93.0;
+            setFieldValueIfNotFocused("brakeToEngineRatio", formatBrakeRatioTwoDigits(ratioFromMsg));
+			setFieldValueIfNotFocused("drivetrainEff", msg.drivetrainEff || 93.0);
             
             rebuildRpmSourceOptions();
 
