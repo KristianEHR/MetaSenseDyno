@@ -128,7 +128,6 @@ String buildProfilePayload(bool includeTypeEnvelope)
     json += ",\"brakeToEngineRatio\":" + String(MetaSense::Settings::virtGearRatio, 3);
     json += ",\"drivetrainEff\":" + String(MetaSense::Settings::drivetrainEff, 1);
     json += ",\"rpmSource\":\"leafrpm\"";
-    json += ",\"tachoCal\":" + String(MetaSense::Settings::getTachoCal(), 3);
     json += ",\"rpmTarget\":" + String(MetaSense::Settings::getRpmTarget(), 1);
     json += ",\"rpmStart\":" + String(MetaSense::Settings::rpmStart(), 1);
     json += ",\"rpmEnd\":" + String(MetaSense::Settings::rpmEnd(), 1);
@@ -261,7 +260,6 @@ bool applyProfilePayload(const String& payload)
                 (flag == "1" || flag == "true" || flag == "on" || flag == "yes");
         }
     }
-    if (!profile["tachoCal"].isNull()) MetaSense::Settings::setTachoCal(profile["tachoCal"].as<float>());
     if (!profile["rpmTarget"].isNull()) MetaSense::Settings::setRpmTarget(profile["rpmTarget"].as<float>());
     if (!profile["rpmStart"].isNull()) MetaSense::Settings::setRpmStart(profile["rpmStart"].as<float>());
     if (!profile["rpmEnd"].isNull()) MetaSense::Settings::setRpmEnd(profile["rpmEnd"].as<float>());
@@ -270,8 +268,6 @@ bool applyProfilePayload(const String& payload)
         const String mode = profile["mode"].as<String>();
         MetaSense::Settings::setInertiaMode(mode == "inertia");
     }
-
-    MetaSense::Settings::useCanLeafRpm = true;
 
     float drumMass = MetaSense::Settings::drumMassKg;
     float drumRadiusM = MetaSense::Settings::drumRadiusM;
@@ -494,15 +490,6 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
     }
     else if (cmdUpper == "RPM_DIAG") {
         MetaSense::WebSocketServer::sendInfo("RPM diagnostic requested");
-    }
-    else if (cmdUpper == "SET_TACHO_CAL") {
-        float cal = value;
-        if (cal == 0.0f && !doc.isNull()) {
-            cal = MetaSense::Settings::getTachoCal();
-        }
-        MetaSense::Settings::setTachoCal(cal);
-        MetaSense::Settings::saveToStorage();
-        MetaSense::WebSocketServer::sendStatus("Tachogen calibration updated");
     }
     else if (cmdUpper == "SET_TORQUE_FF") {
         MetaSense::DynoStateMachine::setTorqueFeedForward(value);
@@ -927,8 +914,6 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
             MetaSense::Settings::pulsesPerRevDrum = (fval > 0.0f) ? fval : MetaSense::Settings::pulsesPerRevDrum;
         } else if (key == "drivetrainEff") {
             MetaSense::Settings::drivetrainEff = (fval > 0.0f && fval <= 100.0f) ? fval : MetaSense::Settings::drivetrainEff;
-        } else if (key == "rpmSource") {
-            MetaSense::Settings::useCanLeafRpm = true;
         } else if (key == "brakeToEngineRatio") {
             MetaSense::Settings::virtGearRatio = (fval > 0.0f) ? fval : MetaSense::Settings::virtGearRatio;
         } else if (key == "virtGearRatio") {

@@ -704,18 +704,6 @@
   white-space: nowrap;
 }
 
-.fallback-badge {
-  display: none;
-  margin-left: 8px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 12px;
-  font-weight: 700;
-  color: #111;
-  background: #ffaa44;
-  animation: fallbackPulse 1s infinite;
-}
-
 .can-monitor {
   --can-value-col-width: 24ch;
   display: none;
@@ -909,12 +897,6 @@
   }
 }
 
-@keyframes fallbackPulse {
-  0% { opacity: 1; }
-  50% { opacity: 0.45; }
-  100% { opacity: 1; }
-}
-    
     /* Ratio Indicator in Torque Section */
     .ratio-indicator {
       font-size: 12px;
@@ -958,10 +940,9 @@
 
   <div id="status">Connecting...</div>
   
-  <!-- RPM Source Indicator -->
+  <!-- RPM Source: CAN 0x1DA is the sole RPM source (no fallback) -->
   <div class="rpm-source">
     📊 RPM Source: <span id="rpmSourceValue">CAN</span>
-    <span id="canFallbackBadge" class="fallback-badge">CAN FALLBACK</span>
   </div>
 
   <div id="canMonitor" class="can-monitor" aria-live="polite">
@@ -1406,9 +1387,6 @@
     let ws = null;
     let wsConnectAttemptInProgress = false;
     let currentKpSource = "firmware";
-    let currentRpmSource = "leafrpm";
-    let lastActiveRpmSource = "leafrpm";
-    let lastCanFallback = false;
     let lastRunPiKpValue = NaN;
     let lastRunPiKiValue = NaN;
     let currentKpSetting = NaN;
@@ -1501,8 +1479,6 @@
       rel_humidity: 0,
       ratio_confidence: 0,
       rpm_target: 0,
-      can_fallback: false,
-      rpm_source_active: "",
       kp_source: "firmware",
       kp_live: NaN,
       ki_live: NaN,
@@ -2776,17 +2752,7 @@
             updateScaleLabels();
             updateRunPiPanel();
             setKpSourceUi(msg.kpSource || "firmware");
-            currentRpmSource = msg.rpmSource || "leafrpm";
-            cachedTelemetry.rpm_source_active = currentRpmSource;
-            cachedTelemetry.can_fallback = false;
-            lastActiveRpmSource = currentRpmSource;
-            document.getElementById("rpmSourceValue").textContent = currentRpmSource === "leafrpm" ? "CAN" : "Tachogen RPM";
-            const canFallbackBadge = document.getElementById("canFallbackBadge");
-            if (canFallbackBadge) {
-              canFallbackBadge.style.display = "none";
-            }
-            lastCanFallback = false;
-            
+
             const versionEl = document.getElementById("versionInfo");
             if (versionEl && msg.version && msg.buildDate) {
               versionEl.innerHTML = `⚙️ MetaSense V${msg.version}<br>${msg.buildDate}`;
@@ -2825,8 +2791,6 @@
             if (msg.rel_humidity !== undefined) cachedTelemetry.rel_humidity = msg.rel_humidity;
             if (msg.ratio_confidence !== undefined) cachedTelemetry.ratio_confidence = msg.ratio_confidence;
             if (msg.rpm_target !== undefined) cachedTelemetry.rpm_target = msg.rpm_target;
-            if (msg.can_fallback !== undefined) cachedTelemetry.can_fallback = Number(msg.can_fallback) === 1;
-            if (msg.rpm_source_active !== undefined) cachedTelemetry.rpm_source_active = msg.rpm_source_active;
             if (msg.kp_source !== undefined) cachedTelemetry.kp_source = msg.kp_source;
             if (msg.kp_live !== undefined) cachedTelemetry.kp_live = msg.kp_live;
             if (msg.ki_live !== undefined) cachedTelemetry.ki_live = msg.ki_live;
@@ -2907,29 +2871,6 @@
             }
             updateRunPiPanel(telemetry);
             let displayRPM = telemetry.rpm || 0;
-            const canFallback = telemetry.can_fallback;
-            const activeRpmSource = (typeof telemetry.rpm_source_active === "string" && telemetry.rpm_source_active.length > 0)
-              ? telemetry.rpm_source_active
-              : ((currentRpmSource === "leafrpm" && !canFallback) ? "leafrpm" : "tachogen");
-            const activeRpmSourceNorm = String(activeRpmSource).toLowerCase();
-            const sourceIsCan = (activeRpmSourceNorm === "leafrpm") ||
-              (activeRpmSourceNorm === "can") ||
-              (activeRpmSourceNorm === "canrpm");
-            const rpmSourceValue = document.getElementById("rpmSourceValue");
-            const canFallbackBadge = document.getElementById("canFallbackBadge");
-            if (rpmSourceValue) {
-              if (sourceIsCan) {
-                rpmSourceValue.textContent = "CAN";
-                if (canFallbackBadge) canFallbackBadge.style.display = "none";
-              } else {
-                rpmSourceValue.textContent = canFallback ? "Tachogen RPM (fallback)" : "Tachogen RPM";
-                if (canFallbackBadge) {
-                  canFallbackBadge.style.display = canFallback ? "inline-block" : "none";
-                }
-              }
-            }
-            lastActiveRpmSource = activeRpmSource;
-            lastCanFallback = canFallback;
             const currentKW = Number.isFinite(Number(telemetry.kw)) ? Number(telemetry.kw) : 0;
             const peakKW = Number.isFinite(Number(telemetry.peakKW)) ? Number(telemetry.peakKW) : currentKW;
             const peakKWRPM = Number.isFinite(Number(telemetry.peakKW_RPM)) ? Number(telemetry.peakKW_RPM) : Math.round(displayRPM);

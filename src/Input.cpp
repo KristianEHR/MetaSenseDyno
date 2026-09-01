@@ -64,11 +64,6 @@ static uint8_t loadKgAverageCount = 0;
 static uint8_t loadKgAverageIndex = 0;
 static float loadKgAverageSum = 0.0f;
 static uint8_t loadKgAverageActiveWindow = kLoadRawAverageWindowDefault;
-constexpr uint8_t kTachoRawAverageWindow = kLoadRawAverageWindowDefault;
-static float tachoRawAverageBuffer[kTachoRawAverageWindow] = {0.0f};
-static uint8_t tachoRawAverageCount = 0;
-static uint8_t tachoRawAverageIndex = 0;
-static float tachoRawAverageSum = 0.0f;
 constexpr uint8_t kAuxRawAverageWindow = 8;
 static float massflowRawAverageBuffer[kAuxRawAverageWindow] = {0.0f};
 static uint8_t massflowRawAverageCount = 0;
@@ -81,8 +76,6 @@ static float lambdaRawAverageSum = 0.0f;
 
 // RPM inputs
 static float canRpm   = 0.0f;
-static float tachoRpm = 0.0f;
-static float tachoCal = 10.0f;   // tachogen calibration factor
 constexpr float kLoadCellRawScale = 0.01f;
 static float zeroOffset = 0.0f;
 static float zeroDeadbandRaw = 0.0f;
@@ -188,11 +181,6 @@ static uint32_t lastLeaf1d4MonitorSampleMs = 0;
 static uint32_t lastCanBusOffSeen = 0;
 static uint32_t lastCanStatusQueryFailuresSeen = 0;
 
-// RPM delta error
-static bool  rpmDeltaError         = false;
-static bool  canFallbackActive     = false;
-static bool  activeRpmFromCan      = false;
-static const float RPM_DELTA_LIMIT = 100.0f;
 static const uint32_t CAN_TEMP_TIMEOUT_MS = 1000;
 static const uint32_t CAN_TX_PERIOD_MS = 10;
 static const uint32_t LEAF_1D4_TORQUE_PAYLOAD_UPDATE_PERIOD_MS = 10;  // Update torque payload every 10ms, send frame every 10ms
@@ -535,11 +523,6 @@ constexpr uint32_t kLeafHandshakeAttemptPeriodMs = 20;
 #endif
 #ifndef METASENSE_LEAF_TX_GAP_TEST_DURATION_MS
 #define METASENSE_LEAF_TX_GAP_TEST_DURATION_MS 500
-#endif
-#ifndef METASENSE_FORCE_TACHO_RPM_SOURCE
-// Default behavior: prefer 0x1DA-derived RPM when fresh, else fallback to tachogen.
-// Set to 1 only for forced tachogen-only diagnostics.
-#define METASENSE_FORCE_TACHO_RPM_SOURCE 0
 #endif
 
 #ifndef METASENSE_LEAF_1D4_RAW_SNIFF_ONLY
@@ -1498,48 +1481,6 @@ float applyLoadRawAverage(float sample)
     return applyLoadRawMovingAverage(sample);
 }
 
-void resetTachoRawAverage(float seed)
-{
-    tachoRawAverageCount = 0;
-    tachoRawAverageIndex = 0;
-    tachoRawAverageSum = 0.0f;
-
-    for (uint8_t i = 0; i < kTachoRawAverageWindow; ++i) {
-        tachoRawAverageBuffer[i] = 0.0f;
-    }
-
-    if (isfinite(seed)) {
-        tachoRawAverageBuffer[0] = seed;
-        tachoRawAverageSum = seed;
-        tachoRawAverageCount = 1;
-        tachoRawAverageIndex = 1;
-    }
-}
-
-float applyTachoRawAverage(float sample)
-{
-    if (!isfinite(sample)) {
-        return sample;
-    }
-
-    if (tachoRawAverageCount < kTachoRawAverageWindow) {
-        tachoRawAverageBuffer[tachoRawAverageIndex] = sample;
-        tachoRawAverageSum += sample;
-        ++tachoRawAverageCount;
-    } else {
-        tachoRawAverageSum -= tachoRawAverageBuffer[tachoRawAverageIndex];
-        tachoRawAverageBuffer[tachoRawAverageIndex] = sample;
-        tachoRawAverageSum += sample;
-    }
-
-    ++tachoRawAverageIndex;
-    if (tachoRawAverageIndex >= kTachoRawAverageWindow) {
-        tachoRawAverageIndex = 0;
-    }
-
-    return tachoRawAverageSum / static_cast<float>(tachoRawAverageCount);
-}
-
 void resetMassflowRawAverage(float seed)
 {
     massflowRawAverageCount = 0;
@@ -1627,12 +1568,10 @@ float applyLambdaRawAverage(float sample)
 // ESP32-S3 ADC map provided for this hardware revision.
 constexpr uint8_t kRpmSetpointPin = 1; // ADC1_CH0
 constexpr uint8_t kThrottlePotPin = 2; // ADC1_CH1
-constexpr uint8_t kTachoPin = 3;       // ADC1_CH2
 constexpr uint8_t kKpPotPin = 6;       // swapped with massflow per latest wiring
 constexpr uint8_t kMassflowPin = 8;    // kept off GPIO5 to avoid CAN RX conflict
 constexpr uint8_t kLambdaPin = 7;      // ADC1_CH6
 constexpr uint8_t kLoadCellPin = 32;   // Load-cell analog input
-// Drum RPM is derived from tachogen × (1/virtGearRatio)
 
 static float kpPotFilteredAdc = -1.0f;
 static float lastAppliedKp = -1.0f;
@@ -1675,20 +1614,6 @@ float readAdcSafe(uint8_t pin)
     return static_cast<float>(analogRead(pin));
 }
 
-float readTachoRpm()
-{
-    float v = readAdcSafe(kTachoPin);
-    v = applyTachoRawAverage(v);
-    return v * tachoCal;
-}
-
-float readDrumRpm()
-{
-    // Drum RPM is derived from the tachogen by inverting the configured gear ratio.
-    // virtGearRatio = engineRpm / drumRpm, so drumRpm = tachoRpm / virtGearRatio.
-    const float ratio = MetaSense::Settings::virtGearRatio;
-    return (ratio > 0.01f) ? (tachoRpm / ratio) : tachoRpm;
-}
 float readLoadKg()
 {
     if (loadCellNauReady) {
@@ -2378,9 +2303,7 @@ void pollLeafCanFrames(uint32_t nowMs)
         // leafCanRpmMonitor = leafFb.rpm;
         // lastCanRpmMonitorUpdate = leafFb.rpm_update_ms;
         lastCanRpmFrameMs = leafFb.rpm_update_ms;
-#if !METASENSE_FORCE_TACHO_RPM_SOURCE
         MetaSense::Input::updateCanRpm(leafFb.rpm);
-#endif
         lastCanLeafAnyUpdate = leafFb.rpm_update_ms;
 
         if (kLeafCanHandshakeOnFirst1da && !s_leafHandshakeSent && !s_leafHandshakeArmed) {
@@ -2441,15 +2364,10 @@ void maybeInjectLeafSimFeedback(uint32_t nowMs)
     s_leafSimLastInjectMs = nowMs;
     s_leafSimFeedbackActive = true;
 
-    // Simulate Leaf feedback path on bench setups without inverter on the CAN bus.
-    float tachEngineRpm = tachoRpm;
-    if (!isfinite(tachEngineRpm) || tachEngineRpm < 0.0f) {
-        tachEngineRpm = readTachoRpm();
-    }
-    const float ratio = (MetaSense::Settings::virtGearRatio > 0.01f)
-        ? MetaSense::Settings::virtGearRatio
-        : 1.0f;
-    const float emotorRpm = (tachEngineRpm > 0.0f) ? (tachEngineRpm / ratio) : 0.0f;
+    // Simulate Leaf feedback path on bench setups without inverter on the CAN
+    // bus. No tachometer input anymore (CAN is the sole RPM source) -- this
+    // sim path (disabled by default) now injects a fixed placeholder RPM.
+    const float emotorRpm = 0.0f;
 
     MetaSense::Input::updateCanRpm(emotorRpm);
     MetaSense::Input::updateCanTorque(0.0f);
@@ -2671,8 +2589,6 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             "\"rel_humidity\":%.1f,"
             "\"ratio_confidence\":0,"
             "\"rpm_target\":%.0f,"
-            "\"can_fallback\":0,"
-            "\"rpm_source_active\":\"leafrpm\","
             "\"kp_source\":\"firmware\","
             "\"kp_live\":0,"
             "\"ki_live\":0,"
@@ -2794,8 +2710,6 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             "\"rel_humidity\":%.1f,"
             "\"ratio_confidence\":0,"
             "\"rpm_target\":%.0f,"
-            "\"can_fallback\":0,"
-            "\"rpm_source_active\":\"leafrpm\","
             "\"kp_source\":\"firmware\","
             "\"kp_live\":0,"
             "\"ki_live\":0,"
@@ -3999,7 +3913,6 @@ void begin()
     filteredAdc = 0.0f;
     resetLoadRawAverage(filteredAdc);
     resetLoadKgAverage(0.0f);
-    resetTachoRawAverage(0.0f);
     resetMassflowRawAverage(0.0f);
     resetLambdaRawAverage(1.0f);
     {
@@ -4323,20 +4236,18 @@ void loop()
     }
     alpha = constrain(alpha, 0.01f, 1.0f);
 
-    // RPM source strategy:
-    // - CAN mode: raw CAN RPM is e-motor RPM, test-engine RPM = e-motor RPM * gear ratio.
-    // - Tachogen mode/fallback: tachogen is treated as test-engine RPM directly.
-    tachoRpm = readTachoRpm();
-    const bool canRpmAllowed = (!METASENSE_FORCE_TACHO_RPM_SOURCE);
+    // RPM source: CAN 0x1DA e-motor RPM is the sole RPM source. Test-engine
+    // RPM = e-motor RPM * gear ratio. No tachometer fallback -- the whole
+    // control chain (VCU state machine, torque commands) already requires
+    // live CAN feedback to do anything, so a fallback RPM source has no
+    // practical meaning and risked showing a misleading "still running"
+    // reading while the system is actually inoperative.
     const MetaSense::CANBus::Stats& canStatsRpm = MetaSense::CANBus::stats();
     const bool canRpmFrameFresh = (canStatsRpm.last1daMs != 0U) &&
                                   (elapsedMsSafe(now, canStatsRpm.last1daMs) <= CAN_RX_TARGET_MAX_AGE_MS);
     const bool canRpmFrameWireCrcOk = is1daWireCrcTrustedForFallback(canStatsRpm, now);
     const bool canRpmFrameTrustworthy = canRpmFrameFresh && canRpmFrameWireCrcOk;
-    bool canValid = canRpmAllowed && MetaSense::CANBus::isReady() && canRpmFrameTrustworthy;
-    float rpmRaw = 0.0f;
-    canFallbackActive = canRpmAllowed && !canValid;
-    activeRpmFromCan = canValid;
+    const bool canValid = MetaSense::CANBus::isReady() && canRpmFrameTrustworthy;
     const float emotorRpmRaw = canRpmFrameTrustworthy ? leafCanRpmMonitor : canRpm;
     const float rpmRatio = (MetaSense::Settings::virtGearRatio > 0.01f)
         ? MetaSense::Settings::virtGearRatio
@@ -4344,11 +4255,9 @@ void loop()
     const float canEngineRpm = emotorRpmRaw * rpmRatio;
     if (canValid) {
         // Mandatory behavior: CAN source is unfiltered.
-        rpmRaw = canEngineRpm;
         rpmFilt = canEngineRpm;
     } else {
-        rpmRaw = tachoRpm;
-        rpmFilt = lpFilter(rpmFilt, rpmRaw, alpha);
+        rpmFilt = lpFilter(rpmFilt, 0.0f, alpha);
     }
     tele.rpm = rpmFilt;
     const bool canRpmMonitorFresh = (lastCanRpmMonitorUpdate != 0U) &&
@@ -4422,15 +4331,8 @@ void loop()
     tele.vcuSsrCmd = vcuDebugSsr;
     tele.vcuRMinusCmd = vcuDebugRMinus;
 
-    if (canRpmAllowed && canValid) {
-        float delta = fabs(canEngineRpm - tachoRpm);
-        rpmDeltaError = (delta > RPM_DELTA_LIMIT);
-    } else {
-        rpmDeltaError = false;
-    }
-
     // other sensors
-    float drumRaw = (canRpmAllowed && canValid) ? emotorRpmRaw : readDrumRpm();
+    float drumRaw = canValid ? emotorRpmRaw : 0.0f;
     float loadRaw = readLoadKg();
     MetaSense::RunStorage::appendFsLiveProbeSample(static_cast<uint64_t>(esp_timer_get_time()), loadRaw);
     const bool captureActive = MetaSense::RunStorage::rawCaptureActive();

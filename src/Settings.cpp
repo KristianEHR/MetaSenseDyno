@@ -5,7 +5,6 @@
 namespace {
 
 constexpr float kDefaultRpmTarget = 0.0f;
-constexpr float kDefaultTachoCal = 10.0f;
 constexpr float kDefaultRpmStart = 1500.0f;
 constexpr float kDefaultRpmEnd = 5500.0f;
 
@@ -46,7 +45,6 @@ constexpr float kDefaultPulsesPerRevDrum = 1.0f;
 
 constexpr float kDefaultDrivetrainEff = 95.0f;
 constexpr bool  kDefaultInertiaMode = false;
-constexpr bool  kDefaultUseCanLeafRpm = true;
 constexpr float kDefaultDrumMassKg = 10.0f;
 constexpr float kDefaultDrumRadiusM = 0.15f;
 constexpr float kDefaultDrumWallM = 0.0f;
@@ -55,7 +53,6 @@ constexpr const char* kSettingsNs = "settings";
 constexpr const char* kSettingsInitKey = "init";
 
 float rpmTargetLocal = kDefaultRpmTarget;
-float tachoCalLocal = kDefaultTachoCal;
 float rpmStartLocal = kDefaultRpmStart;
 float rpmEndLocal = kDefaultRpmEnd;
 
@@ -97,7 +94,6 @@ float drivetrainEff    = kDefaultDrivetrainEff;
 
 // Inertia dyno parameters (defaults)
 bool  inertiaMode     = kDefaultInertiaMode;
-bool  useCanLeafRpm   = kDefaultUseCanLeafRpm;
 float drumMassKg      = kDefaultDrumMassKg;   // kg
 float drumRadiusM     = kDefaultDrumRadiusM;  // 30 cm diameter → 0.15 m radius
 float drumWallM       = kDefaultDrumWallM;    // 0 = solid cylinder
@@ -165,7 +161,6 @@ void resetToDefaults()
     drivetrainEff = kDefaultDrivetrainEff;
 
     inertiaMode = kDefaultInertiaMode;
-    useCanLeafRpm = kDefaultUseCanLeafRpm;
     drumMassKg = kDefaultDrumMassKg;
     drumRadiusM = kDefaultDrumRadiusM;
     drumWallM = kDefaultDrumWallM;
@@ -173,7 +168,6 @@ void resetToDefaults()
     recomputeInertia();
 
     rpmTargetLocal = kDefaultRpmTarget;
-    tachoCalLocal = kDefaultTachoCal;
     rpmStartLocal = kDefaultRpmStart;
     rpmEndLocal = kDefaultRpmEnd;
 }
@@ -230,14 +224,12 @@ void loadFromStorage()
     drivetrainEff = prefs.getFloat("driveEff", drivetrainEff);
 
     inertiaMode = prefs.getBool("inertia", inertiaMode);
-    useCanLeafRpm = true;
     drumMassKg = prefs.getFloat("drumMass", drumMassKg);
     drumRadiusM = prefs.getFloat("drumRad", drumRadiusM);
     drumWallM = prefs.getFloat("drumWall", drumWallM);
     virtGearRatio = prefs.getFloat("gearRatio", virtGearRatio);
 
     rpmTargetLocal = prefs.getFloat("rpmTarget", rpmTargetLocal);
-    tachoCalLocal = prefs.getFloat("tachoCal", tachoCalLocal);
     rpmStartLocal = prefs.getFloat("rpmStart", rpmStartLocal);
     rpmEndLocal = prefs.getFloat("rpmEnd", rpmEndLocal);
 
@@ -344,7 +336,6 @@ void saveToStorage()
     prefs.putFloat("gearRatio", virtGearRatio);
 
     prefs.putFloat("rpmTarget", rpmTargetLocal);
-    prefs.putFloat("tachoCal", tachoCalLocal);
     prefs.putFloat("rpmStart", rpmStartLocal);
     prefs.putFloat("rpmEnd", rpmEndLocal);
 
@@ -364,16 +355,6 @@ float getRpmTarget()
 void setRpmStart(float rpm)
 {
     rpmStartLocal = rpm;
-}
-
-void setTachoCal(float cal)
-{
-    tachoCalLocal = cal;
-}
-
-float getTachoCal()
-{
-    return tachoCalLocal;
 }
 
 float rpmStart()

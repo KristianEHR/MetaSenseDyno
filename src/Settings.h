@@ -34,7 +34,6 @@ extern float pulsesPerRevDrum; // drum/roller hall
 extern float drivetrainEff;
 // Inertia dyno parameters
 extern bool  inertiaMode;       // true when dynoMode == "inertia"
-extern bool  useCanLeafRpm;      // true=Leaf CAN RPM, false=tachogen analog RPM
 extern float drumMassKg;        // total mass of drum/flywheel, kg
 extern float drumRadiusM;       // outer radius of drum, metres
 extern float drumWallM;         // wall thickness for hollow cylinder, metres (0 = solid)
@@ -56,8 +55,5 @@ float rpmStart();
 
 void setRpmEnd(float rpm);
 float rpmEnd();
-
-void setTachoCal(float cal);
-float getTachoCal();
 
 } // namespace MetaSense::Settings
