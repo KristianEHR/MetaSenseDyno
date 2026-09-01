@@ -4850,9 +4850,11 @@ void loop()
         // there is no longer a dedicated TX-sent counter after the metrics
         // cleanup). twai_tx_q/tx_err/bus_err help distinguish "not
         // transmitting at all" from "transmitting but never ACKed".
+        // (arb_lost intentionally omitted -- normal multi-master CAN bus
+        // arbitration loss/retry, not a health/error indicator.)
         const MetaSense::CANBus::Stats& canStatsHb = MetaSense::CANBus::stats();
         MetaSense::TelnetSerialBridge::telnetBridgePrintf(
-            "[CAN-STATUS] ready=%d rx_1da=%lu rx_55a=%lu bus_off=%lu status_fail=%lu tx_loops=%lu twai(state=%u tx_q=%lu rx_q=%lu tx_err=%lu rx_err=%lu bus_err=%lu arb_lost=%lu)\n",
+            "[CAN-STATUS] ready=%d rx_1da=%lu rx_55a=%lu bus_off=%lu status_fail=%lu tx_loops=%lu twai(state=%u tx_q=%lu rx_q=%lu tx_err=%lu rx_err=%lu bus_err=%lu)\n",
             canStatsHb.ready ? 1 : 0,
             static_cast<unsigned long>(canStatsHb.rx1daFrames),
             static_cast<unsigned long>(canStatsHb.rx55aFrames),
@@ -4864,8 +4866,7 @@ void loop()
             static_cast<unsigned long>(canStatsHb.twaiRxQueued),
             static_cast<unsigned long>(canStatsHb.twaiTxErrorCounter),
             static_cast<unsigned long>(canStatsHb.twaiRxErrorCounter),
-            static_cast<unsigned long>(canStatsHb.twaiBusError),
-            static_cast<unsigned long>(canStatsHb.twaiArbLost));
+            static_cast<unsigned long>(canStatsHb.twaiBusError));
         
         // Print 1D4 frame debug info (read directly from cached frame - simple Serial.print approach)
         static uint32_t lastPrintedTxCount = 0xFFFFFFFFUL;
