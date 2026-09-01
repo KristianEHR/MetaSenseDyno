@@ -1193,6 +1193,22 @@
             <span id="manualTorqueDisplay">0.00</span> Nm
           </div>
         </div>
+
+        <!-- Torque Demand vs 0x1DA Effective Torque Readout -->
+        <div style="display: flex; justify-content: space-between; gap: 8px; margin: 8px 0;">
+          <div style="text-align: center; flex: 1;">
+            <div style="font-size: 11px; color: #999;">Torque Demand</div>
+            <div style="font-size: 16px; color: #ffcc66; font-weight: bold;">
+              <span id="torqueDemandReadout">0.00</span> Nm
+            </div>
+          </div>
+          <div style="text-align: center; flex: 1;">
+            <div style="font-size: 11px; color: #999;">0x1DA Effective Torque</div>
+            <div style="font-size: 16px; color: #66ccff; font-weight: bold;">
+              <span id="effectiveTorqueReadout">0.00</span> Nm
+            </div>
+          </div>
+        </div>
         
         <!-- +/- Buttons -->
         <div style="display: flex; gap: 8px; margin: 8px 0; justify-content: center;">
@@ -2962,6 +2978,20 @@
               const manualTorqueEl = document.getElementById("manualTorqueDisplay");
               if (manualTorqueEl) {
                 manualTorqueEl.textContent = Number(telemetry.leaf_torque_demand_manual).toFixed(2);
+              }
+            }
+
+            // Update Torque Demand / 0x1DA Effective Torque readout
+            if (telemetry.leaf_torque_demand !== undefined) {
+              const torqueDemandEl = document.getElementById("torqueDemandReadout");
+              if (torqueDemandEl) {
+                torqueDemandEl.textContent = Number(telemetry.leaf_torque_demand).toFixed(2);
+              }
+            }
+            if (telemetry.leaf_torque !== undefined) {
+              const effectiveTorqueEl = document.getElementById("effectiveTorqueReadout");
+              if (effectiveTorqueEl) {
+                effectiveTorqueEl.textContent = Number(telemetry.leaf_torque).toFixed(2);
               }
             }
             
