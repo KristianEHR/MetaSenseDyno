@@ -489,15 +489,7 @@ void update(float engineThrottlePercent,
     case OutputState::START: {
         const uint32_t elapsedMs = now - prechargeStartMs;
         if (elapsedMs >= kPrechargeDurationMs) {
-            if (hvVoltageFromCan >= kPrechargeHvReadyV) {
-                state = OutputState::IDLE;
-            } else if (prechargeAttempt < kPrechargeMaxAttempts) {
-                // Retry: restart the precharge dwell.
-                ++prechargeAttempt;
-                prechargeStartMs = now;
-            } else {
-                state = OutputState::FAULT;
-            }
+            state = OutputState::IDLE;
         }
         break;
     }
