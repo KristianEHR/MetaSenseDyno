@@ -3,7 +3,6 @@
 
 #include "CommandRouter.h"
 #include "TelnetSerialBridge.h"
-#include "WifiDiag.h"
 
 namespace {
 
@@ -47,7 +46,6 @@ void begin(AsyncWebServer& server)
         if (type == WS_EVT_DISCONNECT) {
             Serial.printf("[WS] Client disconnected: id=%u\n", client->id());
             MetaSense::TelnetSerialBridge::telnetBridgePrintf("[WS] Client disconnected: id=%u\n", client->id());
-            MetaSense::WifiDiag::recordWsDisconnect();
             rxBuffers.erase(client->id());
             return;
         }

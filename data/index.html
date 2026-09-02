@@ -822,57 +822,6 @@
   cursor: pointer;
 }
 
-.can-monitor-status-row {
-  margin-top: 9px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.can-monitor-status-group {
-  margin-top: 7px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-}
-
-.can-monitor-status-label {
-  color: #8fa6b8;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  min-width: 34px;
-}
-
-.can-flag {
-  border: 1px solid #555;
-  border-radius: 999px;
-  padding: 2px 8px;
-  font-size: 11px;
-  color: #999;
-  background: rgba(120, 120, 120, 0.2);
-  font-weight: 700;
-}
-
-.can-flag.on {
-  color: #052007;
-  background: #7dff95;
-  border-color: #7dff95;
-}
-
-.can-flag.warn {
-  color: #2a1a00;
-  background: #ffd089;
-  border-color: #ffd089;
-}
-
-.can-flag.fault {
-  color: #260000;
-  background: #ff8a8a;
-  border-color: #ff8a8a;
-}
-
 @media (max-width: 900px) {
   .header-row {
     top: 14px;
@@ -999,33 +948,6 @@
 
       <span class="can-monitor-label can-sec-55a">Coolant Temp (C)</span>
       <span id="canMonCoolantTemp" class="can-monitor-value can-sec-55a">---</span>
-
-      <span class="can-monitor-label can-monitor-section">DYNO:</span>
-      <span class="can-monitor-value can-monitor-section-value">.</span>
-
-      <span class="can-monitor-label">Torque Demand (Nm)</span>
-      <span id="canMonVcuTorque" class="can-monitor-value">---</span>
-
-      <span class="can-monitor-label">Engine RPM</span>
-      <span id="canMonEngineRpm" class="can-monitor-value">---</span>
-
-      <span class="can-monitor-label">Output State</span>
-      <span id="canMonFwState" class="can-monitor-value">---</span>
-
-      <span class="can-monitor-label">Gate Reason</span>
-      <span id="canMonStartGate" class="can-monitor-value">---</span>
-
-      <span class="can-monitor-label">Sim Mode</span>
-      <span id="canMonVcuMode" class="can-monitor-value">---</span>
-    </div>
-    <div class="can-monitor-status-group">
-      <span id="canFlagReady" class="can-flag">READY</span>
-    </div>
-    <div class="can-monitor-status-group">
-      <span id="canFlagHwPrecharge" class="can-flag">HV_PRECHARGE</span>
-      <span id="canFlagHwRbplus" class="can-flag">HV_RB+</span>
-      <span id="canFlagHwRbminus" class="can-flag">HV_RB-</span>
-      <span id="canFlagHwSsr" class="can-flag">HV_SSR</span>
     </div>
   </div>
 
@@ -1459,48 +1381,6 @@
     let streamLagMinOffsetMs = null;
     let streamLagMs = 0;
 
-    // WiFi disconnect reason toast: firmware tracks the last STA disconnect
-    // reason (esp_wifi reason code) and a sequence number that increments
-    // once per event. We baseline silently on the first "data" frame after
-    // each page load/reconnect, then toast only on a NEW sequence value so a
-    // stale historical reason isn't reported as if it just happened.
-    let lastSeenWifiDiscSeq = null;
-    let lastSeenWsDiscSeq = null;
-    const kWifiDisconnectReasons = {
-      1: "Unspecified",
-      2: "Auth expired",
-      3: "AP left/deauth",
-      4: "Assoc expired (inactivity)",
-      5: "Too many associations",
-      6: "Not authenticated",
-      7: "Not associated",
-      8: "AP-initiated deauth",
-      9: "Assoc, not authed",
-      13: "Invalid IE",
-      14: "MIC failure",
-      15: "4-way handshake timeout",
-      16: "Group key update timeout",
-      18: "Group cipher invalid",
-      19: "Pairwise cipher invalid",
-      20: "AKMP invalid",
-      23: "802.1X auth failed",
-      24: "Cipher suite rejected",
-      200: "Beacon timeout",
-      201: "AP not found",
-      202: "Auth failed",
-      203: "Assoc failed",
-      204: "Handshake timeout",
-      205: "Connection failed",
-      206: "AP TSF reset",
-      207: "Roaming",
-      208: "Assoc comeback time too long",
-      209: "SA query timeout"
-    };
-    function describeWifiDisconnectReason(code) {
-      const label = kWifiDisconnectReasons[code];
-      return label ? (label + " (" + code + ")") : ("Unknown (" + code + ")");
-    }
-
     let streamFastLagMinOffsetMs = null;
     let streamFastLagMs = 0;
     let streamBacklogDrops = 0;
@@ -1718,52 +1598,6 @@
         setTimeout(() => toast.remove(), 350);
       }, visibleFor);
     }
-
-    // Dedicated top-left notification for the WiFi disconnect-reason message
-    // only (kept separate from showToast() so every other toast in the app
-    // stays at its current bottom-left position). Wider max-width since the
-    // decoded reason text ("⚠️ WiFi reconnected — Beacon timeout (200)") can
-    // run longer than the general-purpose toast is sized for.
-    function showWifiToast(message, durationMs = 4000) {
-      const existing = document.getElementById("wifiToast");
-      if (existing) existing.remove();
-
-      const toast = document.createElement("div");
-      toast.id = "wifiToast";
-      toast.textContent = message;
-      toast.style.position = "fixed";
-      toast.style.top = "12px";
-      toast.style.left = "12px";
-      toast.style.background = "rgba(150, 90, 0, 0.95)";
-      toast.style.color = "#ffffff";
-      toast.style.padding = "8px 16px";
-      toast.style.borderRadius = "8px";
-      toast.style.fontSize = "14px";
-      toast.style.fontWeight = "600";
-      toast.style.lineHeight = "1.25";
-      toast.style.maxWidth = "min(520px, 92vw)";
-      toast.style.textAlign = "left";
-      toast.style.zIndex = "2000";
-      toast.style.pointerEvents = "none";
-      toast.style.boxShadow = "0 6px 20px rgba(0,0,0,0.8)";
-      toast.style.transition = "opacity 0.35s ease, transform 0.35s ease";
-      toast.style.opacity = "0";
-      toast.style.transform = "translateY(-8px)";
-      document.body.appendChild(toast);
-
-      requestAnimationFrame(() => {
-        toast.style.opacity = "1";
-        toast.style.transform = "translateY(0)";
-      });
-
-      const visibleFor = Number.isFinite(durationMs) ? Math.max(900, durationMs) : 4000;
-      setTimeout(() => {
-        toast.style.opacity = "0";
-        toast.style.transform = "translateY(-6px)";
-        setTimeout(() => toast.remove(), 350);
-      }, visibleFor);
-    }
-
 
     function updateRunPiPanel(msg) {
       const panel = document.getElementById("piLivePanel");
@@ -2954,34 +2788,6 @@
             if (msg.hw_precharge !== undefined) cachedTelemetry.hw_precharge = Number(msg.hw_precharge) === 1;
             if (msg.hw_rb_minus !== undefined) cachedTelemetry.hw_rb_minus = Number(msg.hw_rb_minus) === 1;
             if (msg.hw_ssr !== undefined) cachedTelemetry.hw_ssr = Number(msg.hw_ssr) === 1;
-
-            if (msg.wifi_disc_seq !== undefined) {
-              const seq = Number(msg.wifi_disc_seq);
-              if (lastSeenWifiDiscSeq === null) {
-                // First frame since page load/reconnect: baseline silently,
-                // don't report a possibly-old/stale disconnect as new.
-                lastSeenWifiDiscSeq = seq;
-              } else if (seq !== lastSeenWifiDiscSeq) {
-                lastSeenWifiDiscSeq = seq;
-                const reasonText = describeWifiDisconnectReason(Number(msg.wifi_disc_reason));
-                showWifiToast("⚠️ WiFi radio reconnected — " + reasonText, 4000);
-              }
-            }
-
-            // WebSocket-level disconnect (e.g. ping/pong timeout or queued-
-            // message overflow) can happen while the WiFi radio itself stays
-            // fully associated -- this is what actually causes the "Live
-            // Data Active" -> "Reconnecting..." flip in most cases, distinct
-            // from a real WiFi STA disconnect above.
-            if (msg.ws_disc_seq !== undefined) {
-              const seq = Number(msg.ws_disc_seq);
-              if (lastSeenWsDiscSeq === null) {
-                lastSeenWsDiscSeq = seq;
-              } else if (seq !== lastSeenWsDiscSeq) {
-                lastSeenWsDiscSeq = seq;
-                showWifiToast("⚠️ Dashboard reconnected (WebSocket dropped, WiFi radio stayed connected)", 4000);
-              }
-            }
 
             // Create a merged view with cached data + new msg for backward compatibility
             const telemetry = Object.assign({}, cachedTelemetry, msg);

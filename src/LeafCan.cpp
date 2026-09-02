@@ -155,20 +155,6 @@ static inline float decodeMotorTorque(const uint8_t *d)
     return static_cast<float>(selectedRaw) * 0.5f;
 }
 
-static inline void decodeTemps(const uint8_t *d,
-                               float &inv,
-                               float &stator,
-                               float &coolant)
-{
-    // BO_ 0x1DC InverterTemps
-    // SG_ InverterTemp : 0|8@1+ (1,-40) "C"
-    // SG_ StatorTemp   : 8|8@1+ (1,-40) "C"
-    // SG_ CoolantTemp  :16|8@1+ (1,-40) "C"
-    inv = static_cast<float>(d[0]) - 40.0f;
-    stator = static_cast<float>(d[1]) - 40.0f;
-    coolant = static_cast<float>(d[2]) - 40.0f;
-}
-
 static inline void decodeTempsOffset1(const uint8_t *d,
                                       float &inv,
                                       float &stator,
@@ -508,35 +494,6 @@ void LeafCan::decodeFrame(const twai_message_t &msg,
                 fb.rpm_update_ms = now_ms;
                 fb.last_update_ms = now_ms;
                 ++fb.rpm_frames;
-            }
-            break;
-
-        case 0x1DB: // MotorTorque (accepted)
-            if (dlc >= 4U) {
-                fb.torque_raw01_le = static_cast<int16_t>(
-                    static_cast<uint16_t>(d[0]) | (static_cast<uint16_t>(d[1]) << 8));
-                fb.torque_raw01_be = static_cast<int16_t>(
-                    (static_cast<uint16_t>(d[0]) << 8) | static_cast<uint16_t>(d[1]));
-                fb.torque_raw23_le = static_cast<int16_t>(
-                    static_cast<uint16_t>(d[2]) | (static_cast<uint16_t>(d[3]) << 8));
-                fb.torque_raw23_be = static_cast<int16_t>(
-                    (static_cast<uint16_t>(d[2]) << 8) | static_cast<uint16_t>(d[3]));
-                fb.torque_nm = decodeMotorTorque(d);
-                fb.torque_update_ms = now_ms;
-                fb.torque_primary_update_ms = now_ms;
-                fb.last_update_ms = now_ms;
-                ++fb.torque_frames;
-                ++fb.torque_primary_frames;
-            }
-            break;
-
-        case 0x1DC: // InverterTemps (accepted)
-            if (dlc >= 3U) {
-                decodeTemps(d, fb.inverter_temp, fb.stator_temp, fb.coolant_temp);
-                fb.temps_update_ms = now_ms;
-                fb.last_update_ms = now_ms;
-                ++fb.temps_frames;
-                ++fb.temps_1dc_frames;
             }
             break;
 

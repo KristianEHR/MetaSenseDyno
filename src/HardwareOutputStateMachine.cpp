@@ -349,13 +349,13 @@ void setStateLed(OutputState hwState)
         color = hw::packColor(0, 0, 255);
         break;
     case OutputState::MOTOR:
-        color = hw::packColor(255, 0, 0);
+        color = hw::packColor(255, 0, 255);
         break;
     case OutputState::DYNO:
         color = hw::packColor(0, 255, 0);
         break;
     case OutputState::FAULT:
-        color = hw::packColor(255, 0, 255);
+        color = hw::packColor(255, 0, 0);
         break;
     }
 

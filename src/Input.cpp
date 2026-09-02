@@ -26,13 +26,6 @@
 #include "CanConfig.h"
 #include "globals.h"
 #include "TelnetSerialBridge.h"
-#include "WifiDiag.h"
-
-// Default: CAN Monitor JSON telemetry is DISABLED (reduce WebSocket payload)
-// Enable via platformio.ini: -D METASENSE_CAN_MONITOR_JSON_ENABLED=1
-#ifndef METASENSE_CAN_MONITOR_JSON_ENABLED
-#define METASENSE_CAN_MONITOR_JSON_ENABLED 0
-#endif
 
 namespace MetaSense::WebSocketServer {
 
@@ -109,9 +102,7 @@ static uint32_t lastAmbientSampleMs = 0;
 // CAN RPM validity timeout + plausibility
 static uint32_t lastCanRpmUpdate   = 0;
 static const uint32_t CAN_RPM_TIMEOUT_MS = 100;
-#ifndef METASENSE_CAN_RPM_MIN_UPDATE_MS
 #define METASENSE_CAN_RPM_MIN_UPDATE_MS 10
-#endif
 static const uint32_t CAN_RPM_MIN_UPDATE_MS = METASENSE_CAN_RPM_MIN_UPDATE_MS;
 static float lastCanRpm            = 0.0f;
 static const float CAN_MAX_JUMP    = 2000.0f;
@@ -241,126 +232,11 @@ float computeVoltageBrakeTorque(float invVoltageV, float idleTorqueNm, float max
     return idleTorqueNm;
 }
 
-#ifndef METASENSE_LEAF_VCM_CHECKLIST_MODE
-#define METASENSE_LEAF_VCM_CHECKLIST_MODE 1
-#endif
-#ifndef METASENSE_LEAF_VCM_DIAGNOSTICS
 #define METASENSE_LEAF_VCM_DIAGNOSTICS 0
-#endif
-#ifndef METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS
-#define METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS 0
-#endif
-#ifndef METASENSE_TEST_TORQUE_OVERRIDE_ENABLED
-#define METASENSE_TEST_TORQUE_OVERRIDE_ENABLED 0
-#endif
-#ifndef METASENSE_TEST_TORQUE_OVERRIDE_NM
-#define METASENSE_TEST_TORQUE_OVERRIDE_NM 25.0f
-#endif
-#ifndef METASENSE_TORQUE_STEP_SEQUENCER_ENABLED
-#define METASENSE_TORQUE_STEP_SEQUENCER_ENABLED 0
-#endif
-#ifndef METASENSE_TORQUE_STEP_SEQUENCER_STEP_NM
-#define METASENSE_TORQUE_STEP_SEQUENCER_STEP_NM 0.5f
-#endif
-#ifndef METASENSE_TORQUE_STEP_SEQUENCER_MAX_NM
-#define METASENSE_TORQUE_STEP_SEQUENCER_MAX_NM 3.0f
-#endif
-#ifndef METASENSE_TORQUE_STEP_SEQUENCER_DWELL_MS
-#define METASENSE_TORQUE_STEP_SEQUENCER_DWELL_MS 5000U
-#endif
-#ifndef METASENSE_LEAF_120_CMD_BASE_SLOPE
 #define METASENSE_LEAF_120_CMD_BASE_SLOPE 0.0300f
-#endif
-#ifndef METASENSE_LEAF_120_CMD_BASE_OFFSET_NM
 #define METASENSE_LEAF_120_CMD_BASE_OFFSET_NM 0.000f
-#endif
-#ifndef METASENSE_LEAF_120_CMD_MIN_FIT_SAMPLES
-#define METASENSE_LEAF_120_CMD_MIN_FIT_SAMPLES 128U
-#endif
-#ifndef METASENSE_LEAF_VCM_LEGACY_VERBOSE_LOGS
-#define METASENSE_LEAF_VCM_LEGACY_VERBOSE_LOGS 0
-#endif
-#ifndef METASENSE_LEAF_VCM_RX_WARN_LOGS
-#define METASENSE_LEAF_VCM_RX_WARN_LOGS 0
-#endif
-#ifndef METASENSE_LEAF_CRC_DEEP_LOGS
-#define METASENSE_LEAF_CRC_DEEP_LOGS 0
-#endif
-#ifndef METASENSE_LEAF_MONITOR_SIMPLE_LOGS
-#define METASENSE_LEAF_MONITOR_SIMPLE_LOGS 1
-#endif
-#ifndef METASENSE_LEAF_MONITOR_SIMPLE_DECIMATE
-#define METASENSE_LEAF_MONITOR_SIMPLE_DECIMATE 20U
-#endif
-#ifndef METASENSE_LEAF_120_AUX_LOGS
-#define METASENSE_LEAF_120_AUX_LOGS 0
-#endif
-#ifndef METASENSE_LEAF_120_SHADOW_LOGS
-#define METASENSE_LEAF_120_SHADOW_LOGS 1
-#endif
-#ifndef METASENSE_LEAF_120_COMPARE_COPY_RX
-#define METASENSE_LEAF_120_COMPARE_COPY_RX 0
-#endif
-#ifndef METASENSE_LEAF_120_SHADOW_STATE_STRATEGY
-// 0: use explicit brake/gear inputs from control path
-// 1: derive state from torque sign (+ = MOTOR, - = BRAKE)
-// 2: 4-quadrant model using torque sign and RPM sign
-//    (0Nm=Neutral, +Nm=Forward, -Nm with rpm>0=Brake, -Nm with rpm<0=Reverse)
-#define METASENSE_LEAF_120_SHADOW_STATE_STRATEGY 0
-#endif
-#ifndef METASENSE_LEAF_120_SHADOW_TORQUE_DEADBAND_NM
-#define METASENSE_LEAF_120_SHADOW_TORQUE_DEADBAND_NM 1.0f
-#endif
-#ifndef METASENSE_LEAF_120_SHADOW_NEUTRAL_STARTUP_MS
-// >0 keeps state in neutral for startup transient window before forcing F states.
-#define METASENSE_LEAF_120_SHADOW_NEUTRAL_STARTUP_MS 0U
-#endif
-#ifndef METASENSE_LEAF_120_SHADOW_IDLE_FORCE_FWD
-// In torque-sign strategy, keep F in near-zero torque zone when enabled.
-#define METASENSE_LEAF_120_SHADOW_IDLE_FORCE_FWD 1
-#endif
-#ifndef METASENSE_LEAF_120_SHADOW_REVERSE_RPM_DEADBAND
-#define METASENSE_LEAF_120_SHADOW_REVERSE_RPM_DEADBAND 30.0f
-#endif
-#ifndef METASENSE_LEAF_120_FACTS_LOGS
-#define METASENSE_LEAF_120_FACTS_LOGS 0
-#endif
-#ifndef METASENSE_LEAF_120_FACTS_LOG_PERIOD_MS
-#define METASENSE_LEAF_120_FACTS_LOG_PERIOD_MS 5000U
-#endif
-#ifndef METASENSE_LEAF_120_NOISE_LOGS
-#define METASENSE_LEAF_120_NOISE_LOGS 0
-#endif
-#ifndef METASENSE_LEAF_120_NOISE_DB_NM
-#define METASENSE_LEAF_120_NOISE_DB_NM 0.4f
-#endif
-#ifndef METASENSE_LEAF_120_NOISE_EMA_ALPHA
-#define METASENSE_LEAF_120_NOISE_EMA_ALPHA 0.10f
-#endif
-#ifndef METASENSE_LEAF_120_NOISE_OUTLIER_ABS_NM
-#define METASENSE_LEAF_120_NOISE_OUTLIER_ABS_NM 5.0f
-#endif
-#ifndef METASENSE_LEAF_120_DT_SLOPE_STEADY_NMPS
-#define METASENSE_LEAF_120_DT_SLOPE_STEADY_NMPS 10.0f
-#endif
-#ifndef METASENSE_LEAF_120_DT_SLOPE_HIGH_NMPS
-#define METASENSE_LEAF_120_DT_SLOPE_HIGH_NMPS 120.0f
-#endif
-#ifndef METASENSE_LEAF_120_TX_COMMIT_ENABLED
 #define METASENSE_LEAF_120_TX_COMMIT_ENABLED 0
-#endif
 
-#ifndef METASENSE_LEAF_120_STARTUP_ZERO_TORQUE
-// Hold 0x120 torque demand at zero during initial HV bring-up so the inverter
-// can precharge cleanly and clear its error bits before any torque is applied.
-// A future sequencer can replace this with a staged ramp without changing the
-// surrounding state-machine logic.
-#define METASENSE_LEAF_120_STARTUP_ZERO_TORQUE 1
-#endif
-#ifndef METASENSE_LEAF_CRC_CANDIDATE_HUNT
-// Disable reverse-engineering candidate sweeps in normal operation.
-#define METASENSE_LEAF_CRC_CANDIDATE_HUNT 0
-#endif
 // Allow scheduler jitter from WiFi/web/FS tasks without tripping a false VCM fault.
 static const uint32_t CAN_TX_MAX_GAP_MS = 120;
 
@@ -431,9 +307,7 @@ constexpr uint32_t kLeafVcmFaultRecoverMs = 500;
 constexpr float kLeafTorqueTrackStepNm = 2.0f;
 constexpr float kLeafTorqueTrackAbsTolNm = 3.0f;
 constexpr float kLeafTorqueTrackRelTol = 0.10f;
-#ifndef METASENSE_LEAF_TORQUE_TRACK_TIMEOUT_MS
 #define METASENSE_LEAF_TORQUE_TRACK_TIMEOUT_MS 3000
-#endif
 constexpr uint32_t kLeafTorqueTrackTimeoutMs = METASENSE_LEAF_TORQUE_TRACK_TIMEOUT_MS;
 constexpr uint32_t kLeafSimFeedbackPeriodMs = 20;
 constexpr uint32_t kLeafSimBootDelayMs = 1000;
@@ -444,121 +318,13 @@ constexpr uint16_t kLeafHandshakeMaxAttempts = 200;
 constexpr uint32_t kLeafHandshakeWindowMs = 5000;
 constexpr uint32_t kLeafHandshakeAttemptPeriodMs = 20;
 
-#ifndef METASENSE_LEAF_CAN_RX_ENABLED
-#define METASENSE_LEAF_CAN_RX_ENABLED 1
-#endif
-#ifndef METASENSE_LEAF_CAN_TX_ENABLED
-#define METASENSE_LEAF_CAN_TX_ENABLED 1
-#endif
-#ifndef METASENSE_LEAF_CAN_LISTEN_ONLY
-#define METASENSE_LEAF_CAN_LISTEN_ONLY 0
-#endif
-#ifndef METASENSE_LEAF_CAN_HANDSHAKE_ON_FIRST_1DA
 #define METASENSE_LEAF_CAN_HANDSHAKE_ON_FIRST_1DA 0
-#endif
-// All 0x11A template definitions are now in include/CanConfig.h
-// These will be used from CanConfig.h via #ifndef guards
-#ifndef METASENSE_55A
-#define METASENSE_55A 0
-#endif
-#ifndef METASENSE_LEAF_CAN_VARIANT_READY_FALLBACK
-#define METASENSE_LEAF_CAN_VARIANT_READY_FALLBACK 1
-#endif
-#ifndef METASENSE_LEAF_1D4_CRC_CLOCK_XOR_ENABLE
-// Conformant 0x1D4 CRC implementation:
-// CRC8 MSB poly 0x1D over [idLo + payload7], then XOR by HCM clock bin.
-#define METASENSE_LEAF_1D4_CRC_CLOCK_XOR_ENABLE 1
-#endif
-#ifndef METASENSE_LEAF_1D4_TEMPLATE_TX_MODE
-// 0: Build 0x1D4 command fields from logic.
-// 1: Start from a known-good Thunderstruck template frame and only patch
-//    selected fields (torque + clock + CRC) for controlled acceptance tests.
-// 2: Replay a captured clock-continuous 0x1D4 frame loop exactly as generated
-//    by tools/analyze_1d4_sniff.py --emit-loop-header.
-// 3: Use newest captured 0x1D4 ring-buffer frame as TX base, then patch
-//    torque + clock + CRC; if ring is empty, fallback to mode 0 builder.
-// 4: Strict raw replay from 0x1D4 ring-buffer frame (no patching, no builder fallback).
-#define METASENSE_LEAF_1D4_TEMPLATE_TX_MODE 0
-#endif
-#ifndef METASENSE_LEAF_1D4_RING_TX_SOURCE_AGE
-// 0 reads newest ring frame, 1 previous, etc.
-#define METASENSE_LEAF_1D4_RING_TX_SOURCE_AGE 0
-#endif
-#ifndef METASENSE_LEAF_1D4_REPLAY_RECALC_CRC
-// Keep enabled to harden generated loop frames against accidental edits.
-#define METASENSE_LEAF_1D4_REPLAY_RECALC_CRC 1
-#endif
-#ifndef METASENSE_LEAF_1D4_TEMPLATE_MAX_ABS_TORQUE_NM
-// Keep template TX in a conservative region while validating inverter acceptance.
-#define METASENSE_LEAF_1D4_TEMPLATE_MAX_ABS_TORQUE_NM 3.75f
-#endif
-#ifndef METASENSE_LEAF_1D4_TORQUE_LSB_NM
-#define METASENSE_LEAF_1D4_TORQUE_LSB_NM 0.0625f
-#endif
-#ifndef METASENSE_LEAF_1D4_TEMPLATE_B0
-#define METASENSE_LEAF_1D4_TEMPLATE_B0 0x6EU  // Static per Thunderstruck reference
-#endif
-#ifndef METASENSE_LEAF_1D4_TEMPLATE_B1
-#define METASENSE_LEAF_1D4_TEMPLATE_B1 0x6EU  // Static per Thunderstruck reference
-#endif
-#ifndef METASENSE_LEAF_1D4_TEMPLATE_B2
 #define METASENSE_LEAF_1D4_TEMPLATE_B2 0x00U  // Torque MSB
-#endif
-#ifndef METASENSE_LEAF_1D4_TEMPLATE_B3
 #define METASENSE_LEAF_1D4_TEMPLATE_B3 0x00U  // Torque LSB
-#endif
-#ifndef METASENSE_LEAF_1D4_TEMPLATE_B4
 #define METASENSE_LEAF_1D4_TEMPLATE_B4 0x87U  // Rolling counter (high nibble), fixed 0x7 (low nibble)
-#endif
-#ifndef METASENSE_LEAF_1D4_TEMPLATE_B5
 #define METASENSE_LEAF_1D4_TEMPLATE_B5 0x44U  // Static charge status per Thunderstruck reference
-#endif
-#ifndef METASENSE_LEAF_1D4_TEMPLATE_B6
-#define METASENSE_LEAF_1D4_TEMPLATE_B6 0x01U  // Static field per Thunderstruck reference
-#endif
-#ifndef METASENSE_LEAF_1D4_TEMPLATE_B7
 #define METASENSE_LEAF_1D4_TEMPLATE_B7 0x00U  // CRC placeholder (will be overwritten)
-#endif
-#ifndef METASENSE_LEAF_CAN_TX_PIN
-#define METASENSE_LEAF_CAN_TX_PIN 4
-#endif
-#ifndef METASENSE_LEAF_CAN_RX_PIN
-#define METASENSE_LEAF_CAN_RX_PIN 5
-#endif
-#ifndef METASENSE_LEAF_CAN_MAX_FRAMES_PER_LOOP
 #define METASENSE_LEAF_CAN_MAX_FRAMES_PER_LOOP 8
-#endif
-#ifndef METASENSE_LEAF_TX_GAP_TEST_ENABLE
-#define METASENSE_LEAF_TX_GAP_TEST_ENABLE 0
-#endif
-#ifndef METASENSE_LEAF_TX_GAP_TEST_PERIOD_MS
-#define METASENSE_LEAF_TX_GAP_TEST_PERIOD_MS 15000
-#endif
-#ifndef METASENSE_LEAF_TX_GAP_TEST_DURATION_MS
-#define METASENSE_LEAF_TX_GAP_TEST_DURATION_MS 500
-#endif
-
-#ifndef METASENSE_LEAF_1D4_RAW_SNIFF_ONLY
-#define METASENSE_LEAF_1D4_RAW_SNIFF_ONLY 0
-#endif
-
-#ifndef METASENSE_LEAF_1D4_KEEPALIVE_ZERO_REFRESH_MS
-// Periodically re-issue a zero-cross pulse to refresh inverter state before timeout fallback.
-#define METASENSE_LEAF_1D4_KEEPALIVE_ZERO_REFRESH_MS 500U
-#endif
-#ifndef METASENSE_LEAF_1D4_KEEPALIVE_ZERO_PULSE_MS
-// Keep the negative pulse long enough to cover multiple 10 ms TX frames.
-#define METASENSE_LEAF_1D4_KEEPALIVE_ZERO_PULSE_MS 20U
-#endif
-#ifndef METASENSE_LEAF_1D4_KEEPALIVE_ZERO_POS_NM
-#define METASENSE_LEAF_1D4_KEEPALIVE_ZERO_POS_NM 0.60f
-#endif
-#ifndef METASENSE_LEAF_1D4_KEEPALIVE_ZERO_PRE_POS_MS
-#define METASENSE_LEAF_1D4_KEEPALIVE_ZERO_PRE_POS_MS 20U
-#endif
-#ifndef METASENSE_LEAF_1D4_KEEPALIVE_ZERO_POST_POS_MS
-#define METASENSE_LEAF_1D4_KEEPALIVE_ZERO_POST_POS_MS 20U
-#endif
 
 constexpr bool kLeafCanHandshakeOnFirst1da = (METASENSE_LEAF_CAN_HANDSHAKE_ON_FIRST_1DA != 0);
 constexpr bool kLeafCanTxActive = (METASENSE_LEAF_CAN_TX_ENABLED != 0) &&
@@ -586,26 +352,14 @@ constexpr float EGT_MAX_LIMIT_C = 950.0f;
 constexpr float TORQUE_MIN = -200.0f;
 constexpr float TORQUE_MAX =  200.0f;
 constexpr float RPM_SETPOINT_MAX = RPM_MAX_LIMIT;
-#ifndef METASENSE_WS_FAST_PERIOD_MS
-#define METASENSE_WS_FAST_PERIOD_MS 20  // 50 Hz - ultra responsive updates
-#endif
-#ifndef METASENSE_WS_SLOW_PERIOD_MS
-#define METASENSE_WS_SLOW_PERIOD_MS 500
-#endif
 constexpr uint32_t kWebSocketPublishPeriodMs = METASENSE_WS_FAST_PERIOD_MS;
-constexpr uint32_t kWebSocketSlowPublishPeriodMs = METASENSE_WS_SLOW_PERIOD_MS;
+constexpr uint32_t kWebSocketSlowPublishPeriodMs = 500;
 constexpr uint8_t kWebSocketSlowTelemetrySlices = 15;
-#ifndef METASENSE_TELEMETRY_PROFILE_DEFAULT_TREND
 #define METASENSE_TELEMETRY_PROFILE_DEFAULT_TREND 0
-#endif
-#ifndef METASENSE_TREND_MINIMAL_TELEMETRY
 // When enabled, trend.html receives only the fields needed for live trend plots.
 #define METASENSE_TREND_MINIMAL_TELEMETRY 1
-#endif
-#ifndef METASENSE_DASHBOARD_TRANSITIONAL_RUN_FIELDS
 // When enabled, low-rate dashboard run-condition fields are sent only on change.
 #define METASENSE_DASHBOARD_TRANSITIONAL_RUN_FIELDS 1
-#endif
 
 enum class TelemetryProfile : uint8_t {
     Full = 0,
@@ -616,20 +370,14 @@ static TelemetryProfile gTelemetryProfile =
     METASENSE_TELEMETRY_PROFILE_DEFAULT_TREND ? TelemetryProfile::TrendMinimal : TelemetryProfile::Full;
 static bool gUiModeHintTrend = false;
 
-#ifndef METASENSE_STREAM_DIAGNOSTICS
 #define METASENSE_STREAM_DIAGNOSTICS 0
-#endif
 // Compile-time facility for JSON delay counter diagnostics (disabled by default for production)
-#ifndef METASENSE_JSON_DELAY_COUNTERS
 #define METASENSE_JSON_DELAY_COUNTERS 0  // Set to 1 to enable JSON size measurements
-#endif
 constexpr float kRuntimeKpMin = 0.005f;
 constexpr float kRuntimeKpMax = 0.200f;
 constexpr float kRuntimeKpAlpha = 0.12f;
 constexpr float kRuntimeKpApplyDelta = 0.001f;
-#ifndef METASENSE_AMBIENT_SAMPLE_PERIOD_MS
 #define METASENSE_AMBIENT_SAMPLE_PERIOD_MS 100
-#endif
 constexpr uint32_t kAmbientSamplePeriodMs = METASENSE_AMBIENT_SAMPLE_PERIOD_MS;
 constexpr uint32_t kLoadCellNauRetryPeriodMs = 5000;
 constexpr uint16_t kMcp9600BootSettleDelayMs = 1000;
@@ -2579,10 +2327,8 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
     // Reduces to 100ms when idle (no clients) to save power
     const uint32_t dashboardCadenceMs = (clientCount > 0) ? 50U : 100U;    // 50ms for stable updates
 
-    // === LIGHTWEIGHT DATA: Essential telemetry ===
-    // Browser expects "data" message type with core fields
-    // When METASENSE_CAN_MONITOR_MODE=0 (production): minimal JSON, reduced CPU/WiFi load
-    // When METASENSE_CAN_MONITOR_MODE=1 (debug): full metrics including leaf_1da/1d4/11a CAN frame data
+    // === LIGHTWEIGHT DATA: Essential telemetry + full CAN monitor metrics ===
+    // Browser expects "data" message type with core fields plus leaf_1da/1d4/11a CAN frame data.
     if (now - lastDashboardMs >= dashboardCadenceMs) {
         lastDashboardMs = now;
         
@@ -2601,129 +2347,8 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             hwSsrOut = MetaSense::HardwareOutputStateMachine::isSsrActive();
         }
 
-#if METASENSE_CAN_MONITOR_MODE == 0
-        // MODE 0 (PRODUCTION): Minimal JSON without CAN metrics for CPU efficiency
-        // Reduced buffer size for production telemetry
-        static char jsonBuffer[1200];  // Smaller buffer: production mode
-        int pos = 0;
-        
-        // Build minimal JSON using snprintf
-        pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos,
-            "{\"type\":\"data\","
-            "\"rpm\":%.1f,"
-            "\"rpm_error\":0,"
-            "\"drum_rpm\":%.1f,"
-            "\"kw\":%.2f,"
-            "\"peakKW\":%.2f,"
-            "\"peakKW_RPM\":%.0f,"
-            "\"torque\":%.2f,"
-            "\"brakeTorque\":%.2f,"
-            "\"torque_measured\":%.2f,"
-            "\"load_kg\":%.2f,"
-            "\"throttle_pct\":%.1f,"
-            "\"peakTorque\":%.2f,"
-            "\"peakTorque_RPM\":%.0f,"
-            "\"e_torque\":%.2f,"
-            "\"energy\":%.2f,"
-            "\"energy_active\":%d,"
-            "\"rel_humidity\":%.1f,"
-            "\"ratio_confidence\":0,"
-            "\"rpm_target\":%.0f,"
-            "\"kp_source\":\"firmware\","
-            "\"kp_live\":0,"
-            "\"ki_live\":0,"
-            "\"egt_hot\":%.1f,"
-            "\"egt_status\":%d,"
-            "\"egt_ready\":%d,"
-            "\"pressure\":%.1f,"
-            "\"ambient_temp\":%.1f,"
-            "\"air_density\":%.3f,"
-            "\"climate_cf\":%.3f,"
-            "\"dyno_mode\":\"%s\","
-            "\"inv_ready\":%d,"
-            "\"sw_active\":%d,"
-            "\"load_raw\":0,"
-            "\"nau_ready\":0,"
-            "\"recording\":%d,"
-            "\"lambda\":%.2f,"
-            "\"massflow_m3h\":%.2f,"
-            "\"leaf_rpm\":%.0f,"
-            "\"leaf_torque\":%.2f,"
-            "\"leaf_torque_demand\":%.2f,"
-            "\"leaf_torque_demand_manual\":%.2f,"
-            "\"leaf_torque_mode\":\"%s\","
-            "\"leaf_1da_input_v\":%.1f,"
-            "\"leaf_1da_inv_fault_map\":%d,"
-            "\"leaf_1da_inv_status_bit\":%d,"
-            "\"leaf_1da_inv_temp\":%.1f,"
-            "\"leaf_1da_stator_temp\":%.1f,"
-            "\"leaf_coolant_temp\":%.1f,"
-            "\"leaf_ready\":%d,"
-            "\"hw_precharge\":%d,"
-            "\"hw_rb_plus\":%d,"
-            "\"hw_rb_minus\":%d,"
-            "\"hw_ssr\":%d,"
-            "\"hw_state\":\"%s\","
-            "\"wifi_disc_reason\":%d,"
-            "\"wifi_disc_seq\":%lu,"
-            "\"ws_disc_seq\":%lu"
-            "}",
-            data.rpm,
-            data.drumRpm,
-            data.kw,
-            data.peakKW,
-            data.peakKW_RPM,
-            data.torqueNm,
-            data.brakeTorqueNm,
-            data.torqueNm,
-            data.loadKg,
-            data.throttlePercent,
-            data.peakTorque,
-            data.peakTorque_RPM,
-            data.eTorque,
-            data.energyMJ,
-            isRecording ? 1 : 0,
-            data.humidity,
-            data.rpmTarget,
-            data.egtHotC,
-            (int)data.egtStatus,
-            data.egtReady ? 1 : 0,
-            data.pressureHpa,
-            data.ambientC,
-            data.airDensity,
-            data.climateCF,
-            MetaSense::toString(data.mode),
-            data.leaf_invReady ? 1 : 0,
-            data.swActive ? 1 : 0,
-            isRecording ? 1 : 0,
-            data.lambdaValue,
-            data.massflowM3h,
-            data.leaf_rpm,
-            data.leaf_torqueNm,
-            data.leaf_torqueDemandNm,
-            MetaSense::Input::getLeafUiTorqueDemandNm(),
-            MetaSense::Input::getLeafManualTorqueMode() ? "manual" : "auto",
-            leafFb.input_voltage,  // leaf_1da_input_v
-            (int)leafFb.inv_fault_map,  // leaf_1da_inv_fault_map
-            (int)leafFb.inv_status_bit,  // leaf_1da_inv_status_bit
-            data.leaf_invTempC,  // leaf_1da_inv_temp
-            data.leaf_statorTempC,  // leaf_1da_stator_temp
-            data.leaf_coolantTempC,  // leaf_coolant_temp
-            leafFb.ready ? 1 : 0,
-            hwPrechargeOut ? 1 : 0,
-            hwRbPlusOut ? 1 : 0,
-            hwRbMinusOut ? 1 : 0,
-            hwSsrOut ? 1 : 0,
-            MetaSense::HardwareOutputStateMachine::stateName(),
-            (int)MetaSense::WifiDiag::lastDisconnectReason(),
-            static_cast<unsigned long>(MetaSense::WifiDiag::disconnectEventSeq()),
-            static_cast<unsigned long>(MetaSense::WifiDiag::wsDisconnectEventSeq())
-        );
-
-#else  // METASENSE_CAN_MONITOR_MODE == 1
-        // MODE 1 (DEBUG): Full JSON WITH all CAN metrics for monitoring/debugging
         // Use static buffer for JSON to avoid String() float conversion issues
-        static char jsonBuffer[2600];  // Larger buffer: debug mode with all metrics
+        static char jsonBuffer[2600];  // Sized for full metrics payload
         int pos = 0;
         
         // FIX: Use stats data that was captured ATOMICALLY at frame reception
@@ -2807,10 +2432,7 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             "\"hw_rb_plus\":%d,"
             "\"hw_rb_minus\":%d,"
             "\"hw_ssr\":%d,"
-            "\"hw_state\":\"%s\","
-            "\"wifi_disc_reason\":%d,"
-            "\"wifi_disc_seq\":%lu,"
-            "\"ws_disc_seq\":%lu"
+            "\"hw_state\":\"%s\""
             "}",
             data.rpm,
             data.drumRpm,
@@ -2879,12 +2501,8 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             hwRbPlusOut ? 1 : 0,
             hwRbMinusOut ? 1 : 0,
             hwSsrOut ? 1 : 0,
-            MetaSense::HardwareOutputStateMachine::stateName(),  // hw_state (INIT/START/IDLE/MOTOR/DYNO)
-            (int)MetaSense::WifiDiag::lastDisconnectReason(),
-            static_cast<unsigned long>(MetaSense::WifiDiag::disconnectEventSeq()),
-            static_cast<unsigned long>(MetaSense::WifiDiag::wsDisconnectEventSeq())
+            MetaSense::HardwareOutputStateMachine::stateName()  // hw_state (INIT/START/IDLE/MOTOR/DYNO)
         );
-#endif  // METASENSE_CAN_MONITOR_MODE
         
         wsock.textAll(jsonBuffer);
     }
@@ -3694,14 +3312,6 @@ void updateVcuDebug(bool simMode,
     vcuDebugRMinus = rMinus;
 }
 
-float computeTorqueStepSequence(uint32_t nowMs, bool torqueGateArmed, bool inverterStatusClear)
-{
-    (void)nowMs;
-    (void)torqueGateArmed;
-    (void)inverterStatusClear;
-    return 0.0f;
-}
-
 // ============================================================================
 // 0x1D4 Payload State Machine (100ms update cadence, independent of TX rate)
 // ============================================================================
@@ -4492,18 +4102,9 @@ void loop()
         tele.leaf_torqueDemandNm = torqueCmd;
     }
 
-#if METASENSE_TORQUE_STEP_SEQUENCER_ENABLED
-    if (torqueArmed && safe && canStatusClearForTorque) {
-        torqueCmd = computeTorqueStepSequence(now, true, true);
-    } else {
-        torqueCmd = 0.0f;
-        (void)computeTorqueStepSequence(now, false, canStatusClearForTorque);
-    }
-#else
     if (torqueArmed && !canStatusClearForTorque) {
         torqueCmd = 0.0f;
     }
-#endif
 
     // eTorque is the PI torque demand signal.
     tele.eTorque = torqueCmd;
@@ -4941,29 +4542,6 @@ void loop()
                       tele.leaf_invTempC, tele.leaf_statorTempC, tele.leaf_coolantTempC,
                       ip[0], ip[1], ip[2], ip[3], rssi, nowMs);
 
-        // CAN bus health, visible over telnet (driver ready state + RX frame
-        // counts + TX pacer loop iterations + TWAI controller health, since
-        // there is no longer a dedicated TX-sent counter after the metrics
-        // cleanup). twai_tx_q/tx_err/bus_err help distinguish "not
-        // transmitting at all" from "transmitting but never ACKed".
-        // (arb_lost intentionally omitted -- normal multi-master CAN bus
-        // arbitration loss/retry, not a health/error indicator.)
-        const MetaSense::CANBus::Stats& canStatsHb = MetaSense::CANBus::stats();
-        MetaSense::TelnetSerialBridge::telnetBridgePrintf(
-            "[CAN-STATUS] ready=%d rx_1da=%lu rx_55a=%lu bus_off=%lu status_fail=%lu tx_loops=%lu twai(state=%u tx_q=%lu rx_q=%lu tx_err=%lu rx_err=%lu bus_err=%lu)\n",
-            canStatsHb.ready ? 1 : 0,
-            static_cast<unsigned long>(canStatsHb.rx1daFrames),
-            static_cast<unsigned long>(canStatsHb.rx55aFrames),
-            static_cast<unsigned long>(canStatsHb.busOffEvents),
-            static_cast<unsigned long>(canStatsHb.statusQueryFailures),
-            static_cast<unsigned long>(s_leaf1d4TxFrameCount),
-            static_cast<unsigned>(canStatsHb.lastTwaiState),
-            static_cast<unsigned long>(canStatsHb.twaiTxQueued),
-            static_cast<unsigned long>(canStatsHb.twaiRxQueued),
-            static_cast<unsigned long>(canStatsHb.twaiTxErrorCounter),
-            static_cast<unsigned long>(canStatsHb.twaiRxErrorCounter),
-            static_cast<unsigned long>(canStatsHb.twaiBusError));
-        
         // Print 1D4 frame debug info (read directly from cached frame - simple Serial.print approach)
         static uint32_t lastPrintedTxCount = 0xFFFFFFFFUL;
         // Print every 10 frames to avoid sync issues with core-1 counter updates
