@@ -26,6 +26,7 @@
 #include "CanConfig.h"
 #include "globals.h"
 #include "TelnetSerialBridge.h"
+#include "WifiDiag.h"
 
 // Default: CAN Monitor JSON telemetry is DISABLED (reduce WebSocket payload)
 // Enable via platformio.ini: -D METASENSE_CAN_MONITOR_JSON_ENABLED=1
@@ -2650,7 +2651,9 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             "\"hw_rb_plus\":%d,"
             "\"hw_rb_minus\":%d,"
             "\"hw_ssr\":%d,"
-            "\"hw_state\":\"%s\""
+            "\"hw_state\":\"%s\","
+            "\"wifi_disc_reason\":%d,"
+            "\"wifi_disc_seq\":%lu"
             "}",
             data.rpm,
             data.drumRpm,
@@ -2698,7 +2701,9 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             hwRbPlusOut ? 1 : 0,
             hwRbMinusOut ? 1 : 0,
             hwSsrOut ? 1 : 0,
-            MetaSense::HardwareOutputStateMachine::stateName()
+            MetaSense::HardwareOutputStateMachine::stateName(),
+            (int)MetaSense::WifiDiag::lastDisconnectReason(),
+            static_cast<unsigned long>(MetaSense::WifiDiag::disconnectEventSeq())
         );
 
 #else  // METASENSE_CAN_MONITOR_MODE == 1
@@ -2788,7 +2793,9 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             "\"hw_rb_plus\":%d,"
             "\"hw_rb_minus\":%d,"
             "\"hw_ssr\":%d,"
-            "\"hw_state\":\"%s\""
+            "\"hw_state\":\"%s\","
+            "\"wifi_disc_reason\":%d,"
+            "\"wifi_disc_seq\":%lu"
             "}",
             data.rpm,
             data.drumRpm,
@@ -2857,7 +2864,9 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             hwRbPlusOut ? 1 : 0,
             hwRbMinusOut ? 1 : 0,
             hwSsrOut ? 1 : 0,
-            MetaSense::HardwareOutputStateMachine::stateName()  // hw_state (INIT/START/IDLE/MOTOR/DYNO)
+            MetaSense::HardwareOutputStateMachine::stateName(),  // hw_state (INIT/START/IDLE/MOTOR/DYNO)
+            (int)MetaSense::WifiDiag::lastDisconnectReason(),
+            static_cast<unsigned long>(MetaSense::WifiDiag::disconnectEventSeq())
         );
 #endif  // METASENSE_CAN_MONITOR_MODE
         

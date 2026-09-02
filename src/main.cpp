@@ -21,6 +21,7 @@
 #include "I2cBusLock.h"
 #include "TelnetSerialBridge.h"
 #include "CanConfig.h"
+#include "WifiDiag.h"
 
 // Enable/disable runtime task instrumentation (set to 0 to disable)
 #define ENABLE_RUNTIME_INSTRUMENTATION 0
@@ -536,6 +537,8 @@ void setupWifi()
             MetaSense::TelnetSerialBridge::telnetBridgePrintf(
                 "[WiFi] Disconnected, reason: %d — reconnecting...\n",
                 info.wifi_sta_disconnected.reason);
+            MetaSense::WifiDiag::recordDisconnect(
+                static_cast<int16_t>(info.wifi_sta_disconnected.reason));
             break;
         case ARDUINO_EVENT_WIFI_STA_CONNECTED:
             Serial.println("[WiFi] Associated to AP");
