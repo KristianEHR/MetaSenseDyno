@@ -286,7 +286,7 @@ constexpr float kDynoEnterRpm = kIdleDynoHystCenterRpm + kIdleDynoHystBandRpm; /
 constexpr float kIdleEnterRpm = kIdleDynoHystCenterRpm - kIdleDynoHystBandRpm; // 350
 constexpr float kMotorSetpointMinRpm = 150.0f;    // MOTOR entry requires setpoint above this.
 constexpr float kHvKeepAliveMaxRpm = 500.0f;      // IDLE-only HV keep-alive: RPM must be <= this.
-constexpr float kHvKeepAliveEngageV = 200.0f;     // Engage precharge-channel recharge below this HV.
+constexpr float kHvKeepAliveEngageV = 10.0f;      // Engage precharge-channel recharge below this HV.
 constexpr float kHvKeepAliveReleaseV = 300.0f;    // Release recharge above this HV (latched, avoids chatter).
 
 // --- Precharge sequencing state ---
