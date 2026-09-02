@@ -1718,6 +1718,52 @@
       }, visibleFor);
     }
 
+    // Dedicated top-left notification for the WiFi disconnect-reason message
+    // only (kept separate from showToast() so every other toast in the app
+    // stays at its current bottom-left position). Wider max-width since the
+    // decoded reason text ("⚠️ WiFi reconnected — Beacon timeout (200)") can
+    // run longer than the general-purpose toast is sized for.
+    function showWifiToast(message, durationMs = 4000) {
+      const existing = document.getElementById("wifiToast");
+      if (existing) existing.remove();
+
+      const toast = document.createElement("div");
+      toast.id = "wifiToast";
+      toast.textContent = message;
+      toast.style.position = "fixed";
+      toast.style.top = "12px";
+      toast.style.left = "12px";
+      toast.style.background = "rgba(150, 90, 0, 0.95)";
+      toast.style.color = "#ffffff";
+      toast.style.padding = "8px 16px";
+      toast.style.borderRadius = "8px";
+      toast.style.fontSize = "14px";
+      toast.style.fontWeight = "600";
+      toast.style.lineHeight = "1.25";
+      toast.style.maxWidth = "min(520px, 92vw)";
+      toast.style.textAlign = "left";
+      toast.style.zIndex = "2000";
+      toast.style.pointerEvents = "none";
+      toast.style.boxShadow = "0 6px 20px rgba(0,0,0,0.8)";
+      toast.style.transition = "opacity 0.35s ease, transform 0.35s ease";
+      toast.style.opacity = "0";
+      toast.style.transform = "translateY(-8px)";
+      document.body.appendChild(toast);
+
+      requestAnimationFrame(() => {
+        toast.style.opacity = "1";
+        toast.style.transform = "translateY(0)";
+      });
+
+      const visibleFor = Number.isFinite(durationMs) ? Math.max(900, durationMs) : 4000;
+      setTimeout(() => {
+        toast.style.opacity = "0";
+        toast.style.transform = "translateY(-6px)";
+        setTimeout(() => toast.remove(), 350);
+      }, visibleFor);
+    }
+
+
     function updateRunPiPanel(msg) {
       const panel = document.getElementById("piLivePanel");
       const sourceEl = document.getElementById("piLiveSource");
@@ -2917,7 +2963,7 @@
               } else if (seq !== lastSeenWifiDiscSeq) {
                 lastSeenWifiDiscSeq = seq;
                 const reasonText = describeWifiDisconnectReason(Number(msg.wifi_disc_reason));
-                showToast("⚠️ WiFi reconnected — " + reasonText, 4000);
+                showWifiToast("⚠️ WiFi reconnected — " + reasonText, 4000);
               }
             }
 
