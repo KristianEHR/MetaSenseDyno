@@ -38,13 +38,6 @@ void begin(AsyncWebServer& server)
         }
 
         if (type == WS_EVT_CONNECT) {
-            // Prefer dropping a stale telemetry frame over killing the whole
-            // connection when the outbound queue briefly backs up (e.g. WiFi
-            // signal dip/congestion). Telemetry is inherently latest-value-
-            // wins, so a discarded frame is harmless, whereas forcing a full
-            // WebSocket reconnect (the library's default behavior) is far
-            // more disruptive to the GUI than losing one stale frame.
-            client->setCloseClientOnQueueFull(false);
             Serial.printf("[WS] Client connected: id=%u, ip=%s\n", client->id(), client->remoteIP().toString().c_str());
             MetaSense::TelnetSerialBridge::telnetBridgePrintf(
                 "[WS] Client connected: id=%u, ip=%s\n", client->id(), client->remoteIP().toString().c_str());
