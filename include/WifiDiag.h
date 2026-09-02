@@ -19,4 +19,11 @@ int16_t lastDisconnectReason();
 // Monotonically increasing counter, incremented once per recorded disconnect.
 uint32_t disconnectEventSeq();
 
+// Separate from the WiFi STA-level disconnect above: this tracks
+// WS_EVT_DISCONNECT (a single WebSocket client connection dropping, e.g. a
+// ping/pong timeout or queued-message overflow) which can happen while the
+// WiFi radio itself stays fully associated to the AP the whole time.
+void recordWsDisconnect();
+uint32_t wsDisconnectEventSeq();
+
 } // namespace MetaSense::WifiDiag

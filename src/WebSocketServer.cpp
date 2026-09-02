@@ -2,6 +2,8 @@
 #include <map>
 
 #include "CommandRouter.h"
+#include "TelnetSerialBridge.h"
+#include "WifiDiag.h"
 
 namespace {
 
@@ -37,11 +39,15 @@ void begin(AsyncWebServer& server)
 
         if (type == WS_EVT_CONNECT) {
             Serial.printf("[WS] Client connected: id=%u, ip=%s\n", client->id(), client->remoteIP().toString().c_str());
+            MetaSense::TelnetSerialBridge::telnetBridgePrintf(
+                "[WS] Client connected: id=%u, ip=%s\n", client->id(), client->remoteIP().toString().c_str());
             return;
         }
 
         if (type == WS_EVT_DISCONNECT) {
             Serial.printf("[WS] Client disconnected: id=%u\n", client->id());
+            MetaSense::TelnetSerialBridge::telnetBridgePrintf("[WS] Client disconnected: id=%u\n", client->id());
+            MetaSense::WifiDiag::recordWsDisconnect();
             rxBuffers.erase(client->id());
             return;
         }

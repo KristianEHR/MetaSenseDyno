@@ -2653,7 +2653,8 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             "\"hw_ssr\":%d,"
             "\"hw_state\":\"%s\","
             "\"wifi_disc_reason\":%d,"
-            "\"wifi_disc_seq\":%lu"
+            "\"wifi_disc_seq\":%lu,"
+            "\"ws_disc_seq\":%lu"
             "}",
             data.rpm,
             data.drumRpm,
@@ -2703,7 +2704,8 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             hwSsrOut ? 1 : 0,
             MetaSense::HardwareOutputStateMachine::stateName(),
             (int)MetaSense::WifiDiag::lastDisconnectReason(),
-            static_cast<unsigned long>(MetaSense::WifiDiag::disconnectEventSeq())
+            static_cast<unsigned long>(MetaSense::WifiDiag::disconnectEventSeq()),
+            static_cast<unsigned long>(MetaSense::WifiDiag::wsDisconnectEventSeq())
         );
 
 #else  // METASENSE_CAN_MONITOR_MODE == 1
@@ -2795,7 +2797,8 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             "\"hw_ssr\":%d,"
             "\"hw_state\":\"%s\","
             "\"wifi_disc_reason\":%d,"
-            "\"wifi_disc_seq\":%lu"
+            "\"wifi_disc_seq\":%lu,"
+            "\"ws_disc_seq\":%lu"
             "}",
             data.rpm,
             data.drumRpm,
@@ -2866,7 +2869,8 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             hwSsrOut ? 1 : 0,
             MetaSense::HardwareOutputStateMachine::stateName(),  // hw_state (INIT/START/IDLE/MOTOR/DYNO)
             (int)MetaSense::WifiDiag::lastDisconnectReason(),
-            static_cast<unsigned long>(MetaSense::WifiDiag::disconnectEventSeq())
+            static_cast<unsigned long>(MetaSense::WifiDiag::disconnectEventSeq()),
+            static_cast<unsigned long>(MetaSense::WifiDiag::wsDisconnectEventSeq())
         );
 #endif  // METASENSE_CAN_MONITOR_MODE
         

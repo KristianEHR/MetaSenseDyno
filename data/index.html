@@ -1465,6 +1465,7 @@
     // each page load/reconnect, then toast only on a NEW sequence value so a
     // stale historical reason isn't reported as if it just happened.
     let lastSeenWifiDiscSeq = null;
+    let lastSeenWsDiscSeq = null;
     const kWifiDisconnectReasons = {
       1: "Unspecified",
       2: "Auth expired",
@@ -2963,7 +2964,22 @@
               } else if (seq !== lastSeenWifiDiscSeq) {
                 lastSeenWifiDiscSeq = seq;
                 const reasonText = describeWifiDisconnectReason(Number(msg.wifi_disc_reason));
-                showWifiToast("⚠️ WiFi reconnected — " + reasonText, 4000);
+                showWifiToast("⚠️ WiFi radio reconnected — " + reasonText, 4000);
+              }
+            }
+
+            // WebSocket-level disconnect (e.g. ping/pong timeout or queued-
+            // message overflow) can happen while the WiFi radio itself stays
+            // fully associated -- this is what actually causes the "Live
+            // Data Active" -> "Reconnecting..." flip in most cases, distinct
+            // from a real WiFi STA disconnect above.
+            if (msg.ws_disc_seq !== undefined) {
+              const seq = Number(msg.ws_disc_seq);
+              if (lastSeenWsDiscSeq === null) {
+                lastSeenWsDiscSeq = seq;
+              } else if (seq !== lastSeenWsDiscSeq) {
+                lastSeenWsDiscSeq = seq;
+                showWifiToast("⚠️ Dashboard reconnected (WebSocket dropped, WiFi radio stayed connected)", 4000);
               }
             }
 
