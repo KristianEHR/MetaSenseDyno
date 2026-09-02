@@ -533,14 +533,20 @@ void setupWifi()
                           info.wifi_sta_disconnected.reason);
             Serial0.printf("[WiFi] Disconnected, reason: %d — reconnecting...\n",
                            info.wifi_sta_disconnected.reason);
+            MetaSense::TelnetSerialBridge::telnetBridgePrintf(
+                "[WiFi] Disconnected, reason: %d — reconnecting...\n",
+                info.wifi_sta_disconnected.reason);
             break;
         case ARDUINO_EVENT_WIFI_STA_CONNECTED:
             Serial.println("[WiFi] Associated to AP");
             Serial0.println("[WiFi] Associated to AP");
+            MetaSense::TelnetSerialBridge::telnetBridgePrintf("[WiFi] Associated to AP\n");
             break;
         case ARDUINO_EVENT_WIFI_STA_GOT_IP:
             Serial.printf("[WiFi] Got IP: %s\n", WiFi.localIP().toString().c_str());
             Serial0.printf("[WiFi] Got IP: %s\n", WiFi.localIP().toString().c_str());
+            MetaSense::TelnetSerialBridge::telnetBridgePrintf("[WiFi] Got IP: %s\n",
+                WiFi.localIP().toString().c_str());
             break;
         default:
             break;
