@@ -4495,6 +4495,47 @@ void loop()
         inverterFaultFromCan,
         canFeedbackFreshForHwsm);
 
+    // Real-time relay/state change log (fires immediately on any transition,
+    // independent of the WebSocket/GUI, so relay switching can be monitored
+    // over telnet/serial during boot or fault entry regardless of whether a
+    // browser is connected).
+    {
+        static bool s_prevRbPlus = false;
+        static bool s_prevRbMinus = false;
+        static bool s_prevSsr = false;
+        static bool s_prevPrecharge = false;
+        static const char* s_prevHwState = "";
+        static bool s_relayLogInit = false;
+
+        const bool curRbPlus = MetaSense::HardwareOutputStateMachine::isRbPlusActive();
+        const bool curRbMinus = MetaSense::HardwareOutputStateMachine::isRbMinusActive();
+        const bool curSsr = MetaSense::HardwareOutputStateMachine::isSsrActive();
+        const bool curPrecharge = MetaSense::HardwareOutputStateMachine::isPrechargeActive();
+        const char* curHwState = MetaSense::HardwareOutputStateMachine::stateName();
+
+        const bool changed = !s_relayLogInit ||
+            curRbPlus != s_prevRbPlus || curRbMinus != s_prevRbMinus ||
+            curSsr != s_prevSsr || curPrecharge != s_prevPrecharge ||
+            strcmp(curHwState, s_prevHwState) != 0;
+
+        if (changed) {
+            s_relayLogInit = true;
+            s_prevRbPlus = curRbPlus;
+            s_prevRbMinus = curRbMinus;
+            s_prevSsr = curSsr;
+            s_prevPrecharge = curPrecharge;
+            s_prevHwState = curHwState;
+
+            Serial.printf("[RELAY] ms=%lu hw_state=%s RB+=%d RB-=%d SSR=%d PRECHARGE=%d\n",
+                          now, curHwState, curRbPlus ? 1 : 0, curRbMinus ? 1 : 0,
+                          curSsr ? 1 : 0, curPrecharge ? 1 : 0);
+            MetaSense::TelnetSerialBridge::telnetBridgePrintf(
+                "[RELAY] ms=%lu hw_state=%s RB+=%d RB-=%d SSR=%d PRECHARGE=%d\n",
+                now, curHwState, curRbPlus ? 1 : 0, curRbMinus ? 1 : 0,
+                curSsr ? 1 : 0, curPrecharge ? 1 : 0);
+        }
+    }
+
     const bool ssrActiveForLeafTx = MetaSense::HardwareOutputStateMachine::isSsrActive();
     const bool prechargeActiveForLeafTx = MetaSense::HardwareOutputStateMachine::isPrechargeActive();
     const bool prechargeSucceededForLeafTx = MetaSense::HardwareOutputStateMachine::isPrechargeSucceeded();
