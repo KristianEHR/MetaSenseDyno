@@ -285,12 +285,18 @@ constexpr float kIdleDynoHystBandRpm = 150.0f;    // Single hysteresis band: 500
 constexpr float kDynoEnterRpm = kIdleDynoHystCenterRpm + kIdleDynoHystBandRpm; // 650
 constexpr float kIdleEnterRpm = kIdleDynoHystCenterRpm - kIdleDynoHystBandRpm; // 350
 constexpr float kMotorSetpointMinRpm = 150.0f;    // MOTOR entry requires setpoint above this.
-constexpr float kHvKeepAliveThresholdV = 300.0f;  // IDLE-only HV keep-alive gate.
-constexpr float kHvKeepAliveMaxRpm = 500.0f;      // IDLE-only HV keep-alive RPM gate.
+constexpr float kHvKeepAliveMaxRpm = 500.0f;      // IDLE-only HV keep-alive: RPM must be <= this.
+constexpr float kHvKeepAliveEngageV = 200.0f;     // Engage precharge-channel recharge below this HV.
+constexpr float kHvKeepAliveReleaseV = 300.0f;    // Release recharge above this HV (latched, avoids chatter).
 
 // --- Precharge sequencing state ---
 uint32_t prechargeStartMs = 0;
 uint8_t prechargeAttempt = 0;
+
+// --- IDLE-state HV keep-alive latch (persists across calls so the 200V/
+// 300V engage/release hysteresis can't chatter at either edge). ---
+bool idleHvKeepAliveLatched = false;
+
 
 // --- Motor-start override (operator request, e.g. START-request button) ---
 bool motorStartRequestPending = false;
@@ -362,7 +368,8 @@ void applyOutputs(OutputState hwState,
                   float engineThrottlePercent,
                   float primaryBrakePercent,
                   float hvVoltageFromCan,
-                  float engineRpm)
+                  float engineRpm,
+                  float rpmSetpoint)
 {
     hw::writeThrottleDutyPwm(engineThrottlePercent);
 
@@ -379,14 +386,27 @@ void applyOutputs(OutputState hwState,
         break;
 
     case OutputState::IDLE: {
-        // Normal IDLE relay pattern is RB+/RB- ON, SSR/Precharge OFF. The HV
-        // keep-alive flips to SSR ON (which forces RB- OFF per the general
-        // invariant) whenever HV sags below threshold AND RPM is low.
-        const bool keepAliveNeeded = (hvVoltageFromCan < kHvKeepAliveThresholdV) &&
-                                      (engineRpm < kHvKeepAliveMaxRpm);
-        if (keepAliveNeeded) {
-            cmd = hw::makeRelayCommand(false, true, true, false);
+        // HV keep-alive: recharges the DC bus through the current-limited
+        // precharge channel (SSR+PRECHARGE together -- same relay pattern
+        // as the initial START precharge) whenever HV sags, but only while
+        // genuinely idling: RPM <= 500 AND RPM > the operator's rpm
+        // setpoint. Engage at HV<200V, release at HV>300V (latched, so HV
+        // sitting near either edge cannot cause relay chatter).
+        const bool keepAliveEligible = (engineRpm <= kHvKeepAliveMaxRpm) &&
+                                        (engineRpm > rpmSetpoint);
+        if (!keepAliveEligible) {
+            idleHvKeepAliveLatched = false;
+        } else if (!idleHvKeepAliveLatched && hvVoltageFromCan < kHvKeepAliveEngageV) {
+            idleHvKeepAliveLatched = true;
+        } else if (idleHvKeepAliveLatched && hvVoltageFromCan > kHvKeepAliveReleaseV) {
+            idleHvKeepAliveLatched = false;
+        }
+
+        if (idleHvKeepAliveLatched) {
+            // RB+=ON, RB-=OFF, SSR=ON, PRECHARGE=ON.
+            cmd = hw::makeRelayCommand(false, true, true, true);
         } else {
+            // Normal IDLE relay pattern: RB+/RB- ON, SSR/Precharge OFF.
             cmd = hw::makeRelayCommand(true, false, true, false);
         }
         break;
@@ -526,7 +546,7 @@ void update(float engineThrottlePercent,
         break;
     }
 
-    applyOutputs(state, engineThrottlePercent, primaryBrakePercent, hvVoltageFromCan, engineRpm);
+    applyOutputs(state, engineThrottlePercent, primaryBrakePercent, hvVoltageFromCan, engineRpm, rpmSetpoint);
 }
 
 void requestMotorStartOverride(float rpmSetpoint)
@@ -554,7 +574,7 @@ void stop()
 {
     writeThrottle(0.0f);
     state = OutputState::IDLE;
-    applyOutputs(state, 0.0f, 0.0f, 0.0f, 0.0f);
+    applyOutputs(state, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
 }
 
 const char* stateName()

@@ -194,7 +194,9 @@ static const uint32_t CAN_1DA_CRC_BAD_STREAK_LIMIT = 10;
 // ─────────────────────────────────────────────────────────────────────────────
 // Voltage-based brake torque controller (overvoltage protection)
 // ─────────────────────────────────────────────────────────────────────────────
-// When inverter voltage > 450V, increase brake torque proportionally to:
+// Active only in IDLE state, and only when engineRpm > rpmSetpoint (i.e. the
+// engine is overrunning the operator's target -- the regen/overvoltage risk
+// scenario). When inverter voltage > 450V, increase brake torque proportionally to:
 // - Dissipate more power (brake_power = V × I)
 // - Keep inverter voltage under control during high inertia braking
 // - Limit voltage overshoot and prevent inverter faults
@@ -204,11 +206,21 @@ static float s_computedBrakeTorqueNm = 0.0f;    // Output of voltage-based contr
 // Voltage thresholds for hysteresis
 static constexpr float kInvVoltageActivateThresholdV = 450.0f;   // Activate at 450V
 static constexpr float kInvVoltageDeactivateThresholdV = 440.0f; // Release at 440V (avoid hunting)
-static constexpr float kInvVoltageSafeMaxV = 500.0f;             // Scale ramp based on this max
+static constexpr float kInvVoltageSafeMaxV = 550.0f;             // Scale ramp based on this max
 
-// Computes brake torque as a linear ramp: 4Nm @ 450V → 30Nm @ 500V+
-float computeVoltageBrakeTorque(float invVoltageV, float idleTorqueNm, float maxBrakeTorqueNm)
+// Computes brake torque as a linear ramp: 4Nm @ 450V → 30Nm @ 550V, gated on
+// engineRpm > rpmSetpoint (caller restricts invocation to IDLE state).
+float computeVoltageBrakeTorque(float invVoltageV, float idleTorqueNm, float maxBrakeTorqueNm,
+                                 float engineRpm, float rpmSetpoint)
 {
+    if (engineRpm <= rpmSetpoint) {
+        // Not overrunning the setpoint: not the overvoltage/regen scenario
+        // this controller guards against. Reset the latch so it can't carry
+        // a stale "active" state into the next eligible window.
+        s_brakeTorqueControlActive = false;
+        return idleTorqueNm;
+    }
+
     // Hysteresis: activate at 450V, deactivate at 440V
     if (invVoltageV >= kInvVoltageActivateThresholdV) {
         s_brakeTorqueControlActive = true;
@@ -4798,13 +4810,16 @@ void loop()
             // INIT state: force torque demand to 0 Nm during startup (safety critical)
             torqueToSend = 0.0f;
         } else if (isIdleState) {
-            // IDLE state: Apply voltage-based brake torque controller for inverter overvoltage protection
-            // When inverter voltage > 450V, increase brake torque to dissipate more power (V × I)
+            // IDLE state: Apply voltage-based brake torque controller for inverter overvoltage
+            // protection. Active only when engineRpm > rpmSetpoint (overrunning the target,
+            // the regen/overvoltage risk case) AND inverter voltage > 450V, ramping to 30Nm @ 550V.
             const float invVoltageV = MetaSense::CANBus::feedback().input_voltage;
             const float appliedBrakeTorque = computeVoltageBrakeTorque(
                 invVoltageV,                               // Inverter voltage from CAN
                 MetaSense::Settings::idleTorqueNm,         // Base idle torque (4Nm default)
-                MetaSense::Settings::brakeMaxTorqueNm      // Max brake torque (30Nm default)
+                MetaSense::Settings::brakeMaxTorqueNm,     // Max brake torque (30Nm default)
+                tele.rpm,                                  // Engine RPM
+                tele.rpmTarget                             // Operator RPM setpoint
             );
             torqueToSend = appliedBrakeTorque;
         } else {
