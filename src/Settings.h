@@ -19,6 +19,12 @@ extern float idleTorqueNm;
 extern float brakeMaxTorqueNm;
 extern bool forceVcuReadyForUiTest;
 extern bool leafSimFeedbackEnabled;
+// Bench/remote test only: when true, the relay telemetry fields sent to the
+// GUI (hw_precharge/hw_rb_plus/hw_rb_minus/hw_ssr) are replaced with an
+// auto-cycling test pattern instead of real GPIO readback. Does NOT touch
+// actual relay outputs -- display-layer only. Always resets to false on
+// boot/reload (never persisted).
+extern bool relayGuiTestEnabled;
 
 // Gauge display ranges (sent back in settings snapshot)
 extern float maxRPM;

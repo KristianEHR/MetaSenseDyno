@@ -361,6 +361,7 @@ void sendSettingsSnapshot()
     json += ",\"idleTorqueNm\":" + String(MetaSense::Settings::idleTorqueNm, 2);
     json += ",\"brakeMaxTorqueNm\":" + String(MetaSense::Settings::brakeMaxTorqueNm, 1);
     json += ",\"forceVcuReadyForUiTest\":" + String(MetaSense::Settings::forceVcuReadyForUiTest ? 1 : 0);
+    json += ",\"relayGuiTestEnabled\":" + String(MetaSense::Settings::relayGuiTestEnabled ? 1 : 0);
     json += ",\"leafSimFeedback\":" + String(MetaSense::Settings::leafSimFeedbackEnabled ? 1 : 0);
     json += ",\"pulsesPerRev\":" + String(MetaSense::Settings::pulsesPerRev, 2);
     json += ",\"rpmFilter\":" + String(MetaSense::Settings::filterAlpha, 3);
@@ -901,6 +902,12 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
             flag.trim();
             flag.toLowerCase();
             MetaSense::Settings::forceVcuReadyForUiTest =
+                (flag == "1" || flag == "true" || flag == "on" || flag == "yes");
+        } else if (key == "relayGuiTestEnabled") {
+            String flag = val;
+            flag.trim();
+            flag.toLowerCase();
+            MetaSense::Settings::relayGuiTestEnabled =
                 (flag == "1" || flag == "true" || flag == "on" || flag == "yes");
         } else if (key == "leafSimFeedback") {
             String flag = val;

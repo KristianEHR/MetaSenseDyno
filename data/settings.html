@@ -419,6 +419,16 @@
         </select>
         <button onclick="saveSingle('forceVcuReadyForUiTest', event)">💾 SAVE</button>
       </div>
+
+      <label>Relay GUI Test Pattern</label>
+      <div class="info">Substitutes an auto-cycling test pattern for the real relay readback in the Inverter Ready panel (PRECHARGE → RB+ → RB- → SSR, one at a time). Does NOT touch actual relay outputs -- lets you verify the GUI relay display updates correctly without hardware access. Set OFF for normal operation.</div>
+      <div class="param-row">
+        <select id="relayGuiTestEnabled">
+          <option value="0" selected>OFF (Normal, real relay state)</option>
+          <option value="1">ON (Cycling test pattern)</option>
+        </select>
+        <button onclick="saveSingle('relayGuiTestEnabled', event)">💾 SAVE</button>
+      </div>
 	  
 	       <!-- Drivetrain Efficiency -->
       <label>Drivetrain Efficiency (%) — Crank Power Correction</label>
@@ -704,6 +714,7 @@
             setFieldValueIfNotFocused("motorModeMaxRpm", msg.motorModeMaxRpm !== undefined ? msg.motorModeMaxRpm : 2000);
             setFieldValueIfNotFocused("brakeMaxTorqueNm", msg.brakeMaxTorqueNm !== undefined ? msg.brakeMaxTorqueNm : 30.0);
             setFieldValueIfNotFocused("forceVcuReadyForUiTest", msg.forceVcuReadyForUiTest ? "1" : "0");
+            setFieldValueIfNotFocused("relayGuiTestEnabled", msg.relayGuiTestEnabled ? "1" : "0");
             setFieldValueIfNotFocused("dynoMode", msg.mode);
             setFieldValueIfNotFocused("virtGearRatio", msg.virtGearRatio || 1.0);
             setFieldValueIfNotFocused("drumMass", msg.drumMass);

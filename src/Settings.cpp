@@ -30,6 +30,7 @@ constexpr float kDefaultMotorModeMaxRpm = 2000.0f;
 constexpr float kDefaultIdleTorqueNm = 4.0f;
 constexpr float kDefaultBrakeMaxTorqueNm = 30.0f;
 constexpr bool kDefaultForceVcuReadyForUiTest = false;
+constexpr bool kDefaultRelayGuiTestEnabled = false;
 #ifndef METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS
 #define METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS 0
 #endif
@@ -78,6 +79,7 @@ float idleTorqueNm = kDefaultIdleTorqueNm;
 float brakeMaxTorqueNm = kDefaultBrakeMaxTorqueNm;
 bool forceVcuReadyForUiTest = kDefaultForceVcuReadyForUiTest;
 bool leafSimFeedbackEnabled = kDefaultLeafSimFeedbackEnabled;
+bool relayGuiTestEnabled = kDefaultRelayGuiTestEnabled;
 
 // Gauge display ranges
 float maxRPM          = kDefaultMaxRPM;
@@ -149,6 +151,7 @@ void resetToDefaults()
     brakeMaxTorqueNm = kDefaultBrakeMaxTorqueNm;
     forceVcuReadyForUiTest = kDefaultForceVcuReadyForUiTest;
     leafSimFeedbackEnabled = kDefaultLeafSimFeedbackEnabled;
+    relayGuiTestEnabled = kDefaultRelayGuiTestEnabled;
 
     maxRPM = kDefaultMaxRPM;
     maxHP = kDefaultMaxHP;
@@ -199,6 +202,7 @@ void loadFromStorage()
     idleTorqueNm = prefs.getFloat("idleTorque", idleTorqueNm);
     brakeMaxTorqueNm = prefs.getFloat("brakeMaxTq", brakeMaxTorqueNm);
     forceVcuReadyForUiTest = kDefaultForceVcuReadyForUiTest;
+    relayGuiTestEnabled = kDefaultRelayGuiTestEnabled;
     leafSimFeedbackEnabled = prefs.getBool("leafSimFb", leafSimFeedbackEnabled);
     if (kDefaultLeafSimFeedbackEnabled) {
         leafSimFeedbackEnabled = true;

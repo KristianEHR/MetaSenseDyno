@@ -2532,6 +2532,20 @@ bool checkSafety(const MetaSense::Telemetry& t)
     return true;
 }
 
+// Bench/remote test only (Settings::relayGuiTestEnabled): auto-cycling
+// one-at-a-time relay pattern for exercising the GUI relay display without
+// real hardware access. This substitutes ONLY the telemetry values sent to
+// the browser -- it never touches actual relay GPIO outputs.
+void getRelayGuiTestPattern(uint32_t nowMs, bool& precharge, bool& rbPlus, bool& rbMinus, bool& ssr)
+{
+    constexpr uint32_t kPhaseMs = 750;  // Time each relay stays "on" in the cycle.
+    const uint32_t phase = (nowMs / kPhaseMs) % 4U;
+    precharge = (phase == 0U);
+    rbPlus    = (phase == 1U);
+    rbMinus   = (phase == 2U);
+    ssr       = (phase == 3U);
+}
+
 void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
 {
     AsyncWebSocket& wsock = MetaSense::WebSocketServer::socket();
@@ -2560,6 +2574,19 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         lastDashboardMs = now;
         
         const auto& leafFb = MetaSense::CANBus::feedback();
+
+        bool hwPrechargeOut = false;
+        bool hwRbPlusOut = false;
+        bool hwRbMinusOut = false;
+        bool hwSsrOut = false;
+        if (MetaSense::Settings::relayGuiTestEnabled) {
+            getRelayGuiTestPattern(now, hwPrechargeOut, hwRbPlusOut, hwRbMinusOut, hwSsrOut);
+        } else {
+            hwPrechargeOut = MetaSense::HardwareOutputStateMachine::isPrechargeActive();
+            hwRbPlusOut = MetaSense::HardwareOutputStateMachine::isRbPlusActive();
+            hwRbMinusOut = MetaSense::HardwareOutputStateMachine::isRbMinusActive();
+            hwSsrOut = MetaSense::HardwareOutputStateMachine::isSsrActive();
+        }
 
 #if METASENSE_CAN_MONITOR_MODE == 0
         // MODE 0 (PRODUCTION): Minimal JSON without CAN metrics for CPU efficiency
@@ -2667,10 +2694,10 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             data.leaf_statorTempC,  // leaf_1da_stator_temp
             data.leaf_coolantTempC,  // leaf_coolant_temp
             leafFb.ready ? 1 : 0,
-            MetaSense::HardwareOutputStateMachine::isPrechargeActive() ? 1 : 0,
-            MetaSense::HardwareOutputStateMachine::isRbPlusActive() ? 1 : 0,
-            MetaSense::HardwareOutputStateMachine::isRbMinusActive() ? 1 : 0,
-            MetaSense::HardwareOutputStateMachine::isSsrActive() ? 1 : 0,
+            hwPrechargeOut ? 1 : 0,
+            hwRbPlusOut ? 1 : 0,
+            hwRbMinusOut ? 1 : 0,
+            hwSsrOut ? 1 : 0,
             MetaSense::HardwareOutputStateMachine::stateName()
         );
 
@@ -2826,10 +2853,10 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             data.leaf_coolantTempC,  // leaf_coolant_temp
             (int)leafFb.inv_status_bit,  // leaf_1da_inv_status_bit (Inv_StatusBit: 1=ready, 0=not ready)
             leafFb.ready ? 1 : 0,  // leaf_ready
-            MetaSense::HardwareOutputStateMachine::isPrechargeActive() ? 1 : 0,
-            MetaSense::HardwareOutputStateMachine::isRbPlusActive() ? 1 : 0,
-            MetaSense::HardwareOutputStateMachine::isRbMinusActive() ? 1 : 0,
-            MetaSense::HardwareOutputStateMachine::isSsrActive() ? 1 : 0,
+            hwPrechargeOut ? 1 : 0,
+            hwRbPlusOut ? 1 : 0,
+            hwRbMinusOut ? 1 : 0,
+            hwSsrOut ? 1 : 0,
             MetaSense::HardwareOutputStateMachine::stateName()  // hw_state (INIT/START/IDLE/MOTOR/DYNO)
         );
 #endif  // METASENSE_CAN_MONITOR_MODE
