@@ -56,13 +56,14 @@
 #define METASENSE_LEAF_11A_TEMPLATE_M2_B7 0xE4U
 #define METASENSE_LEAF_11A_TEMPLATE_M3_B7 0x61U
 
-// Telemetry Configuration: a single small WebSocket JSON message is sent at
-// this cadence (avoids backing up the send queue and forcing a disconnect
-// during WiFi throughput dips). Every message always carries engine RPM,
-// load-cell torque, and power. All other fields are change-gated (only
-// included when they moved by a meaningful amount) plus one round-robin
-// slow/diagnostic field per tick (see kWebSocketSlowTelemetrySlices and
-// notifyClients() in Input.cpp), so an unchanged reading costs zero bytes.
+// Telemetry Configuration: a single WebSocket JSON message (one common
+// tier, all fields) is sent at this cadence, but only when
+// AsyncWebSocket::availableForWriteAll() confirms every client's send
+// queue has room -- if the queue is still backed up the tick is skipped
+// entirely and retried on the next network task iteration, rather than
+// firing blindly on a timer and risking a WS_MAX_QUEUED_MESSAGES overflow
+// (which forces the library to close the connection). See notifyClients()
+// in Input.cpp.
 #define METASENSE_WS_FAST_PERIOD_MS 20
 
 // Simulation Feedback (required by code)

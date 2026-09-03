@@ -351,11 +351,6 @@ constexpr float TORQUE_MIN = -200.0f;
 constexpr float TORQUE_MAX =  200.0f;
 constexpr float RPM_SETPOINT_MAX = RPM_MAX_LIMIT;
 constexpr uint32_t kWebSocketPublishPeriodMs = METASENSE_WS_FAST_PERIOD_MS;
-// Number of round-robin slots for slow/diagnostic telemetry fields. Exactly
-// one slot is sent per fast-tier tick, so a full cycle takes
-// kWebSocketSlowTelemetrySlices * kWebSocketPublishPeriodMs (~1s) -- harmless
-// for values that only matter for diagnostics.
-constexpr uint8_t kWebSocketSlowTelemetrySlices = 47;
 #define METASENSE_TELEMETRY_PROFILE_DEFAULT_TREND 0
 // When enabled, trend.html receives only the fields needed for live trend plots.
 #define METASENSE_TREND_MINIMAL_TELEMETRY 1
@@ -2360,7 +2355,7 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
     // slow/diagnostic field. This keeps every send tiny so the WebSocket
     // library's per-client queue never backs up and force-closes the
     // connection during a WiFi throughput dip.
-    static char jsonBuffer[1024];
+    static char jsonBuffer[2600];
     int pos = 0;
     pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "{\"type\":\"data\",");
 
@@ -2449,158 +2444,60 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         prevHwState = hwStateNow;
     }
 
-    // Round-robin: exactly one slow-changing/diagnostic field per tick.
-    static uint8_t slowSlice = 0;
-    const uint8_t sliceNow = slowSlice;
-    slowSlice = static_cast<uint8_t>((slowSlice + 1U) % kWebSocketSlowTelemetrySlices);
-
-    switch (sliceNow) {
-        case 0:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"energy\":%.2f,", data.energyMJ);
-            break;
-        case 1:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"energy_active\":%d,", isRecording ? 1 : 0);
-            break;
-        case 2:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"rel_humidity\":%.1f,", data.humidity);
-            break;
-        case 3:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"ratio_confidence\":0,");
-            break;
-        case 4:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"egt_hot\":%.1f,", data.egtHotC);
-            break;
-        case 5:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"egt_status\":%d,", (int)data.egtStatus);
-            break;
-        case 6:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"egt_ready\":%d,", data.egtReady ? 1 : 0);
-            break;
-        case 7:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"pressure\":%.1f,", data.pressureHpa);
-            break;
-        case 8:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"ambient_temp\":%.1f,", data.ambientC);
-            break;
-        case 9:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"air_density\":%.3f,", data.airDensity);
-            break;
-        case 10:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"climate_cf\":%.3f,", data.climateCF);
-            break;
-        case 11:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"lambda\":%.2f,", data.lambdaValue);
-            break;
-        case 12:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"massflow_m3h\":%.2f,", data.massflowM3h);
-            break;
-        case 13:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_rpm\":%.0f,", data.leaf_rpm);
-            break;
-        case 14:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_torque\":%.2f,", data.leaf_torqueNm);
-            break;
-        case 15:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_torque_demand\":%.2f,", data.leaf_torqueDemandNm);
-            break;
-        case 16:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_torque_demand_manual\":%.2f,", MetaSense::Input::getLeafUiTorqueDemandNm());
-            break;
-        case 17:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_torque_mode\":\"%s\",", MetaSense::Input::getLeafManualTorqueMode() ? "manual" : "auto");
-            break;
-        case 18:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_input_v\":%.1f,", leafFb.input_voltage);
-            break;
-        case 19:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_torque_nm\":%.2f,", leafFb.torque_nm);
-            break;
-        case 20:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_rpm\":%.0f,", data.leaf_rpm);
-            break;
-        case 21:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_clock\":%d,", (int)leafFb.mg_clock);
-            break;
-        case 22:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_err\":0,");
-            break;
-        case 23:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_inv_fault_map\":%d,", (int)leafFb.inv_fault_map);
-            break;
-        case 24:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_inv_blinky\":0,");
-            break;
-        case 25:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_inv_fault_can_timeout\":0,");
-            break;
-        case 26:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc\":%d,", (int)leaf1daCrcRx);
-            break;
-        case 27:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_calc\":%d,", (int)leaf1daCrcCalc);
-            break;
-        case 28:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_wire_calc\":%d,", (int)canStats.last1daWireCrcCalc);
-            break;
-        case 29:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_ok\":%d,", leaf1daCrcOk);
-            break;
-        case 30:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_wire_ok\":%d,", (canStats.last1daWireCrcOk > 0) ? 1 : 0);
-            break;
-        case 31:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_wire_trusted\":%d,", (canStats.last1daWireCrcOk > 0) ? 1 : 0);
-            break;
-        case 32:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_ok_frames\":%lu,", canStats.rx1daWireCrcOkFrames);
-            break;
-        case 33:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_bad_frames\":%lu,", canStats.rx1daWireCrcBadFrames);
-            break;
-        case 34:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_wire_ok_frames\":%lu,", canStats.rx1daWireCrcOkFrames);
-            break;
-        case 35:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_wire_bad_frames\":%lu,", canStats.rx1daWireCrcBadFrames);
-            break;
-        case 36:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos,
-                "\"leaf_1da_raw_b0b7\":\"%02X %02X %02X %02X %02X %02X %02X %02X\",",
-                canStats.last1daData[0], canStats.last1daData[1], canStats.last1daData[2], canStats.last1daData[3],
-                canStats.last1daData[4], canStats.last1daData[5], canStats.last1daData[6], canStats.last1daData[7]);
-            break;
-        case 37:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_inv_temp\":%.1f,", data.leaf_invTempC);
-            break;
-        case 38:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_stator_temp\":%.1f,", data.leaf_statorTempC);
-            break;
-        case 39:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_coolant_temp\":%.1f,", data.leaf_coolantTempC);
-            break;
-        case 40:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_inv_status_bit\":%d,", (int)leafFb.inv_status_bit);
-            break;
-        case 41:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"kp_source\":\"firmware\",");
-            break;
-        case 42:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"kp_live\":0,");
-            break;
-        case 43:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"ki_live\":0,");
-            break;
-        case 44:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"rpm_error\":0,");
-            break;
-        case 45:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"load_raw\":0,");
-            break;
-        case 46:
-        default:
-            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"nau_ready\":0,");
-            break;
-    }
+    // Single common tier: every field is written every 20ms tick (the
+    // buffer-availability check above -- not round-robin spreading -- is
+    // what keeps this safe; a tick that can't be sent is skipped entirely
+    // rather than queued up).
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"energy\":%.2f,", data.energyMJ);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"energy_active\":%d,", isRecording ? 1 : 0);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"rel_humidity\":%.1f,", data.humidity);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"ratio_confidence\":0,");
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"egt_hot\":%.1f,", data.egtHotC);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"egt_status\":%d,", (int)data.egtStatus);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"egt_ready\":%d,", data.egtReady ? 1 : 0);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"pressure\":%.1f,", data.pressureHpa);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"ambient_temp\":%.1f,", data.ambientC);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"air_density\":%.3f,", data.airDensity);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"climate_cf\":%.3f,", data.climateCF);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"lambda\":%.2f,", data.lambdaValue);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"massflow_m3h\":%.2f,", data.massflowM3h);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_rpm\":%.0f,", data.leaf_rpm);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_torque\":%.2f,", data.leaf_torqueNm);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_torque_demand\":%.2f,", data.leaf_torqueDemandNm);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_torque_demand_manual\":%.2f,", MetaSense::Input::getLeafUiTorqueDemandNm());
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_torque_mode\":\"%s\",", MetaSense::Input::getLeafManualTorqueMode() ? "manual" : "auto");
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_input_v\":%.1f,", leafFb.input_voltage);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_torque_nm\":%.2f,", leafFb.torque_nm);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_rpm\":%.0f,", data.leaf_rpm);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_clock\":%d,", (int)leafFb.mg_clock);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_err\":0,");
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_inv_fault_map\":%d,", (int)leafFb.inv_fault_map);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_inv_blinky\":0,");
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_inv_fault_can_timeout\":0,");
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc\":%d,", (int)leaf1daCrcRx);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_calc\":%d,", (int)leaf1daCrcCalc);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_wire_calc\":%d,", (int)canStats.last1daWireCrcCalc);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_ok\":%d,", leaf1daCrcOk);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_wire_ok\":%d,", (canStats.last1daWireCrcOk > 0) ? 1 : 0);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_wire_trusted\":%d,", (canStats.last1daWireCrcOk > 0) ? 1 : 0);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_ok_frames\":%lu,", canStats.rx1daWireCrcOkFrames);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_bad_frames\":%lu,", canStats.rx1daWireCrcBadFrames);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_wire_ok_frames\":%lu,", canStats.rx1daWireCrcOkFrames);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_wire_bad_frames\":%lu,", canStats.rx1daWireCrcBadFrames);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos,
+        "\"leaf_1da_raw_b0b7\":\"%02X %02X %02X %02X %02X %02X %02X %02X\",",
+        canStats.last1daData[0], canStats.last1daData[1], canStats.last1daData[2], canStats.last1daData[3],
+        canStats.last1daData[4], canStats.last1daData[5], canStats.last1daData[6], canStats.last1daData[7]);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_inv_temp\":%.1f,", data.leaf_invTempC);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_stator_temp\":%.1f,", data.leaf_statorTempC);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_coolant_temp\":%.1f,", data.leaf_coolantTempC);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_inv_status_bit\":%d,", (int)leafFb.inv_status_bit);
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"kp_source\":\"firmware\",");
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"kp_live\":0,");
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"ki_live\":0,");
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"rpm_error\":0,");
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"load_raw\":0,");
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"nau_ready\":0,");
 
     // Close JSON, trimming the trailing comma.
     if (pos > 0 && pos < (int)sizeof(jsonBuffer) && jsonBuffer[pos - 1] == ',') {
