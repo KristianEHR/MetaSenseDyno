@@ -3,10 +3,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef METASENSE_LEAF_1DA_SNIFF_DECODE
-#define METASENSE_LEAF_1DA_SNIFF_DECODE 0
-#endif
-
 #include "driver/twai.h"
 
 struct LeafInvFeedback
@@ -68,12 +64,6 @@ struct LeafInvFeedback
     uint16_t inv_unknown_faults;
     uint8_t inv_fault_can_timeout_maybe;
     uint8_t id1da_raw[8]; // Raw 8-byte payload of last 0x1DA/0x01A frame
-    uint8_t id1da_status_byte; // Source byte used for extra 1DA status/fault bit decode
-    uint8_t id1da_status_bits;  // Decoded low-nibble status/fault bitmask for sniff diagnostics
-    bool id1da_status_ready;
-    bool id1da_status_fault;
-    bool id1da_status_warning;
-    bool id1da_status_limp;
     float id1da_ze1_rpm;  // ZE1 Motorola-decoded RPM candidate
     float id1da_leg_rpm;  // Legacy LE word RPM candidate
     float id1da_ze1_tq;   // ZE1 Motorola-decoded torque candidate (Nm)

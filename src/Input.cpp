@@ -4314,8 +4314,6 @@ void loop()
                            (elapsedMsSafe(now, lastCanLeafAnyUpdate) <= kLeafVcmFeedbackTimeoutMs);
         const bool id1daFreshForTorque = (aliveFb.rpm_update_ms != 0U) &&
                          (elapsedMsSafe(now, aliveFb.rpm_update_ms) <= CAN_RX_TARGET_MAX_AGE_MS);
-        const bool id1daReadyTokenObserved = id1daFreshForTorque &&
-                                             (aliveFb.id1da_status_bits == 0U);
         const bool id1daStatusClearForTorque = id1daFreshForTorque &&
                                (aliveFb.mg_error_codes == 0U);
         const bool inverterAlive = nativeStatusAlive || (!nativeStatusAlive && fallbackAlive);
@@ -4341,9 +4339,8 @@ void loop()
         // safe state, no fault) before the status bits may rise out of the 000/000
         // window; otherwise the inverter latches a 011 style startup fault.
         const bool startupQualified = safe && canBusReady && s_leafCanPartnerSeen && !inverterFaulted;
-        // The Leaf uses the all-zero 0x1DA status nibble as a ready token once it
-        // has accepted the startup handshake; treat that as a permanent ready signal.
-        const bool inverterReadyToken = id1daReadyTokenObserved || tele.leaf_invReady;
+        // Ready is signalled by the Leaf's own decoded inverter-ready feedback.
+        const bool inverterReadyToken = tele.leaf_invReady;
         const bool hvOk = startupQualified && (tele.vcuReady || inverterReadyToken);
         const bool inverterReadyBit = startupQualified && inverterReadyToken;
         readyBit = inverterReadyBit;

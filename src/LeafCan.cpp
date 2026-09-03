@@ -257,66 +257,6 @@ static inline void decodeStatus(const uint8_t *d,
     limp = directLimp || shiftedLimp;
 }
 
-static inline void decode1daStatusBits(const uint8_t* d,
-                                        uint8_t dlc,
-                                        uint8_t& statusByte,
-                                        uint8_t& statusBits,
-                                        bool& ready,
-                                        bool& fault,
-                                        bool& warning,
-                                        bool& limp)
-{
-    statusByte = 0U;
-    statusBits = 0U;
-    ready = false;
-    fault = false;
-    warning = false;
-    limp = false;
-
-#if METASENSE_LEAF_1DA_SNIFF_DECODE
-    if (dlc == 0U) {
-        return;
-    }
-
-    const uint8_t byteCount = (dlc < 8U) ? dlc : 8U;
-    for (uint8_t byteIdx = 0U; byteIdx < byteCount; ++byteIdx) {
-        const uint8_t rawByte = d[byteIdx];
-        const uint8_t lowNibble = static_cast<uint8_t>(rawByte & 0x0FU);
-        const uint8_t highNibble = static_cast<uint8_t>((rawByte >> 4U) & 0x0FU);
-
-        const uint8_t candidateBytes[2] = {lowNibble, highNibble};
-        for (uint8_t candidateIdx = 0U; candidateIdx < 2U; ++candidateIdx) {
-            const uint8_t candidateNibble = candidateBytes[candidateIdx];
-            const bool candidateIsBenign = (candidateNibble == 0x00U) || (candidateNibble == 0x08U) || (candidateNibble == 0x04U) || (candidateNibble == 0x0CU);
-            if (candidateNibble == 0U && byteIdx >= 2U) {
-                continue;
-            }
-            if (candidateIsBenign && candidateNibble == 0U) {
-                continue;
-            }
-
-            statusByte = rawByte;
-            statusBits = candidateNibble;
-            ready = (statusBits & 0x01U) != 0U;
-            fault = (statusBits & 0x02U) != 0U;
-            warning = (statusBits & 0x04U) != 0U;
-            limp = (statusBits & 0x08U) != 0U;
-            if (statusBits != 0U) {
-                return;
-            }
-        }
-    }
-
-    // Fallback to the previous byte-6 assumption when nothing else looks useful.
-    statusByte = (byteCount > 6U) ? d[6] : d[0];
-    statusBits = static_cast<uint8_t>(statusByte & 0x0FU);
-    ready = (statusBits & 0x01U) != 0U;
-    fault = (statusBits & 0x02U) != 0U;
-    warning = (statusBits & 0x04U) != 0U;
-    limp = (statusBits & 0x08U) != 0U;
-#endif
-}
-
 static inline void decode1daLikeFrame(const uint8_t* d,
                                       uint8_t dlc,
                                       uint16_t& raw01Le,
@@ -448,36 +388,10 @@ void LeafCan::decodeFrame(const twai_message_t &msg,
                 // const bool startupStyleStatus = (statusByteZeroMask == 0x00U) ||
                 //                                (statusByteZeroMask == 0x18U) ||
                 //                                (statusByteZeroMask == 0x24U);
-                // if (startupStyleStatus || (fb.id1da_status_bits == startupMask)) {
+                // if (startupStyleStatus) {
                 //     fb.rpm = 0.0f;
                 //     fb.torque_nm = 0.0f;
                 // }
-
-#if METASENSE_LEAF_1DA_SNIFF_DECODE
-                if (dlc >= 1U) {
-                    uint8_t statusByte = 0U;
-                    uint8_t statusBits = 0U;
-                    bool statusReady = false;
-                    bool statusFault = false;
-                    bool statusWarning = false;
-                    bool statusLimp = false;
-                    decode1daStatusBits(d, dlc, statusByte, statusBits, statusReady, statusFault, statusWarning, statusLimp);
-                    fb.id1da_status_byte = statusByte;
-                    fb.id1da_status_bits = statusBits;
-                    fb.id1da_status_ready = statusReady;
-                    fb.id1da_status_fault = statusFault;
-                    fb.id1da_status_warning = statusWarning;
-                    fb.id1da_status_limp = statusLimp;
-                    Serial.printf("[1DA-SNIFF] len=%u selected_byte=0x%02X status_bits=0x%02X ready=%u fault=%u warning=%u limp=%u\n",
-                                  static_cast<unsigned>(dlc),
-                                  static_cast<unsigned>(statusByte),
-                                  static_cast<unsigned>(statusBits),
-                                  statusReady ? 1U : 0U,
-                                  statusFault ? 1U : 0U,
-                                  statusWarning ? 1U : 0U,
-                                  statusLimp ? 1U : 0U);
-                }
-#endif
 
                 float invFallback = 0.0f;
                 float statorFallback = 0.0f;
@@ -597,12 +511,6 @@ void LeafCan::reset(LeafInvFeedback &fb)
     fb.inv_blinky = 0;
     fb.inv_unknown_faults = 0;
     fb.inv_fault_can_timeout_maybe = 0;
-    fb.id1da_status_byte = 0;
-    fb.id1da_status_bits = 0;
-    fb.id1da_status_ready = false;
-    fb.id1da_status_fault = false;
-    fb.id1da_status_warning = false;
-    fb.id1da_status_limp = false;
     for (uint8_t i = 0U; i < 8U; ++i) fb.id1da_raw[i] = 0U;
     fb.id1da_ze1_rpm = 0.0f;
     fb.id1da_leg_rpm = 0.0f;
