@@ -64,7 +64,7 @@
 // firing blindly on a timer and risking a WS_MAX_QUEUED_MESSAGES overflow
 // (which forces the library to close the connection). See notifyClients()
 // in Input.cpp.
-#define METASENSE_WS_FAST_PERIOD_MS 20
+#define METASENSE_WS_FAST_PERIOD_MS 16
 
 // Simulation Feedback (required by code)
 #define METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS 0
