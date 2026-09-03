@@ -1,4 +1,0 @@
-restore_dir=C:\PlatformIO\MetaSense-DYNO\backups\restore_20260802_100851
-created=2026-08-02T10:08:52
-branch=project/cco-v1
-base_commit=49940d710c139b21c1922f20c87d316dba7d157e
