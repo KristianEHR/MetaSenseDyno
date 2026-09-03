@@ -67,6 +67,13 @@ RelayCommand makeRelayCommand(bool rbMinusOn, bool ssrOn, bool rbPlusOn, bool pr
 
 RelayCommand activeRelayCommand{};
 
+// Non-blocking break-before-make state. While a dwell is running,
+// activeRelayCommand already reflects the physical "break" (open) step;
+// breakBeforeMakeTarget is what gets written once the dwell elapses.
+bool breakBeforeMakePending = false;
+uint32_t breakBeforeMakeStartMs = 0;
+RelayCommand breakBeforeMakeTarget{};
+
 Adafruit_NeoPixel strip(MetaSense::Globals::kOnboardLedCount,
                         MetaSense::Globals::kOnboardLedPin,
                         NEO_GRB + NEO_KHZ800);
@@ -171,6 +178,12 @@ bool relayCommandEquals(const RelayCommand& a, const RelayCommand& b)
 // precharge() path -- RB+ must open before precharge() energizes the bus,
 // and precharge() must de-energize before RB+ closes, or the fresh
 // charge/discharge current would bypass the current limiting entirely).
+//
+// The dwell is non-blocking (millis()-based): this function must be called
+// repeatedly (every applyOutputs() tick) so it can notice when the dwell has
+// elapsed and complete the "make" step. It never calls delay(), so it can't
+// stall the caller's loop (which also drives the PI control loop and other
+// time-sensitive work).
 void applyRelayCommand(RelayCommand target)
 {
     // General invariant: SSR and RB- can never both be commanded ON.
@@ -181,6 +194,18 @@ void applyRelayCommand(RelayCommand target)
     // General invariant: Precharge always follows SSR (slaved to it).
     if (target.ssrOn) {
         target.prechargeOn = true;
+    }
+
+    // A break-before-make dwell is already in flight: the relays are
+    // physically mid-transition (open) and must not be re-commanded until
+    // the dwell elapses, regardless of what target is requested meanwhile.
+    if (breakBeforeMakePending) {
+        if (millis() - breakBeforeMakeStartMs < kRelaySwitchDelayMs) {
+            return;
+        }
+        writeRelayPinsImmediate(breakBeforeMakeTarget);
+        activeRelayCommand = breakBeforeMakeTarget;
+        breakBeforeMakePending = false;
     }
 
     if (relayCommandEquals(activeRelayCommand, target)) {
@@ -194,8 +219,6 @@ void applyRelayCommand(RelayCommand target)
     const bool rbPlusGoingLow = activeRelayCommand.rbPlusOn && !target.rbPlusOn;
     const bool rbPlusGoingHigh = !activeRelayCommand.rbPlusOn && target.rbPlusOn;
 
-    // Blocking delay is intentional here -- rotational inertia means the PI
-    // control loop will not notice a relay transition.
     const bool ssrRbMinusCrossover = (ssrGoingLow && rbMinusGoingHigh) ||
                                      (rbMinusGoingLow && ssrGoingHigh);
     const bool rbPlusPrechargeCrossover = (rbPlusGoingLow && ssrGoingHigh) ||
@@ -210,7 +233,11 @@ void applyRelayCommand(RelayCommand target)
         if (rbPlusGoingLow) breakStep.rbPlusOn = false;
 
         writeRelayPinsImmediate(breakStep);
-        delay(kRelaySwitchDelayMs);
+        activeRelayCommand = breakStep;
+        breakBeforeMakeTarget = target;
+        breakBeforeMakeStartMs = millis();
+        breakBeforeMakePending = true;
+        return;
     }
 
     writeRelayPinsImmediate(target);
@@ -257,6 +284,7 @@ void beginOutputs()
     (void)configureOutputPin(MetaSense::Globals::kPrechargeRelayPin);
 
     activeRelayCommand = RelayCommand{};
+    breakBeforeMakePending = false;
     writeRelayPinsImmediate(activeRelayCommand);
 }
 

@@ -56,12 +56,13 @@
 #define METASENSE_LEAF_11A_TEMPLATE_M2_B7 0xE4U
 #define METASENSE_LEAF_11A_TEMPLATE_M3_B7 0x61U
 
-// Telemetry Configuration: full metrics (leaf_1da/1d4/11a CAN frame data) are
-// always included in the WebSocket JSON payload -- there is no separate
-// stripped-down production mode anymore (the CPU/WiFi savings weren't
-// significant since the same data is transmitted to the GUI regardless).
-// Single compromise cadence between the old 16ms (production) and 50ms
-// (monitor) periods.
+// Telemetry Configuration: a single small WebSocket JSON message is sent at
+// this cadence (avoids backing up the send queue and forcing a disconnect
+// during WiFi throughput dips). Every message always carries engine RPM,
+// load-cell torque, and power. All other fields are change-gated (only
+// included when they moved by a meaningful amount) plus one round-robin
+// slow/diagnostic field per tick (see kWebSocketSlowTelemetrySlices and
+// notifyClients() in Input.cpp), so an unchanged reading costs zero bytes.
 #define METASENSE_WS_FAST_PERIOD_MS 20
 
 // Simulation Feedback (required by code)

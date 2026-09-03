@@ -351,8 +351,11 @@ constexpr float TORQUE_MIN = -200.0f;
 constexpr float TORQUE_MAX =  200.0f;
 constexpr float RPM_SETPOINT_MAX = RPM_MAX_LIMIT;
 constexpr uint32_t kWebSocketPublishPeriodMs = METASENSE_WS_FAST_PERIOD_MS;
-constexpr uint32_t kWebSocketSlowPublishPeriodMs = 500;
-constexpr uint8_t kWebSocketSlowTelemetrySlices = 15;
+// Number of round-robin slots for slow/diagnostic telemetry fields. Exactly
+// one slot is sent per fast-tier tick, so a full cycle takes
+// kWebSocketSlowTelemetrySlices * kWebSocketPublishPeriodMs (~1s) -- harmless
+// for values that only matter for diagnostics.
+constexpr uint8_t kWebSocketSlowTelemetrySlices = 47;
 #define METASENSE_TELEMETRY_PROFILE_DEFAULT_TREND 0
 // When enabled, trend.html receives only the fields needed for live trend plots.
 #define METASENSE_TREND_MINIMAL_TELEMETRY 1
@@ -2280,206 +2283,342 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
         return;
     }
 
-    static uint32_t lastDashboardMs = 0;
-    static uint32_t lastIPCacheMs = 0;
-    static String cachedIP = "0.0.0.0";
-    static int cachedRSSI = 0;
+    static uint32_t lastSendMs = 0;
     const uint32_t now = millis();
-    
-    // Check if we have WebSocket clients connected
-    const uint32_t clientCount = MetaSense::WebSocketServer::socket().count();
-    
-    // Dashboard updates at 50ms (20 Hz) when browser is connected for smooth display without WiFi overload
-    // Reduces to 100ms when idle (no clients) to save power
-    const uint32_t dashboardCadenceMs = (clientCount > 0) ? 50U : 100U;    // 50ms for stable updates
-
-    // === LIGHTWEIGHT DATA: Essential telemetry + full CAN monitor metrics ===
-    // Browser expects "data" message type with core fields plus leaf_1da/1d4/11a CAN frame data.
-    if (now - lastDashboardMs >= dashboardCadenceMs) {
-        lastDashboardMs = now;
-        
-        const auto& leafFb = MetaSense::CANBus::feedback();
-
-        bool hwPrechargeOut = false;
-        bool hwRbPlusOut = false;
-        bool hwRbMinusOut = false;
-        bool hwSsrOut = false;
-        if (MetaSense::Settings::relayGuiTestEnabled) {
-            getRelayGuiTestPattern(now, hwPrechargeOut, hwRbPlusOut, hwRbMinusOut, hwSsrOut);
-        } else {
-            hwPrechargeOut = MetaSense::HardwareOutputStateMachine::isPrechargeActive();
-            hwRbPlusOut = MetaSense::HardwareOutputStateMachine::isRbPlusActive();
-            hwRbMinusOut = MetaSense::HardwareOutputStateMachine::isRbMinusActive();
-            hwSsrOut = MetaSense::HardwareOutputStateMachine::isSsrActive();
-        }
-
-        // Use static buffer for JSON to avoid String() float conversion issues
-        static char jsonBuffer[2600];  // Sized for full metrics payload
-        int pos = 0;
-        
-        // FIX: Use stats data that was captured ATOMICALLY at frame reception
-        // last1daData[] and last1daWireCrcCalc are always synchronized (set together in CANBus handler)
-        // This guarantees CRC RX, Calc, and OK are from the SAME frame reception event
-        const auto& canStats = MetaSense::CANBus::stats();
-        const uint8_t leaf1daCrcRx = canStats.last1daData[7];  // CRC RX from last reception
-        const uint8_t leaf1daCrcCalc = canStats.last1daWireCrcCalc;  // CRC Calc from same reception
-        const int leaf1daCrcOk = (canStats.last1daWireCrcOk > 0) ? 1 : 0;  // Match result from same reception
-        
-        // Build JSON with full CAN metrics using snprintf for robust numeric formatting
-        pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos,
-            "{\"type\":\"data\","
-            "\"rpm\":%.1f,"
-            "\"rpm_error\":0,"
-            "\"drum_rpm\":%.1f,"
-            "\"kw\":%.2f,"
-            "\"peakKW\":%.2f,"
-            "\"peakKW_RPM\":%.0f,"
-            "\"torque\":%.2f,"
-            "\"brakeTorque\":%.2f,"
-            "\"torque_measured\":%.2f,"
-            "\"load_kg\":%.2f,"
-            "\"throttle_pct\":%.1f,"
-            "\"peakTorque\":%.2f,"
-            "\"peakTorque_RPM\":%.0f,"
-            "\"e_torque\":%.2f,"
-            "\"energy\":%.2f,"
-            "\"energy_active\":%d,"
-            "\"rel_humidity\":%.1f,"
-            "\"ratio_confidence\":0,"
-            "\"rpm_target\":%.0f,"
-            "\"kp_source\":\"firmware\","
-            "\"kp_live\":0,"
-            "\"ki_live\":0,"
-            "\"egt_hot\":%.1f,"
-            "\"egt_status\":%d,"
-            "\"egt_ready\":%d,"
-            "\"pressure\":%.1f,"
-            "\"ambient_temp\":%.1f,"
-            "\"air_density\":%.3f,"
-            "\"climate_cf\":%.3f,"
-            "\"dyno_mode\":\"%s\","
-            "\"inv_ready\":%d,"
-            "\"sw_active\":%d,"
-            "\"load_raw\":0,"
-            "\"nau_ready\":0,"
-            "\"recording\":%d,"
-            "\"lambda\":%.2f,"
-            "\"massflow_m3h\":%.2f,"
-            "\"leaf_rpm\":%.0f,"
-            "\"leaf_torque\":%.2f,"
-            "\"leaf_torque_demand\":%.2f,"
-            "\"leaf_torque_demand_manual\":%.2f,"
-            "\"leaf_torque_mode\":\"%s\","
-            "\"leaf_1da_input_v\":%.1f,"
-            "\"leaf_1da_torque_nm\":%.2f,"
-            "\"leaf_1da_rpm\":%.0f,"
-            "\"leaf_1da_clock\":%d,"
-            "\"leaf_1da_err\":0,"
-            "\"leaf_1da_inv_fault_map\":%d,"
-            "\"leaf_1da_inv_blinky\":0,"
-            "\"leaf_1da_inv_fault_can_timeout\":0,"
-            "\"leaf_1da_crc\":%d,"
-            "\"leaf_1da_crc_calc\":%d,"
-            "\"leaf_1da_crc_wire_calc\":%d,"
-            "\"leaf_1da_crc_ok\":%d,"
-            "\"leaf_1da_crc_wire_ok\":%d,"
-            "\"leaf_1da_crc_wire_trusted\":%d,"
-            "\"leaf_1da_crc_ok_frames\":%lu,"
-            "\"leaf_1da_crc_bad_frames\":%lu,"
-            "\"leaf_1da_crc_wire_ok_frames\":%lu,"
-            "\"leaf_1da_crc_wire_bad_frames\":%lu,"
-            "\"leaf_1da_raw_b0b7\":\"%02X %02X %02X %02X %02X %02X %02X %02X\","
-            "\"leaf_1da_inv_temp\":%.1f,"
-            "\"leaf_1da_stator_temp\":%.1f,"
-            "\"leaf_coolant_temp\":%.1f,"
-            "\"leaf_1da_inv_status_bit\":%d,"
-            "\"leaf_ready\":%d,"
-            "\"hw_precharge\":%d,"
-            "\"hw_rb_plus\":%d,"
-            "\"hw_rb_minus\":%d,"
-            "\"hw_ssr\":%d,"
-            "\"hw_state\":\"%s\""
-            "}",
-            data.rpm,
-            data.drumRpm,
-            data.kw,
-            data.peakKW,
-            data.peakKW_RPM,
-            data.torqueNm,
-            data.brakeTorqueNm,
-            data.torqueNm,
-            data.loadKg,
-            data.throttlePercent,
-            data.peakTorque,
-            data.peakTorque_RPM,
-            data.eTorque,
-            data.energyMJ,
-            isRecording ? 1 : 0,
-            data.humidity,
-            data.rpmTarget,
-            data.egtHotC,
-            (int)data.egtStatus,
-            data.egtReady ? 1 : 0,
-            data.pressureHpa,
-            data.ambientC,
-            data.airDensity,
-            data.climateCF,
-            MetaSense::toString(data.mode),
-            data.leaf_invReady ? 1 : 0,
-            data.swActive ? 1 : 0,
-            isRecording ? 1 : 0,
-            data.lambdaValue,
-            data.massflowM3h,
-            data.leaf_rpm,
-            data.leaf_torqueNm,
-            data.leaf_torqueDemandNm,
-            MetaSense::Input::getLeafUiTorqueDemandNm(),
-            MetaSense::Input::getLeafManualTorqueMode() ? "manual" : "auto",
-            leafFb.input_voltage,
-            leafFb.torque_nm,
-            data.leaf_rpm,  // leaf_1da_rpm
-            (int)leafFb.mg_clock,  // leaf_1da_clock
-            (int)leafFb.inv_fault_map,  // leaf_1da_inv_fault_map
-            (int)leaf1daCrcRx,  // leaf_1da_crc (CRC RX) - from atomic frame
-            (int)leaf1daCrcCalc,  // leaf_1da_crc_calc - from atomic frame
-            (int)canStats.last1daWireCrcCalc,  // leaf_1da_crc_wire_calc - calculated at reception
-            leaf1daCrcOk,  // leaf_1da_crc_ok - from atomic frame
-            (canStats.last1daWireCrcOk > 0) ? 1 : 0,  // leaf_1da_crc_wire_ok - wire CRC status
-            (canStats.last1daWireCrcOk > 0) ? 1 : 0,  // leaf_1da_crc_wire_trusted - same as wire_ok
-            canStats.rx1daWireCrcOkFrames,  // leaf_1da_crc_ok_frames - total accepted frames
-            canStats.rx1daWireCrcBadFrames,  // leaf_1da_crc_bad_frames - total rejected frames
-            canStats.rx1daWireCrcOkFrames,  // leaf_1da_crc_wire_ok_frames - wire CRC good count
-            canStats.rx1daWireCrcBadFrames,  // leaf_1da_crc_wire_bad_frames - wire CRC bad count
-            canStats.last1daData[0],  // Use same atomic frame data as CRC
-            canStats.last1daData[1],
-            canStats.last1daData[2],
-            canStats.last1daData[3],
-            canStats.last1daData[4],
-            canStats.last1daData[5],
-            canStats.last1daData[6],
-            canStats.last1daData[7],
-            data.leaf_invTempC,  // leaf_inv_temp
-            data.leaf_statorTempC,  // leaf_stator_temp
-            data.leaf_coolantTempC,  // leaf_coolant_temp
-            (int)leafFb.inv_status_bit,  // leaf_1da_inv_status_bit (Inv_StatusBit: 1=ready, 0=not ready)
-            leafFb.ready ? 1 : 0,  // leaf_ready
-            hwPrechargeOut ? 1 : 0,
-            hwRbPlusOut ? 1 : 0,
-            hwRbMinusOut ? 1 : 0,
-            hwSsrOut ? 1 : 0,
-            MetaSense::HardwareOutputStateMachine::stateName()  // hw_state (INIT/START/IDLE/MOTOR/DYNO)
-        );
-        
-        wsock.textAll(jsonBuffer);
+    if (now - lastSendMs < kWebSocketPublishPeriodMs) {
+        return;
     }
+
+    // Synchronize with the actual send-buffer state rather than firing
+    // blindly on a timer: if any client's per-connection queue is still
+    // backed up (previous message(s) not yet drained over the air), skip
+    // this tick entirely -- do NOT touch lastSendMs, the change-detection
+    // snapshot, or the round-robin slice, so nothing is "consumed" without
+    // being sent. The next network task iteration (~ every 25ms) retries
+    // immediately, so once the queue frees up we resume at full rate
+    // without ever building up a backlog that would otherwise trip
+    // WS_MAX_QUEUED_MESSAGES and force-close the connection.
+    if (!wsock.availableForWriteAll()) {
+        return;
+    }
+    lastSendMs = now;
+
+    const auto& leafFb = MetaSense::CANBus::feedback();
+    const auto& canStats = MetaSense::CANBus::stats();
+
+    bool hwPrechargeOut = false;
+    bool hwRbPlusOut = false;
+    bool hwRbMinusOut = false;
+    bool hwSsrOut = false;
+    if (MetaSense::Settings::relayGuiTestEnabled) {
+        getRelayGuiTestPattern(now, hwPrechargeOut, hwRbPlusOut, hwRbMinusOut, hwSsrOut);
+    } else {
+        hwPrechargeOut = MetaSense::HardwareOutputStateMachine::isPrechargeActive();
+        hwRbPlusOut = MetaSense::HardwareOutputStateMachine::isRbPlusActive();
+        hwRbMinusOut = MetaSense::HardwareOutputStateMachine::isRbMinusActive();
+        hwSsrOut = MetaSense::HardwareOutputStateMachine::isSsrActive();
+    }
+    const char* hwStateNow = MetaSense::HardwareOutputStateMachine::stateName();
+
+    // FIX: Use stats data that was captured ATOMICALLY at frame reception.
+    // last1daData[] and last1daWireCrcCalc are always synchronized (set together
+    // in the CANBus handler), guaranteeing CRC RX, Calc, and OK come from the
+    // SAME frame reception event.
+    const uint8_t leaf1daCrcRx = canStats.last1daData[7];
+    const uint8_t leaf1daCrcCalc = canStats.last1daWireCrcCalc;
+    const int leaf1daCrcOk = (canStats.last1daWireCrcOk > 0) ? 1 : 0;
+
+    // --- Change-detection snapshot, persists across calls ---
+    static bool snapshotInitialized = false;
+    static float prevDrumRpm = 0.0f;
+    static float prevRpmTarget = 0.0f;
+    static float prevThrottlePct = 0.0f;
+    static float prevPeakKW = 0.0f;
+    static float prevPeakKW_RPM = 0.0f;
+    static float prevPeakTorque = 0.0f;
+    static float prevPeakTorqueRPM = 0.0f;
+    static float prevBrakeTorque = 0.0f;
+    static float prevETorque = 0.0f;
+    static float prevLoadKg = 0.0f;
+    static bool prevRecording = false;
+    static MetaSense::DynoMode prevMode = MetaSense::DynoMode::Brake;
+    static bool prevSwActive = false;
+    static bool prevInvReady = false;
+    static bool prevLeafReady = false;
+    static bool prevHwPrecharge = false;
+    static bool prevHwRbPlus = false;
+    static bool prevHwRbMinus = false;
+    static bool prevHwSsr = false;
+    static const char* prevHwState = nullptr;
+
+    const bool forceAll = !snapshotInitialized;
+    snapshotInitialized = true;
+
+    // Single small message per tick: always the core fast fields (engine
+    // RPM, load-cell torque, power), plus each other field only when it
+    // actually changed by a meaningful amount, plus exactly one rotating
+    // slow/diagnostic field. This keeps every send tiny so the WebSocket
+    // library's per-client queue never backs up and force-closes the
+    // connection during a WiFi throughput dip.
+    static char jsonBuffer[1024];
+    int pos = 0;
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "{\"type\":\"data\",");
+
+    pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos,
+        "\"rpm\":%.1f,\"torque\":%.2f,\"torque_measured\":%.2f,\"kw\":%.2f,",
+        data.rpm, data.torqueNm, data.torqueNm, data.kw);
+
+    if (forceAll || floatChanged(data.drumRpm, prevDrumRpm, 1.0f)) {
+        pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"drum_rpm\":%.1f,", data.drumRpm);
+        prevDrumRpm = data.drumRpm;
+    }
+    if (forceAll || floatChanged(data.rpmTarget, prevRpmTarget, 1.0f)) {
+        pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"rpm_target\":%.0f,", data.rpmTarget);
+        prevRpmTarget = data.rpmTarget;
+    }
+    if (forceAll || floatChanged(data.throttlePercent, prevThrottlePct, 0.5f)) {
+        pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"throttle_pct\":%.1f,", data.throttlePercent);
+        prevThrottlePct = data.throttlePercent;
+    }
+    if (forceAll || floatChanged(data.peakKW, prevPeakKW, 0.05f)) {
+        pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"peakKW\":%.2f,", data.peakKW);
+        prevPeakKW = data.peakKW;
+    }
+    if (forceAll || floatChanged(data.peakKW_RPM, prevPeakKW_RPM, 5.0f)) {
+        pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"peakKW_RPM\":%.0f,", data.peakKW_RPM);
+        prevPeakKW_RPM = data.peakKW_RPM;
+    }
+    if (forceAll || floatChanged(data.peakTorque, prevPeakTorque, 0.5f)) {
+        pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"peakTorque\":%.2f,", data.peakTorque);
+        prevPeakTorque = data.peakTorque;
+    }
+    if (forceAll || floatChanged(data.peakTorque_RPM, prevPeakTorqueRPM, 5.0f)) {
+        pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"peakTorque_RPM\":%.0f,", data.peakTorque_RPM);
+        prevPeakTorqueRPM = data.peakTorque_RPM;
+    }
+    if (forceAll || floatChanged(data.brakeTorqueNm, prevBrakeTorque, 0.05f)) {
+        pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"brakeTorque\":%.2f,", data.brakeTorqueNm);
+        prevBrakeTorque = data.brakeTorqueNm;
+    }
+    if (forceAll || floatChanged(data.eTorque, prevETorque, 0.05f)) {
+        pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"e_torque\":%.2f,", data.eTorque);
+        prevETorque = data.eTorque;
+    }
+    if (forceAll || floatChanged(data.loadKg, prevLoadKg, 0.1f)) {
+        pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"load_kg\":%.2f,", data.loadKg);
+        prevLoadKg = data.loadKg;
+    }
+    if (forceAll || isRecording != prevRecording) {
+        pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"recording\":%d,", isRecording ? 1 : 0);
+        prevRecording = isRecording;
+    }
+    if (forceAll || data.mode != prevMode) {
+        pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"dyno_mode\":\"%s\",", MetaSense::toString(data.mode));
+        prevMode = data.mode;
+    }
+    if (forceAll || data.swActive != prevSwActive) {
+        pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"sw_active\":%d,", data.swActive ? 1 : 0);
+        prevSwActive = data.swActive;
+    }
+    if (forceAll || data.leaf_invReady != prevInvReady) {
+        pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"inv_ready\":%d,", data.leaf_invReady ? 1 : 0);
+        prevInvReady = data.leaf_invReady;
+    }
+    if (forceAll || leafFb.ready != prevLeafReady) {
+        pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_ready\":%d,", leafFb.ready ? 1 : 0);
+        prevLeafReady = leafFb.ready;
+    }
+    if (forceAll || hwPrechargeOut != prevHwPrecharge) {
+        pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"hw_precharge\":%d,", hwPrechargeOut ? 1 : 0);
+        prevHwPrecharge = hwPrechargeOut;
+    }
+    if (forceAll || hwRbPlusOut != prevHwRbPlus) {
+        pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"hw_rb_plus\":%d,", hwRbPlusOut ? 1 : 0);
+        prevHwRbPlus = hwRbPlusOut;
+    }
+    if (forceAll || hwRbMinusOut != prevHwRbMinus) {
+        pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"hw_rb_minus\":%d,", hwRbMinusOut ? 1 : 0);
+        prevHwRbMinus = hwRbMinusOut;
+    }
+    if (forceAll || hwSsrOut != prevHwSsr) {
+        pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"hw_ssr\":%d,", hwSsrOut ? 1 : 0);
+        prevHwSsr = hwSsrOut;
+    }
+    if (forceAll || hwStateNow != prevHwState) {
+        pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"hw_state\":\"%s\",", hwStateNow);
+        prevHwState = hwStateNow;
+    }
+
+    // Round-robin: exactly one slow-changing/diagnostic field per tick.
+    static uint8_t slowSlice = 0;
+    const uint8_t sliceNow = slowSlice;
+    slowSlice = static_cast<uint8_t>((slowSlice + 1U) % kWebSocketSlowTelemetrySlices);
+
+    switch (sliceNow) {
+        case 0:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"energy\":%.2f,", data.energyMJ);
+            break;
+        case 1:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"energy_active\":%d,", isRecording ? 1 : 0);
+            break;
+        case 2:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"rel_humidity\":%.1f,", data.humidity);
+            break;
+        case 3:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"ratio_confidence\":0,");
+            break;
+        case 4:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"egt_hot\":%.1f,", data.egtHotC);
+            break;
+        case 5:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"egt_status\":%d,", (int)data.egtStatus);
+            break;
+        case 6:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"egt_ready\":%d,", data.egtReady ? 1 : 0);
+            break;
+        case 7:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"pressure\":%.1f,", data.pressureHpa);
+            break;
+        case 8:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"ambient_temp\":%.1f,", data.ambientC);
+            break;
+        case 9:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"air_density\":%.3f,", data.airDensity);
+            break;
+        case 10:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"climate_cf\":%.3f,", data.climateCF);
+            break;
+        case 11:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"lambda\":%.2f,", data.lambdaValue);
+            break;
+        case 12:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"massflow_m3h\":%.2f,", data.massflowM3h);
+            break;
+        case 13:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_rpm\":%.0f,", data.leaf_rpm);
+            break;
+        case 14:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_torque\":%.2f,", data.leaf_torqueNm);
+            break;
+        case 15:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_torque_demand\":%.2f,", data.leaf_torqueDemandNm);
+            break;
+        case 16:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_torque_demand_manual\":%.2f,", MetaSense::Input::getLeafUiTorqueDemandNm());
+            break;
+        case 17:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_torque_mode\":\"%s\",", MetaSense::Input::getLeafManualTorqueMode() ? "manual" : "auto");
+            break;
+        case 18:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_input_v\":%.1f,", leafFb.input_voltage);
+            break;
+        case 19:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_torque_nm\":%.2f,", leafFb.torque_nm);
+            break;
+        case 20:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_rpm\":%.0f,", data.leaf_rpm);
+            break;
+        case 21:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_clock\":%d,", (int)leafFb.mg_clock);
+            break;
+        case 22:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_err\":0,");
+            break;
+        case 23:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_inv_fault_map\":%d,", (int)leafFb.inv_fault_map);
+            break;
+        case 24:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_inv_blinky\":0,");
+            break;
+        case 25:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_inv_fault_can_timeout\":0,");
+            break;
+        case 26:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc\":%d,", (int)leaf1daCrcRx);
+            break;
+        case 27:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_calc\":%d,", (int)leaf1daCrcCalc);
+            break;
+        case 28:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_wire_calc\":%d,", (int)canStats.last1daWireCrcCalc);
+            break;
+        case 29:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_ok\":%d,", leaf1daCrcOk);
+            break;
+        case 30:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_wire_ok\":%d,", (canStats.last1daWireCrcOk > 0) ? 1 : 0);
+            break;
+        case 31:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_wire_trusted\":%d,", (canStats.last1daWireCrcOk > 0) ? 1 : 0);
+            break;
+        case 32:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_ok_frames\":%lu,", canStats.rx1daWireCrcOkFrames);
+            break;
+        case 33:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_bad_frames\":%lu,", canStats.rx1daWireCrcBadFrames);
+            break;
+        case 34:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_wire_ok_frames\":%lu,", canStats.rx1daWireCrcOkFrames);
+            break;
+        case 35:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_crc_wire_bad_frames\":%lu,", canStats.rx1daWireCrcBadFrames);
+            break;
+        case 36:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos,
+                "\"leaf_1da_raw_b0b7\":\"%02X %02X %02X %02X %02X %02X %02X %02X\",",
+                canStats.last1daData[0], canStats.last1daData[1], canStats.last1daData[2], canStats.last1daData[3],
+                canStats.last1daData[4], canStats.last1daData[5], canStats.last1daData[6], canStats.last1daData[7]);
+            break;
+        case 37:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_inv_temp\":%.1f,", data.leaf_invTempC);
+            break;
+        case 38:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_stator_temp\":%.1f,", data.leaf_statorTempC);
+            break;
+        case 39:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_coolant_temp\":%.1f,", data.leaf_coolantTempC);
+            break;
+        case 40:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"leaf_1da_inv_status_bit\":%d,", (int)leafFb.inv_status_bit);
+            break;
+        case 41:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"kp_source\":\"firmware\",");
+            break;
+        case 42:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"kp_live\":0,");
+            break;
+        case 43:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"ki_live\":0,");
+            break;
+        case 44:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"rpm_error\":0,");
+            break;
+        case 45:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"load_raw\":0,");
+            break;
+        case 46:
+        default:
+            pos += snprintf(jsonBuffer + pos, sizeof(jsonBuffer) - pos, "\"nau_ready\":0,");
+            break;
+    }
+
+    // Close JSON, trimming the trailing comma.
+    if (pos > 0 && pos < (int)sizeof(jsonBuffer) && jsonBuffer[pos - 1] == ',') {
+        --pos;
+    }
+    if (pos >= 0 && pos < (int)sizeof(jsonBuffer) - 2) {
+        jsonBuffer[pos++] = '}';
+        jsonBuffer[pos] = '\0';
+    }
+
+    wsock.textAll(jsonBuffer);
 
     // === EXCEPTIONS ONLY: Send alerts for errors/faults via serial ===
     // Log warnings when conditions change
     static uint32_t lastExceptionCheckMs = 0;
     if ((now - lastExceptionCheckMs) > 5000) {  // Check every 5 seconds
         lastExceptionCheckMs = now;
-        const auto& leafFb = MetaSense::CANBus::feedback();
-        
+
         // Log fault conditions
         if (leafFb.inv_fault_map != 0) {
             Serial.printf("[WARNING] Inverter fault detected: 0x%02X\n", leafFb.inv_fault_map);
@@ -2488,13 +2627,13 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
             Serial.printf("[WARNING] MG error codes: 0x%02X\n", leafFb.mg_error_codes);
         }
         if (data.leaf_invTempC > 80.0f) {
-            Serial.printf("[WARNING] Inverter temperature high: %.1f°C\n", data.leaf_invTempC);
+            Serial.printf("[WARNING] Inverter temperature high: %.1f\xC2\xB0""C\n", data.leaf_invTempC);
         }
         if (data.leaf_statorTempC > 150.0f) {
-            Serial.printf("[WARNING] Stator temperature high: %.1f°C\n", data.leaf_statorTempC);
+            Serial.printf("[WARNING] Stator temperature high: %.1f\xC2\xB0""C\n", data.leaf_statorTempC);
         }
         if (data.leaf_coolantTempC > 95.0f) {
-            Serial.printf("[WARNING] Coolant temperature high: %.1f°C\n", data.leaf_coolantTempC);
+            Serial.printf("[WARNING] Coolant temperature high: %.1f\xC2\xB0""C\n", data.leaf_coolantTempC);
         }
     }
 }
