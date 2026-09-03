@@ -285,13 +285,23 @@ constexpr float kIdleDynoHystBandRpm = 150.0f;    // Single hysteresis band: 500
 constexpr float kDynoEnterRpm = kIdleDynoHystCenterRpm + kIdleDynoHystBandRpm; // 650
 constexpr float kIdleEnterRpm = kIdleDynoHystCenterRpm - kIdleDynoHystBandRpm; // 350
 constexpr float kMotorSetpointMinRpm = 150.0f;    // MOTOR entry requires setpoint above this.
+// RB- (load-dump resistor connection) must stay OFF right after entering
+// IDLE (a freshly-precharged bus discharging into the dump resistor is a
+// hazard) and only engage once RPM climbs high enough that the engine is
+// genuinely generating regen power that needs dissipating. Hysteresis:
+// engage at RPM>=550, release at RPM<450 (holds latched state in between
+// to avoid relay chatter at the edge).
+constexpr float kIdleRbMinusHystCenterRpm = 500.0f;
+constexpr float kIdleRbMinusHystBandRpm = 50.0f;
+constexpr float kIdleRbMinusEngageRpm = kIdleRbMinusHystCenterRpm + kIdleRbMinusHystBandRpm; // 550
+constexpr float kIdleRbMinusReleaseRpm = kIdleRbMinusHystCenterRpm - kIdleRbMinusHystBandRpm; // 450
 constexpr float kHvKeepAliveMaxRpm = 500.0f;      // IDLE-only HV keep-alive: RPM must be <= this.
 constexpr float kHvKeepAliveEngageV = 10.0f;      // Engage precharge-channel recharge below this HV.
 constexpr float kHvKeepAliveReleaseV = 300.0f;    // Release recharge above this HV (latched, avoids chatter).
-// Temporarily disabled: this re-engages SSR+Precharge while nominally in
-// IDLE and has not yet been proven safe on hardware. IDLE always uses the
-// normal RB+/RB- ON, SSR/Precharge OFF pattern while this is false.
-constexpr bool kHvKeepAliveEnabled = false;
+// Reactivated: safe under the RB- load-dump rule above, since keep-alive's
+// RPM ceiling (<=500) always sits below the RB- engage threshold (>=550),
+// so the two latches can never be active at the same time.
+constexpr bool kHvKeepAliveEnabled = true;
 
 // --- Precharge sequencing state ---
 uint32_t prechargeStartMs = 0;
@@ -300,6 +310,10 @@ uint8_t prechargeAttempt = 0;
 // --- IDLE-state HV keep-alive latch (persists across calls so the 200V/
 // 300V engage/release hysteresis can't chatter at either edge). ---
 bool idleHvKeepAliveLatched = false;
+
+// --- IDLE-state RB- (load-dump) engage latch (persists across calls so
+// the 550/450 RPM engage/release hysteresis can't chatter at the edge). ---
+bool idleRbMinusLatched = false;
 
 
 // --- Motor-start override (operator request, e.g. START-request button) ---
@@ -390,12 +404,26 @@ void applyOutputs(OutputState hwState,
         break;
 
     case OutputState::IDLE: {
+        // RB- (load-dump resistor connection) must stay OFF right after
+        // entering IDLE -- discharging a freshly-precharged bus into the
+        // dump resistor is a hazard -- and only engage once RPM indicates
+        // genuine regen power needing dissipation. Latched hysteresis:
+        // engage at RPM>=550, release at RPM<450.
+        if (engineRpm - kIdleRbMinusHystBandRpm >= kIdleRbMinusHystCenterRpm) {
+            idleRbMinusLatched = true;
+        } else if (engineRpm + kIdleRbMinusHystBandRpm < kIdleRbMinusHystCenterRpm) {
+            idleRbMinusLatched = false;
+        }
+
         // HV keep-alive: recharges the DC bus through the current-limited
         // precharge channel (SSR+PRECHARGE together -- same relay pattern
         // as the initial START precharge) whenever HV sags, but only while
         // genuinely idling: RPM <= 500 AND RPM > the operator's rpm
         // setpoint. Engage at HV<200V, release at HV>300V (latched, so HV
-        // sitting near either edge cannot cause relay chatter).
+        // sitting near either edge cannot cause relay chatter). This RPM
+        // ceiling (<=500) always sits below the RB- engage threshold
+        // (>=550) above, so keep-alive can never be active while RB- would
+        // want to engage -- the two latches cannot conflict.
         const bool keepAliveEligible = kHvKeepAliveEnabled &&
                                         (engineRpm <= kHvKeepAliveMaxRpm) &&
                                         (engineRpm > rpmSetpoint);
@@ -411,8 +439,9 @@ void applyOutputs(OutputState hwState,
             // RB+=ON, RB-=OFF, SSR=ON, PRECHARGE=ON.
             cmd = hw::makeRelayCommand(false, true, true, true);
         } else {
-            // Normal IDLE relay pattern: RB+/RB- ON, SSR/Precharge OFF.
-            cmd = hw::makeRelayCommand(true, false, true, false);
+            // RB+=ON always; RB- follows the load-dump latch above;
+            // SSR/Precharge OFF.
+            cmd = hw::makeRelayCommand(idleRbMinusLatched, false, true, false);
         }
         break;
     }
