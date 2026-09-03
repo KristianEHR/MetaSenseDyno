@@ -28,11 +28,13 @@
 //      prior such mechanism, VCU_switch=0, was identified as an unintended
 //      artifact and has been retired).
 //
-// Relay table (RB+, RB-, SSR, Precharge) decided by the VCU layer:
+// Relay table (RB+, RB-, SSR, Precharge) decided by the VCU layer. Precharge
+// is always slaved to SSR (enforced by applyRelayCommand -- Precharge always
+// follows SSR ON, regardless of what the VCU layer requests):
 //   INIT:    OFF, OFF, OFF, OFF
 //   START:   OFF, OFF, ON,  ON  (2.5s precharge dwell)
-//   IDLE:    ON,  ON,  OFF, OFF   (HV keep-alive can flip SSR on / RB- off)
-//   MOTOR:   ON,  OFF, ON,  OFF
+//   IDLE:    ON,  ON,  OFF, OFF   (HV keep-alive can flip SSR+Precharge on / RB- off)
+//   MOTOR:   ON,  OFF, ON,  ON  (Precharge active but inert here -- RB+ carries the real power path)
 //   DYNO:    ON,  ON,  OFF, OFF
 //   FAULT:   OFF, OFF, OFF, OFF
 // ─────────────────────────────────────────────────────────────────────────
@@ -120,12 +122,31 @@ void writeThrottleDutyPwm(float percent)
     ledcWrite(MetaSense::Globals::kThrottlePwmChannel, constrain(pwm, 0, maxPwm));
 }
 
+// precharge(): the single named function that switches the SSR+Precharge
+// pair. Scope: this is invoked for exactly two purposes -- the initial 2.5s
+// precharge dwell in START, and the current-limited recharge ("keep-alive")
+// supply to the inverter while IDLE. (It also incidentally fires for
+// MOTOR/DYNO entry since those states pin SSR to a fixed value too, but
+// Precharge's state is inert there -- MOTOR: don't care, DYNO: already
+// lands on precharge(false) since DYNO runs SSR=OFF.)
+//   precharge(true):  PRECHARGE relay = ON, then SSR = ON.
+//   precharge(false): SSR = OFF, then PRECHARGE relay = OFF.
+void precharge(bool on)
+{
+    if (on) {
+        digitalWrite(MetaSense::Globals::kPrechargeRelayPin, HIGH);
+        digitalWrite(MetaSense::Globals::kSssrPin, HIGH);
+    } else {
+        digitalWrite(MetaSense::Globals::kSssrPin, LOW);
+        digitalWrite(MetaSense::Globals::kPrechargeRelayPin, LOW);
+    }
+}
+
 void writeRelayPinsImmediate(const RelayCommand& cmd)
 {
     digitalWrite(MetaSense::Globals::kRbMinusFetPin, cmd.rbMinusOn ? HIGH : LOW);
-    digitalWrite(MetaSense::Globals::kSssrPin, cmd.ssrOn ? HIGH : LOW);
+    precharge(cmd.prechargeOn);
     digitalWrite(MetaSense::Globals::kRbPlusRelayPin, cmd.rbPlusOn ? HIGH : LOW);
-    digitalWrite(MetaSense::Globals::kPrechargeRelayPin, cmd.prechargeOn ? HIGH : LOW);
 }
 
 bool relayCommandEquals(const RelayCommand& a, const RelayCommand& b)
@@ -136,15 +157,30 @@ bool relayCommandEquals(const RelayCommand& a, const RelayCommand& b)
         a.prechargeOn == b.prechargeOn;
 }
 
-// Applies a relay command with break-before-make (open contactors first,
-// wait the relay switch delay, then close the next set) and enforces the
-// general SSR/RB- mutual-exclusion invariant. This is the single point of
-// authority for relay outputs.
+// Applies a relay command and enforces two general invariants: (a) SSR and
+// RB- can never both be commanded ON, (b) Precharge is always active
+// whenever SSR is ON -- Precharge has no independent role of its own; it is
+// always a slave to SSR (SSR does the actual power switching, Precharge
+// switches no power). This is the single point of authority for relay
+// outputs.
+//
+// Break-before-make (open, wait the relay switch delay, then close) applies
+// to two crossovers, both of which connect the bus via one path while
+// disconnecting the other: SSR<->RB- (swapping which path carries the load),
+// and RB+<->SSR/Precharge (the direct path vs. the current-limited
+// precharge() path -- RB+ must open before precharge() energizes the bus,
+// and precharge() must de-energize before RB+ closes, or the fresh
+// charge/discharge current would bypass the current limiting entirely).
 void applyRelayCommand(RelayCommand target)
 {
     // General invariant: SSR and RB- can never both be commanded ON.
     if (target.ssrOn && target.rbMinusOn) {
         target.rbMinusOn = false;
+    }
+
+    // General invariant: Precharge always follows SSR (slaved to it).
+    if (target.ssrOn) {
+        target.prechargeOn = true;
     }
 
     if (relayCommandEquals(activeRelayCommand, target)) {
@@ -157,21 +193,21 @@ void applyRelayCommand(RelayCommand target)
     const bool ssrGoingHigh = !activeRelayCommand.ssrOn && target.ssrOn;
     const bool rbPlusGoingLow = activeRelayCommand.rbPlusOn && !target.rbPlusOn;
     const bool rbPlusGoingHigh = !activeRelayCommand.rbPlusOn && target.rbPlusOn;
-    const bool prechargeGoingLow = activeRelayCommand.prechargeOn && !target.prechargeOn;
-    const bool prechargeGoingHigh = !activeRelayCommand.prechargeOn && target.prechargeOn;
 
-    const bool anyGoingLow = rbMinusGoingLow || ssrGoingLow || rbPlusGoingLow || prechargeGoingLow;
-    const bool anyGoingHigh = rbMinusGoingHigh || ssrGoingHigh || rbPlusGoingHigh || prechargeGoingHigh;
-
-    // Break-before-make: open contactors first, wait relay latency, then
-    // close the next set. Blocking delay is intentional here -- rotational
-    // inertia means the PI control loop will not notice a relay transition.
-    if (anyGoingLow && anyGoingHigh) {
+    // Blocking delay is intentional here -- rotational inertia means the PI
+    // control loop will not notice a relay transition.
+    const bool ssrRbMinusCrossover = (ssrGoingLow && rbMinusGoingHigh) ||
+                                     (rbMinusGoingLow && ssrGoingHigh);
+    const bool rbPlusPrechargeCrossover = (rbPlusGoingLow && ssrGoingHigh) ||
+                                          (ssrGoingLow && rbPlusGoingHigh);
+    if (ssrRbMinusCrossover || rbPlusPrechargeCrossover) {
         RelayCommand breakStep = activeRelayCommand;
         if (rbMinusGoingLow) breakStep.rbMinusOn = false;
-        if (ssrGoingLow) breakStep.ssrOn = false;
+        if (ssrGoingLow) {
+            breakStep.ssrOn = false;
+            breakStep.prechargeOn = false;
+        }
         if (rbPlusGoingLow) breakStep.rbPlusOn = false;
-        if (prechargeGoingLow) breakStep.prechargeOn = false;
 
         writeRelayPinsImmediate(breakStep);
         delay(kRelaySwitchDelayMs);
@@ -436,8 +472,13 @@ void applyOutputs(OutputState hwState,
         }
 
         if (idleHvKeepAliveLatched) {
-            // RB+=ON, RB-=OFF, SSR=ON, PRECHARGE=ON.
-            cmd = hw::makeRelayCommand(false, true, true, true);
+            // RB+=OFF (opened so the current-limited precharge() path, not
+            // the direct path, carries the recharge current), RB-=OFF,
+            // SSR=ON, PRECHARGE=ON. applyRelayCommand()'s RB+<->SSR/Precharge
+            // crossover handling staggers this: RB+ opens before SSR/
+            // Precharge energize, and closes again only after they
+            // de-energize when this latch releases.
+            cmd = hw::makeRelayCommand(false, true, false, true);
         } else {
             // RB+=ON always; RB- follows the load-dump latch above;
             // SSR/Precharge OFF.
