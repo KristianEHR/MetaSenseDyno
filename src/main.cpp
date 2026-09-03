@@ -25,9 +25,7 @@
 // Enable/disable runtime task instrumentation (set to 0 to disable)
 #define ENABLE_RUNTIME_INSTRUMENTATION 0
 
-#ifndef METASENSE_VCU_SIM_MODE
 #define METASENSE_VCU_SIM_MODE 0
-#endif
 
 const char* ssid     = "5djnmv47";
 const char* password = "Niser0201";
@@ -47,20 +45,10 @@ constexpr const char* kOtaHostname = "dyno-controller";
 constexpr const char* kOtaPassword = "metasense";
 constexpr uint32_t kI2cClockHz = 50000;
 constexpr uint16_t kI2cTimeoutMs = 50;
-#ifndef METASENSE_CONTROL_PERIOD_MS
 #define METASENSE_CONTROL_PERIOD_MS 10
-#endif
-#ifndef METASENSE_HEARTBEAT_PERIOD_MS
-#define METASENSE_HEARTBEAT_PERIOD_MS 2000
-#endif
-#ifndef METASENSE_FW_ID
-#define METASENSE_FW_ID "unknown"
-#endif
-#ifndef METASENSE_STARTUP_SNIFF_RELEASE_TX_PIN
-#define METASENSE_STARTUP_SNIFF_RELEASE_TX_PIN -1
-#endif
 constexpr uint32_t kControlPeriodMs = METASENSE_CONTROL_PERIOD_MS;
 constexpr uint32_t kModbusPeriodMs = 50;
+// METASENSE_HEARTBEAT_PERIOD_MS is defined in CanConfig.h (15000ms).
 constexpr uint32_t kHeartbeatPeriodMs = METASENSE_HEARTBEAT_PERIOD_MS;
 constexpr UBaseType_t kControlTaskPriority = 5;
 constexpr UBaseType_t kNetworkTaskPriority = 3;
@@ -471,8 +459,8 @@ void logBuildProfile()
                    METASENSE_LEAF_CAN_TX_PIN,
                    METASENSE_LEAF_CAN_RX_PIN,
                    METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS != 0 ? 1 : 0);
-    Serial.printf("[FW-ID] id=%s hb_ms=%lu\n", METASENSE_FW_ID, static_cast<unsigned long>(kHeartbeatPeriodMs));
-    Serial0.printf("[FW-ID] id=%s hb_ms=%lu\n", METASENSE_FW_ID, static_cast<unsigned long>(kHeartbeatPeriodMs));
+    Serial.printf("[FW-ID] hb_ms=%lu\n", static_cast<unsigned long>(kHeartbeatPeriodMs));
+    Serial0.printf("[FW-ID] hb_ms=%lu\n", static_cast<unsigned long>(kHeartbeatPeriodMs));
 }
 
 bool wifiCredentialsConfigured()
@@ -934,13 +922,6 @@ void setup()
     Serial.println("[BOOT] Settings loaded from storage (if available)");
     Serial0.println("[BOOT] Settings loaded from storage (if available)");
     logBuildProfile();
-    if (METASENSE_STARTUP_SNIFF_RELEASE_TX_PIN >= 0) {
-        pinMode(METASENSE_STARTUP_SNIFF_RELEASE_TX_PIN, INPUT_PULLUP);
-        Serial.printf("[BOOT] Released legacy CAN TX pin %d to INPUT_PULLUP\n",
-                      METASENSE_STARTUP_SNIFF_RELEASE_TX_PIN);
-        Serial0.printf("[BOOT] Released legacy CAN TX pin %d to INPUT_PULLUP\n",
-                       METASENSE_STARTUP_SNIFF_RELEASE_TX_PIN);
-    }
     scanI2cBus();
     logWifiConfiguration();
 
