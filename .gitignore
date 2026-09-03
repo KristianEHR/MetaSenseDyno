@@ -6,3 +6,8 @@
 *.bin
 *.elf
 *.map
+*.log
+__pycache__/
+*.pyc
+build_output.*
+_tmp_*
