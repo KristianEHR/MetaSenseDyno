@@ -288,6 +288,10 @@ constexpr float kMotorSetpointMinRpm = 150.0f;    // MOTOR entry requires setpoi
 constexpr float kHvKeepAliveMaxRpm = 500.0f;      // IDLE-only HV keep-alive: RPM must be <= this.
 constexpr float kHvKeepAliveEngageV = 10.0f;      // Engage precharge-channel recharge below this HV.
 constexpr float kHvKeepAliveReleaseV = 300.0f;    // Release recharge above this HV (latched, avoids chatter).
+// Temporarily disabled: this re-engages SSR+Precharge while nominally in
+// IDLE and has not yet been proven safe on hardware. IDLE always uses the
+// normal RB+/RB- ON, SSR/Precharge OFF pattern while this is false.
+constexpr bool kHvKeepAliveEnabled = false;
 
 // --- Precharge sequencing state ---
 uint32_t prechargeStartMs = 0;
@@ -392,7 +396,8 @@ void applyOutputs(OutputState hwState,
         // genuinely idling: RPM <= 500 AND RPM > the operator's rpm
         // setpoint. Engage at HV<200V, release at HV>300V (latched, so HV
         // sitting near either edge cannot cause relay chatter).
-        const bool keepAliveEligible = (engineRpm <= kHvKeepAliveMaxRpm) &&
+        const bool keepAliveEligible = kHvKeepAliveEnabled &&
+                                        (engineRpm <= kHvKeepAliveMaxRpm) &&
                                         (engineRpm > rpmSetpoint);
         if (!keepAliveEligible) {
             idleHvKeepAliveLatched = false;
