@@ -2893,10 +2893,6 @@ bool isVcuReady()
 
 const char* vcuReadySource()
 {
-    if (!MetaSense::Globals::kVcuSwitch) {
-        return "bench_forced";
-    }
-
     if (!tele.vcuReady) {
         return "not_ready";
     }
@@ -3580,11 +3576,9 @@ void begin()
     prevSwState = (digitalRead(MetaSense::Globals::kRampSwitchPin) == HIGH);
     prevStartRequestState = (digitalRead(MetaSense::Globals::kStartRequestPin) == HIGH);
     const int vcuRbPlusLevel = digitalRead(MetaSense::Globals::kRbPlusInputPin);
-    Serial.printf("[Input] VCU ready source: CAN_INVERTER_STATUS (legacy_cfg_gpio=%d, RB+=%d)\n",
-                  MetaSense::Globals::kVcuSwitch ? 1 : 0,
+    Serial.printf("[Input] VCU ready source: CAN_INVERTER_STATUS (RB+=%d)\n",
                   vcuRbPlusLevel);
-    Serial0.printf("[Input] VCU ready source: CAN_INVERTER_STATUS (legacy_cfg_gpio=%d, RB+=%d)\n",
-                   MetaSense::Globals::kVcuSwitch ? 1 : 0,
+    Serial0.printf("[Input] VCU ready source: CAN_INVERTER_STATUS (RB+=%d)\n",
                    vcuRbPlusLevel);
 
     // Bring relay/control outputs to a known-safe state before probing I2C sensors.
@@ -3807,12 +3801,9 @@ void loop()
 
     const float manualRpmTarget = readRpmSetpointPot();
 
-    // VCU ready for bring-up follows the configured source:
-    // - VCU_switch=1 uses the RB+ input pin (normal hardware path)
-    // - VCU_switch=0 forces VCU-ready true so bench bring-up can proceed without a live inverter.
-    const bool vcuReadyBase = MetaSense::Globals::kVcuSwitch
-        ? (digitalRead(MetaSense::Globals::kRbPlusInputPin) == HIGH)
-        : true;
+    // VCU ready is read directly from the RB+ input pin (real hardware VCU
+    // signal) -- no bench-forced bypass.
+    const bool vcuReadyBase = (digitalRead(MetaSense::Globals::kRbPlusInputPin) == HIGH);
     tele.vcuReady = vcuReadyBase;
 
     // --- SW switch recording toggle (GPIO 35, active HIGH, debounced) ---

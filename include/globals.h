@@ -6,8 +6,6 @@
 
 namespace MetaSense::Globals {
 
-extern const bool kVcuSwitch;
-
 #ifndef METASENSE_GPIO_RBPLUS_PIN
 #define METASENSE_GPIO_RBPLUS_PIN 36
 #endif

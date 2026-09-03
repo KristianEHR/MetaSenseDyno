@@ -25,28 +25,9 @@
 // Enable/disable runtime task instrumentation (set to 0 to disable)
 #define ENABLE_RUNTIME_INSTRUMENTATION 0
 
-// VCU ready source switch:
-// 1 = use GPIO RB+ input (normal operation)
-// 0 = force VCU ready true (bench testing without VCU)
-#if !defined(VCU_switch) && defined(VCU_set)
-#define VCU_switch VCU_set
-#endif
-
-#ifndef VCU_switch
-#define VCU_switch 0
-#endif
-
-#ifndef METASENSE_VCU_OWNS_HV_RPLUS_PRECHARGE
-#define METASENSE_VCU_OWNS_HV_RPLUS_PRECHARGE 0
-#endif
-
 #ifndef METASENSE_VCU_SIM_MODE
 #define METASENSE_VCU_SIM_MODE 0
 #endif
-
-namespace MetaSense::Globals {
-const bool kVcuSwitch = (VCU_switch != 0);
-}
 
 const char* ssid     = "5djnmv47";
 const char* password = "Niser0201";
@@ -469,14 +450,10 @@ void logWifiConfiguration()
 
 void logBuildProfile()
 {
-    Serial.printf("[BOOT] Build profile: vcu_gpio=%d, vcu_sim=%d, hv_vcu_owner=%d\n",
-                  VCU_switch != 0 ? 1 : 0,
-                  METASENSE_VCU_SIM_MODE != 0 ? 1 : 0,
-                  METASENSE_VCU_OWNS_HV_RPLUS_PRECHARGE != 0 ? 1 : 0);
-    Serial0.printf("[BOOT] Build profile: vcu_gpio=%d, vcu_sim=%d, hv_vcu_owner=%d\n",
-                   VCU_switch != 0 ? 1 : 0,
-                   METASENSE_VCU_SIM_MODE != 0 ? 1 : 0,
-                   METASENSE_VCU_OWNS_HV_RPLUS_PRECHARGE != 0 ? 1 : 0);
+    Serial.printf("[BOOT] Build profile: vcu_sim=%d\n",
+                  METASENSE_VCU_SIM_MODE != 0 ? 1 : 0);
+    Serial0.printf("[BOOT] Build profile: vcu_sim=%d\n",
+                   METASENSE_VCU_SIM_MODE != 0 ? 1 : 0);
 
     Serial.printf("[BOOT] Build profile: leaf_can_rx=%d, leaf_can_tx=%d, can_listen_only=%d, can_bitrate_kbps=%d, can_tx_pin=%d, can_rx_pin=%d, leaf_sim_feedback=%d\n",
                   METASENSE_LEAF_CAN_RX_ENABLED != 0 ? 1 : 0,
