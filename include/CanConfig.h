@@ -57,13 +57,14 @@
 #define METASENSE_LEAF_11A_TEMPLATE_M3_B7 0x61U
 
 // Telemetry Configuration: a single WebSocket JSON message (one common
-// tier, all fields) is sent at this cadence, but only when
-// AsyncWebSocket::availableForWriteAll() confirms every client's send
-// queue has room -- if the queue is still backed up the tick is skipped
-// entirely and retried on the next network task iteration, rather than
-// firing blindly on a timer and risking a WS_MAX_QUEUED_MESSAGES overflow
-// (which forces the library to close the connection). See notifyClients()
-// in Input.cpp.
+// tier, all fields, no per-field change-detection) is sent to every
+// connected client at this cadence. Sends are per-client, not a single
+// gated broadcast, and are not pre-checked against queue state: a
+// transiently slow client just queues a couple of extra messages and
+// catches up, while a genuinely stuck client (queue never draining) hits
+// WS_MAX_QUEUED_MESSAGES and gets closed by the library -- which is what
+// makes the browser's WebSocket reconnect automatically. See
+// notifyClients() in Input.cpp.
 #define METASENSE_WS_FAST_PERIOD_MS 16
 
 // Simulation Feedback (required by code)
