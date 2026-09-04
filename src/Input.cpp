@@ -2405,13 +2405,16 @@ void notifyClients(const MetaSense::Telemetry &data, bool isRecording)
     }
 
     // Send per-client rather than a single broadcast gated on every
-    // client being ready: one slow/backgrounded browser tab's queue
-    // backing up must not stall updates for every other connected client.
-    // Skip only the individual client(s) whose queue is still full; each
-    // message is fully self-contained (see note above), so a client that
-    // misses a tick just catches up on the next one.
+    // client being ready: one slow/backgrounded browser tab must not
+    // stall updates for every other connected client. Deliberately do
+    // NOT pre-check queueIsFull() here -- if a client's queue is
+    // genuinely stuck (never draining), attempting the send is what lets
+    // the library's own overflow handling detect it and close that
+    // client, which is what makes the browser reconnect. Skipping the
+    // send pre-emptively would silently strand that client forever
+    // (still "connected", never sent to again, no error, no reconnect).
     for (auto& client : wsock.getClients()) {
-        if (client.status() == WS_CONNECTED && !client.queueIsFull()) {
+        if (client.status() == WS_CONNECTED) {
             client.text(jsonBuffer, static_cast<size_t>(pos));
         }
     }
