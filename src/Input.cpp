@@ -233,8 +233,6 @@ float computeVoltageBrakeTorque(float invVoltageV, float idleTorqueNm, float max
 }
 
 #define METASENSE_LEAF_VCM_DIAGNOSTICS 0
-#define METASENSE_LEAF_120_CMD_BASE_SLOPE 0.0300f
-#define METASENSE_LEAF_120_CMD_BASE_OFFSET_NM 0.000f
 #define METASENSE_LEAF_120_TX_COMMIT_ENABLED 0
 
 // Allow scheduler jitter from WiFi/web/FS tasks without tripping a false VCM fault.
@@ -510,38 +508,6 @@ bool is1daWireCrcTrustedForFallback(const MetaSense::CANBus::Stats& canStats, ui
     }
 
     return s_crcTrustLatched;
-}
-
-struct Leaf120CommandDecode {
-    uint16_t torqueDemandRawBe = 0U;
-    int16_t torqueDemandSignedBe = 0;
-    float torqueDemandNmBase = 0.0f;
-    uint8_t unknown120_2 = 0U;
-    uint8_t crc120 = 0U;
-};
-
-Leaf120CommandDecode decodeLeaf120Command(const uint8_t* data, uint8_t len)
-{
-    Leaf120CommandDecode decoded;
-    if (data == nullptr || len == 0U) {
-        return decoded;
-    }
-
-    if (len >= 2U) {
-        decoded.torqueDemandRawBe = (static_cast<uint16_t>(data[0]) << 8) |
-                                    static_cast<uint16_t>(data[1]);
-        decoded.torqueDemandSignedBe = static_cast<int16_t>(decoded.torqueDemandRawBe);
-        decoded.torqueDemandNmBase = METASENSE_LEAF_120_CMD_BASE_OFFSET_NM +
-                                     (METASENSE_LEAF_120_CMD_BASE_SLOPE * static_cast<float>(decoded.torqueDemandSignedBe));
-    }
-    if (len >= 3U) {
-        decoded.unknown120_2 = data[2];
-    }
-    if (len >= 4U) {
-        decoded.crc120 = data[3];
-    }
-
-    return decoded;
 }
 
 uint32_t extractIntelUnsigned(const uint8_t* data, uint8_t len, uint8_t startBit, uint8_t bitLen)
