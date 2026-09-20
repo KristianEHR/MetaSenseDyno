@@ -1,0 +1,36 @@
+	//DynoModbus map 18-09-2026/KE
+
+    // Legacy/meta block: registers 0-9
+    server.holdingRegisterWrite(0, kLegacyFwMajor);
+    server.holdingRegisterWrite(1, kLegacyFwMinor);
+    server.holdingRegisterWrite(2, kStableMapVersion);
+    server.holdingRegisterWrite(3, kLegacyPublishPeriodMs);
+    server.holdingRegisterWrite(4, toRegisterValueSigned(telemetry.energyMJ, 100.0f));
+    // Compatibility mirror for legacy clients polling low addresses.
+    server.holdingRegisterWrite(5, toRegisterValueSigned(telemetry.throttlePercent, 10.0f));
+    server.holdingRegisterWrite(6, toRegisterValueSigned(telemetry.rpmTarget));
+    server.holdingRegisterWrite(7, toRegisterValueSigned(MetaSense::Input::currentKpLive(), 10000.0f));
+    server.holdingRegisterWrite(8, toRegisterValueSigned(MetaSense::Settings::ki, 10000.0f));
+    server.holdingRegisterWrite(9, toRegisterValueSigned(egtCompatC(telemetry), 10.0f));
+
+    // Live dyno data: registers 10-29
+    server.holdingRegisterWrite(10, toRegisterValueSigned(telemetry.rpm));
+    server.holdingRegisterWrite(11, toRegisterValueSigned(telemetry.drumRpm));
+    server.holdingRegisterWrite(12, toRegisterValueSigned(telemetry.loadKg, 10.0f));
+    server.holdingRegisterWrite(13, toRegisterValueSigned(telemetry.torqueNm, 10.0f));
+    server.holdingRegisterWrite(14, toRegisterValueSigned(telemetry.brakeTorqueNm, 10.0f));
+    server.holdingRegisterWrite(15, toRegisterValueSigned(telemetry.energyMJ, 100.0f));
+    server.holdingRegisterWrite(16, toRegisterValueSigned(telemetry.airDensity, 1000.0f));
+    server.holdingRegisterWrite(17, toRegisterValueSigned(telemetry.ambientC, 10.0f));
+    server.holdingRegisterWrite(18, toRegisterValueSigned(telemetry.pressureHpa, 10.0f));
+    server.holdingRegisterWrite(19, toRegisterValueSigned(telemetry.egtHotC, 10.0f));
+    server.holdingRegisterWrite(20, toRegisterValueSigned(telemetry.egtAmbientC, 10.0f));
+    server.holdingRegisterWrite(21, toRegisterValueSigned(telemetry.peakTorque, 10.0f));
+    server.holdingRegisterWrite(22, toRegisterValueSigned(telemetry.peakTorque_RPM));
+    server.holdingRegisterWrite(23, toRegisterValueSigned(telemetry.maxRpm));
+    server.holdingRegisterWrite(24, toRegisterValueSigned(telemetry.maxTorqueNm, 10.0f));
+    server.holdingRegisterWrite(25, toRegisterValueSigned(telemetry.rpmTarget));
+    server.holdingRegisterWrite(26, toRegisterValueSigned(telemetry.kw, 100.0f));
+    server.holdingRegisterWrite(27, toRegisterValueSigned(telemetry.humidity, 10.0f));
+    server.holdingRegisterWrite(28, toRegisterValueSigned(telemetry.eTorque, 10.0f));
+    server.holdingRegisterWrite(29, telemetryStatusWord(telemetry));
