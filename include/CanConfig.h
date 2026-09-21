@@ -65,7 +65,7 @@
 // WS_MAX_QUEUED_MESSAGES and gets closed by the library -- which is what
 // makes the browser's WebSocket reconnect automatically. See
 // notifyClients() in Input.cpp.
-#define METASENSE_WS_FAST_PERIOD_MS 16
+#define METASENSE_WS_FAST_PERIOD_MS 33
 
 // Simulation Feedback (required by code)
 #define METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS 0

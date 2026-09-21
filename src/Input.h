@@ -6,6 +6,7 @@ namespace MetaSense::Input {
     void tareMainGui();
     void tare();
     bool requestTare();
+    void setZeroOffset(float offset);
     void setCalibrationFactor(float factor);
     bool calibrateWithKnownWeight(float knownWeightKg, float& outFactor);
     bool requestCalibrationWithKnownWeight(float knownWeightKg);

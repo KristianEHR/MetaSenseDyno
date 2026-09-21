@@ -79,10 +79,34 @@ void loop()
 {
     // Send ping to all connected clients to keep connections alive
     static uint32_t lastPingMs = 0;
+    static uint32_t lastDiagnosticsMs = 0;
     const uint32_t now = millis();
     if (now - lastPingMs >= 5000U) {  // Ping every 5 seconds
         lastPingMs = now;
         ws.pingAll();
+    }
+    
+    // Diagnostics: monitor client buffer health every 10 seconds to preempt disconnections
+    if (now - lastDiagnosticsMs >= 10000U) {
+        lastDiagnosticsMs = now;
+        size_t connectedCount = 0;
+        size_t warningCount = 0;
+        for (auto &client : ws.getClients()) {
+            if (client.status() == WS_CONNECTED) {
+                connectedCount++;
+                // Check if client's message queue is approaching limits
+                // ESPAsyncWebServer's default queue can be small; high queue usage indicates
+                // browser may not be keeping pace with 50ms telemetry rate
+                size_t queueLen = client.queueLen();
+                if (queueLen > 3) {  // Warn if 3+ messages queued (potential bottleneck)
+                    warningCount++;
+                }
+            }
+        }
+        if (connectedCount > 0 && warningCount > 0) {
+            Serial.printf("[WS] Diagnostics: %u connected, %u clients with queue backlog (3+ msgs queued)\n",
+                         connectedCount, warningCount);
+        }
     }
     
     ws.cleanupClients();

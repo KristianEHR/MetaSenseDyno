@@ -164,13 +164,25 @@ bool applyProfilePayload(const String& payload)
         return false;
     }
 
+    if (!profile["calZero"].isNull()) {
+        const float zero = profile["calZero"].as<float>();
+        if (isfinite(zero)) {
+            MetaSense::Input::setZeroOffset(zero);
+            calibrationZero = zero;
+        }
+    }
+
     if (!profile["calFactor"].isNull()) {
         const float factor = profile["calFactor"].as<float>();
         if (factor > 0.0f) {
             MetaSense::Input::setCalibrationFactor(factor);
             calibrationFactor = factor;
-            MetaSense::RunStorage::saveCalibration();
         }
+    }
+
+    // Save calibration only after both zero and factor are applied
+    if (!profile["calZero"].isNull() || !profile["calFactor"].isNull()) {
+        MetaSense::RunStorage::saveCalibration();
     }
 
     if (!profile["maxRPM"].isNull()) MetaSense::Settings::maxRPM = profile["maxRPM"].as<float>();
@@ -872,6 +884,13 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
             flag.toLowerCase();
             MetaSense::Settings::leafSimFeedbackEnabled =
                 (flag == "1" || flag == "true" || flag == "on" || flag == "yes");
+        } else if (key == "leaf1d4TorqueMode") {
+            String mode = val;
+            mode.trim();
+            mode.toLowerCase();
+            const bool manualMode = (mode == "manual" || mode == "1");
+            MetaSense::Input::setLeafManualTorqueMode(manualMode);
+            persistSettings = false;  // Don't persist to NVS (runtime mode toggle)
         } else if (key == "pulsesPerRev") {
             MetaSense::Settings::pulsesPerRev = (fval > 0.0f) ? fval : MetaSense::Settings::pulsesPerRev;
         } else if (key == "pulsesPerRevDrum") {

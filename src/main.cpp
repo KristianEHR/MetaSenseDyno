@@ -27,296 +27,337 @@
 
 #define METASENSE_VCU_SIM_MODE 0
 
-const char* ssid     = "5djnmv47";
-const char* password = "Niser0201";
+const char *ssid = "5djnmv47";
+const char *password = "Niser0201";
 
-namespace {
- 
-MetaSense::ModbusPublisher modbusPublisher;
-MetaSense::MetaSenseDynoVCU dynoVcu;
-AsyncWebServer webServer(80);
-bool otaStarted = false;
-bool webServerStarted = false;
-TaskHandle_t controlTaskHandle = nullptr;
-TaskHandle_t networkTaskHandle = nullptr;
-TaskHandle_t modbusTaskHandle = nullptr;
+namespace
+{
 
-constexpr const char* kOtaHostname = "dyno-controller";
-constexpr const char* kOtaPassword = "metasense";
-constexpr uint32_t kI2cClockHz = 50000;
-constexpr uint16_t kI2cTimeoutMs = 50;
+    MetaSense::ModbusPublisher modbusPublisher;
+    MetaSense::MetaSenseDynoVCU dynoVcu;
+    AsyncWebServer webServer(80);
+    bool otaStarted = false;
+    bool webServerStarted = false;
+    TaskHandle_t controlTaskHandle = nullptr;
+    TaskHandle_t networkTaskHandle = nullptr;
+    TaskHandle_t modbusTaskHandle = nullptr;
+
+    constexpr const char *kOtaHostname = "dyno-controller";
+    constexpr const char *kOtaPassword = "metasense";
+    constexpr uint32_t kI2cClockHz = 50000;
+    constexpr uint16_t kI2cTimeoutMs = 50;
 #define METASENSE_CONTROL_PERIOD_MS 10
-constexpr uint32_t kControlPeriodMs = METASENSE_CONTROL_PERIOD_MS;
-constexpr uint32_t kModbusPeriodMs = 50;
-// METASENSE_HEARTBEAT_PERIOD_MS is defined in CanConfig.h (15000ms).
-constexpr uint32_t kHeartbeatPeriodMs = METASENSE_HEARTBEAT_PERIOD_MS;
-constexpr UBaseType_t kControlTaskPriority = 5;
-constexpr UBaseType_t kNetworkTaskPriority = 3;
-constexpr UBaseType_t kModbusTaskPriority = 1;
+    constexpr uint32_t kControlPeriodMs = METASENSE_CONTROL_PERIOD_MS;
+    constexpr uint32_t kModbusPeriodMs = 50;
+    // METASENSE_HEARTBEAT_PERIOD_MS is defined in CanConfig.h (15000ms).
+    constexpr uint32_t kHeartbeatPeriodMs = METASENSE_HEARTBEAT_PERIOD_MS;
+    constexpr UBaseType_t kControlTaskPriority = 5;
+    constexpr UBaseType_t kNetworkTaskPriority = 3;
+    constexpr UBaseType_t kModbusTaskPriority = 1;
 
-void processSerialMonitorCommand(Stream& stream, String& buffer)
-{
-    while (stream.available() > 0) {
-        const int raw = stream.read();
-        if (raw < 0) {
-            break;
-        }
-
-        const char ch = static_cast<char>(raw);
-        if (ch == '\r') {
-            continue;
-        }
-
-        if (ch != '\n') {
-            if (buffer.length() < 64U) {
-                buffer += ch;
+    void processSerialMonitorCommand(Stream &stream, String &buffer)
+    {
+        while (stream.available() > 0)
+        {
+            const int raw = stream.read();
+            if (raw < 0)
+            {
+                break;
             }
-            continue;
-        }
 
-        buffer.trim();
-        buffer.toUpperCase();
-        if (buffer.isEmpty()) {
-            continue;
-        }
+            const char ch = static_cast<char>(raw);
+            if (ch == '\r')
+            {
+                continue;
+            }
 
-        if (buffer == "HELP") {
-            stream.println("[SERIAL-CMD] No debug commands currently enabled");
-        } else {
-            stream.print("[SERIAL-CMD] unknown: ");
-            stream.println(buffer);
-        }
+            if (ch != '\n')
+            {
+                if (buffer.length() < 64U)
+                {
+                    buffer += ch;
+                }
+                continue;
+            }
 
-        buffer = "";
+            buffer.trim();
+            buffer.toUpperCase();
+            if (buffer.isEmpty())
+            {
+                continue;
+            }
+
+            if (buffer == "HELP")
+            {
+                stream.println("[SERIAL-CMD] No debug commands currently enabled");
+            }
+            else
+            {
+                stream.print("[SERIAL-CMD] unknown: ");
+                stream.println(buffer);
+            }
+
+            buffer = "";
+        }
     }
-}
 
-struct TaskRuntimeStats {
-    volatile uint32_t lastUs = 0;
-    volatile uint32_t maxUs = 0;
-    volatile uint32_t emaUs = 0;
-    volatile uint32_t loops = 0;
-    volatile uint32_t overruns = 0;
-};
+    struct TaskRuntimeStats
+    {
+        volatile uint32_t lastUs = 0;
+        volatile uint32_t maxUs = 0;
+        volatile uint32_t emaUs = 0;
+        volatile uint32_t loops = 0;
+        volatile uint32_t overruns = 0;
+    };
 
-TaskRuntimeStats controlTaskStats;
-TaskRuntimeStats networkTaskStats;
-TaskRuntimeStats modbusTaskStats;
+    TaskRuntimeStats controlTaskStats;
+    TaskRuntimeStats networkTaskStats;
+    TaskRuntimeStats modbusTaskStats;
 
-void updateBenchVcuSimInputs(uint32_t nowMs,
-                             bool prechargeCmd,
-                             bool rPlusCmd,
-                             bool& inverter12vOn,
-                             float& hvVoltage)
-{
-    static bool initialized = false;
-    static uint32_t lastMs = 0;
-    static bool simInv12v = false;
-    static float simHvVoltage = 0.0f;
+    void updateBenchVcuSimInputs(uint32_t nowMs,
+                                 bool prechargeCmd,
+                                 bool rPlusCmd,
+                                 bool &inverter12vOn,
+                                 float &hvVoltage)
+    {
+        static bool initialized = false;
+        static uint32_t lastMs = 0;
+        static bool simInv12v = false;
+        static float simHvVoltage = 0.0f;
 
-    if (!initialized) {
-        initialized = true;
+        if (!initialized)
+        {
+            initialized = true;
+            lastMs = nowMs;
+            simInv12v = false;
+            simHvVoltage = 0.0f;
+        }
+
+        uint32_t deltaMs = nowMs - lastMs;
+        if (deltaMs > 250U)
+        {
+            deltaMs = 250U;
+        }
         lastMs = nowMs;
-        simInv12v = false;
-        simHvVoltage = 0.0f;
+
+        const float dt = static_cast<float>(deltaMs) / 1000.0f;
+
+        if (nowMs > 1200U)
+        {
+            simInv12v = true;
+        }
+
+        if (!simInv12v)
+        {
+            simHvVoltage = 0.0f;
+        }
+        else if (prechargeCmd && !rPlusCmd)
+        {
+            simHvVoltage += 220.0f * dt;
+        }
+        else if (rPlusCmd)
+        {
+            simHvVoltage += 80.0f * dt;
+        }
+        else
+        {
+            simHvVoltage -= 140.0f * dt;
+        }
+
+        if (simHvVoltage < 0.0f)
+        {
+            simHvVoltage = 0.0f;
+        }
+        if (simHvVoltage > 360.0f)
+        {
+            simHvVoltage = 360.0f;
+        }
+
+        inverter12vOn = simInv12v;
+        hvVoltage = simHvVoltage;
     }
 
-    uint32_t deltaMs = nowMs - lastMs;
-    if (deltaMs > 250U) {
-        deltaMs = 250U;
-    }
-    lastMs = nowMs;
-
-    const float dt = static_cast<float>(deltaMs) / 1000.0f;
-
-    if (nowMs > 1200U) {
-        simInv12v = true;
-    }
-
-    if (!simInv12v) {
-        simHvVoltage = 0.0f;
-    } else if (prechargeCmd && !rPlusCmd) {
-        simHvVoltage += 220.0f * dt;
-    } else if (rPlusCmd) {
-        simHvVoltage += 80.0f * dt;
-    } else {
-        simHvVoltage -= 140.0f * dt;
-    }
-
-    if (simHvVoltage < 0.0f) {
-        simHvVoltage = 0.0f;
-    }
-    if (simHvVoltage > 360.0f) {
-        simHvVoltage = 360.0f;
+    void recordTaskRuntime(TaskRuntimeStats &stats, uint32_t elapsedUs, uint32_t periodUs)
+    {
+        stats.lastUs = elapsedUs;
+        if (elapsedUs > stats.maxUs)
+        {
+            stats.maxUs = elapsedUs;
+        }
+        if (stats.emaUs == 0)
+        {
+            stats.emaUs = elapsedUs;
+        }
+        else
+        {
+            stats.emaUs = (stats.emaUs * 7U + elapsedUs) / 8U;
+        }
+        ++stats.loops;
+        if (elapsedUs > periodUs)
+        {
+            ++stats.overruns;
+        }
     }
 
-    inverter12vOn = simInv12v;
-    hvVoltage = simHvVoltage;
-}
-
-void recordTaskRuntime(TaskRuntimeStats& stats, uint32_t elapsedUs, uint32_t periodUs)
-{
-    stats.lastUs = elapsedUs;
-    if (elapsedUs > stats.maxUs) {
-        stats.maxUs = elapsedUs;
+    void resetMaxStats()
+    {
+        controlTaskStats.maxUs = 0;
+        networkTaskStats.maxUs = 0;
+        modbusTaskStats.maxUs = 0;
+        MetaSense::Input::resetLoadCellSamplerMaxRuntime();
     }
-    if (stats.emaUs == 0) {
-        stats.emaUs = elapsedUs;
-    } else {
-        stats.emaUs = (stats.emaUs * 7U + elapsedUs) / 8U;
+
+    bool wifiCredentialsConfigured();
+
+    uint32_t heartbeatTimestamp()
+    {
+        time_t now = time(nullptr);
+        return (now > 1000000000L) ? (uint32_t)now : (uint32_t)(millis() / 1000);
     }
-    ++stats.loops;
-    if (elapsedUs > periodUs) {
-        ++stats.overruns;
-    }
-}
 
-void resetMaxStats()
-{
-    controlTaskStats.maxUs = 0;
-    networkTaskStats.maxUs = 0;
-    modbusTaskStats.maxUs = 0;
-    MetaSense::Input::resetLoadCellSamplerMaxRuntime();
-}
-
-bool wifiCredentialsConfigured();
-
-uint32_t heartbeatTimestamp()
-{
-    time_t now = time(nullptr);
-    return (now > 1000000000L) ? (uint32_t)now : (uint32_t)(millis() / 1000);
-}
-
-void scanI2cBus()
-{
-    uint8_t found = 0;
-    if (MetaSense::I2cBus::take(pdMS_TO_TICKS(50))) {
-        for (uint8_t addr = 0x08; addr <= 0x77; ++addr) {
-            Wire.beginTransmission(addr);
-            const uint8_t err = Wire.endTransmission();
-            if (err == 0) {
-                ++found;
+    void scanI2cBus()
+    {
+        uint8_t found = 0;
+        if (MetaSense::I2cBus::take(pdMS_TO_TICKS(50)))
+        {
+            for (uint8_t addr = 0x08; addr <= 0x77; ++addr)
+            {
+                Wire.beginTransmission(addr);
+                const uint8_t err = Wire.endTransmission();
+                if (err == 0)
+                {
+                    ++found;
+                }
             }
-        }
-        MetaSense::I2cBus::give();
-    }
-
-    if (found == 0) {
-        Serial0.println("[BOOT] I2C scan: no devices found");
-    } else {
-        Serial0.printf("[BOOT] I2C scan complete: %u device(s)\n", found);
-    }
-}
-
-const char* wifiStatusToString(wl_status_t status)
-{
-    switch (status) {
-    case WL_NO_SHIELD: return "WL_NO_SHIELD";
-    case WL_IDLE_STATUS: return "WL_IDLE_STATUS";
-    case WL_NO_SSID_AVAIL: return "WL_NO_SSID_AVAIL";
-    case WL_SCAN_COMPLETED: return "WL_SCAN_COMPLETED";
-    case WL_CONNECTED: return "WL_CONNECTED";
-    case WL_CONNECT_FAILED: return "WL_CONNECT_FAILED";
-    case WL_CONNECTION_LOST: return "WL_CONNECTION_LOST";
-    case WL_DISCONNECTED: return "WL_DISCONNECTED";
-    default: return "WL_UNKNOWN";
-    }
-}
-
-void logLine(const char* message)
-{
-    Serial.println(message);
-    Serial0.println(message);
-    // Also send to telnet clients
-    MetaSense::TelnetSerialBridge::telnetSerialBridge.writeToClients(
-        (const uint8_t*)message, strlen(message));
-    MetaSense::TelnetSerialBridge::telnetSerialBridge.writeToClients(
-        (const uint8_t*)"\r\n", 2);
-}
-
-void logWifiConnecting(const char* targetSsid)
-{
-    Serial0.printf("[BOOT] WiFi connecting to SSID '%s'\n", targetSsid);
-}
-
-void logWifiConnected()
-{
-    const String ip = WiFi.localIP().toString();
-    Serial0.printf("[BOOT] WiFi connected, IP: %s\n", ip.c_str());
-    Serial0.printf("[BOOT] WiFi MAC: %s\n", WiFi.macAddress().c_str());
-    Serial0.println("[BOOT] Web UI: http://dyno-controller.local/");
-}
-
-bool setupWebServer()
-{
-    if (!LittleFS.begin(false, "/littlefs", 10, "littlefs")) {
-        logLine("[BOOT] LittleFS mount failed (no auto-format)");
-        logLine("[BOOT] Preserve FS contents; run Upload Filesystem manually if needed");
-        return false;
-    }
-
-    auto sendHtmlNoCache = [](AsyncWebServerRequest* request, const char* path) {
-        if (!LittleFS.exists(path)) {
-            const String body = String("<html><body><h1>MetaSense DYNO</h1><p>UI file missing: ") +
-                                path +
-                                "</p><p>LittleFS was likely reformatted. Upload the filesystem image to restore the web UI.</p>"
-                                "</body></html>";
-            AsyncWebServerResponse* fallback = request->beginResponse(503, "text/html", body);
-            fallback->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-            fallback->addHeader("Pragma", "no-cache");
-            fallback->addHeader("Expires", "0");
-            request->send(fallback);
-            return;
+            MetaSense::I2cBus::give();
         }
 
-        AsyncWebServerResponse* response = request->beginResponse(LittleFS, path, "text/html");
-        if (response == nullptr) {
-            request->send(500, "text/plain", "failed to create file response");
-            return;
+        if (found == 0)
+        {
+            Serial0.println("[BOOT] I2C scan: no devices found");
         }
-        response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-        response->addHeader("Pragma", "no-cache");
-        response->addHeader("Expires", "0");
-        request->send(response);
-    };
+        else
+        {
+            Serial0.printf("[BOOT] I2C scan complete: %u device(s)\n", found);
+        }
+    }
 
-    webServer.on("/", HTTP_GET, [sendHtmlNoCache](AsyncWebServerRequest* request) {
-        sendHtmlNoCache(request, "/index.html");
-    });
-    webServer.on("/index.html", HTTP_GET, [sendHtmlNoCache](AsyncWebServerRequest* request) {
-        sendHtmlNoCache(request, "/index.html");
-    });
-    webServer.on("/index1.html", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->redirect("/index.html");
-    });
-    webServer.on("/index1", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->redirect("/index.html");
-    });
-    webServer.on("/index", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->redirect("/index.html");
-    });
-    webServer.on("/settings", HTTP_GET, [sendHtmlNoCache](AsyncWebServerRequest* request) {
-        sendHtmlNoCache(request, "/settings.html");
-    });
-    webServer.on("/trend", HTTP_GET, [sendHtmlNoCache](AsyncWebServerRequest* request) {
-        sendHtmlNoCache(request, "/trend.html");
-    });
-    webServer.on("/update", HTTP_GET, [sendHtmlNoCache](AsyncWebServerRequest* request) {
-        sendHtmlNoCache(request, "/update.html");
-    });
-    webServer.on("/update_fs", HTTP_GET, [sendHtmlNoCache](AsyncWebServerRequest* request) {
-        sendHtmlNoCache(request, "/update_fs.html");
-    });
+    const char *wifiStatusToString(wl_status_t status)
+    {
+        switch (status)
+        {
+        case WL_NO_SHIELD:
+            return "WL_NO_SHIELD";
+        case WL_IDLE_STATUS:
+            return "WL_IDLE_STATUS";
+        case WL_NO_SSID_AVAIL:
+            return "WL_NO_SSID_AVAIL";
+        case WL_SCAN_COMPLETED:
+            return "WL_SCAN_COMPLETED";
+        case WL_CONNECTED:
+            return "WL_CONNECTED";
+        case WL_CONNECT_FAILED:
+            return "WL_CONNECT_FAILED";
+        case WL_CONNECTION_LOST:
+            return "WL_CONNECTION_LOST";
+        case WL_DISCONNECTED:
+            return "WL_DISCONNECTED";
+        default:
+            return "WL_UNKNOWN";
+        }
+    }
 
-    auto sendJsonNoCache = [](AsyncWebServerRequest* request, int code, const String& body) {
-        AsyncWebServerResponse* response = request->beginResponse(code, "application/json", body);
-        response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-        response->addHeader("Pragma", "no-cache");
-        response->addHeader("Expires", "0");
-        request->send(response);
-    };
+    void logLine(const char *message)
+    {
+        Serial.println(message);
+        Serial0.println(message);
+        // Also send to telnet clients
+        MetaSense::TelnetSerialBridge::telnetSerialBridge.writeToClients(
+            (const uint8_t *)message, strlen(message));
+        MetaSense::TelnetSerialBridge::telnetSerialBridge.writeToClients(
+            (const uint8_t *)"\r\n", 2);
+    }
 
-    webServer.on("/api/fs/selftest", HTTP_GET, [sendJsonNoCache](AsyncWebServerRequest* request) {
+    void logWifiConnecting(const char *targetSsid)
+    {
+        Serial0.printf("[BOOT] WiFi connecting to SSID '%s'\n", targetSsid);
+    }
+
+    void logWifiConnected()
+    {
+        const String ip = WiFi.localIP().toString();
+        Serial0.printf("[BOOT] WiFi connected, IP: %s\n", ip.c_str());
+        Serial0.printf("[BOOT] WiFi MAC: %s\n", WiFi.macAddress().c_str());
+        Serial0.println("[BOOT] Web UI: http://dyno-controller.local/");
+    }
+
+    bool setupWebServer()
+    {
+        if (!LittleFS.begin(false, "/littlefs", 10, "littlefs"))
+        {
+            logLine("[BOOT] LittleFS mount failed (no auto-format)");
+            logLine("[BOOT] Preserve FS contents; run Upload Filesystem manually if needed");
+            return false;
+        }
+
+        auto sendHtmlNoCache = [](AsyncWebServerRequest *request, const char *path)
+        {
+            if (!LittleFS.exists(path))
+            {
+                const String body = String("<html><body><h1>MetaSense DYNO</h1><p>UI file missing: ") +
+                                    path +
+                                    "</p><p>LittleFS was likely reformatted. Upload the filesystem image to restore the web UI.</p>"
+                                    "</body></html>";
+                AsyncWebServerResponse *fallback = request->beginResponse(503, "text/html", body);
+                fallback->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+                fallback->addHeader("Pragma", "no-cache");
+                fallback->addHeader("Expires", "0");
+                request->send(fallback);
+                return;
+            }
+
+            AsyncWebServerResponse *response = request->beginResponse(LittleFS, path, "text/html");
+            if (response == nullptr)
+            {
+                request->send(500, "text/plain", "failed to create file response");
+                return;
+            }
+            response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+            response->addHeader("Pragma", "no-cache");
+            response->addHeader("Expires", "0");
+            request->send(response);
+        };
+
+        webServer.on("/", HTTP_GET, [sendHtmlNoCache](AsyncWebServerRequest *request)
+                     { sendHtmlNoCache(request, "/index.html"); });
+        webServer.on("/index.html", HTTP_GET, [sendHtmlNoCache](AsyncWebServerRequest *request)
+                     { sendHtmlNoCache(request, "/index.html"); });
+        webServer.on("/index1.html", HTTP_GET, [](AsyncWebServerRequest *request)
+                     { request->redirect("/index.html"); });
+        webServer.on("/index1", HTTP_GET, [](AsyncWebServerRequest *request)
+                     { request->redirect("/index.html"); });
+        webServer.on("/index", HTTP_GET, [](AsyncWebServerRequest *request)
+                     { request->redirect("/index.html"); });
+        webServer.on("/settings", HTTP_GET, [sendHtmlNoCache](AsyncWebServerRequest *request)
+                     { sendHtmlNoCache(request, "/settings.html"); });
+        webServer.on("/trend", HTTP_GET, [sendHtmlNoCache](AsyncWebServerRequest *request)
+                     { sendHtmlNoCache(request, "/trend.html"); });
+        webServer.on("/update", HTTP_GET, [sendHtmlNoCache](AsyncWebServerRequest *request)
+                     { sendHtmlNoCache(request, "/update.html"); });
+        webServer.on("/update_fs", HTTP_GET, [sendHtmlNoCache](AsyncWebServerRequest *request)
+                     { sendHtmlNoCache(request, "/update_fs.html"); });
+
+        auto sendJsonNoCache = [](AsyncWebServerRequest *request, int code, const String &body)
+        {
+            AsyncWebServerResponse *response = request->beginResponse(code, "application/json", body);
+            response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+            response->addHeader("Pragma", "no-cache");
+            response->addHeader("Expires", "0");
+            request->send(response);
+        };
+
+        webServer.on("/api/fs/selftest", HTTP_GET, [sendJsonNoCache](AsyncWebServerRequest *request)
+                     {
         const String path = "/fs_selftest.csv";
         const String expected = "timestamp_us,source,raw_value,filtered_value\n1000,selftest,1.234,1.200\n2000,selftest,2.345,2.300\n";
 
@@ -356,36 +397,39 @@ bool setupWebServer()
             else body += c;
         }
         body += "\"}";
-        sendJsonNoCache(request, 200, body);
-    });
+        sendJsonNoCache(request, 200, body); });
 
-    auto startFsProbeHandler = [sendJsonNoCache](AsyncWebServerRequest* request) {
-        uint32_t durationMs = 10000;
-        if (request->hasParam("duration_ms")) {
-            const uint32_t requested = static_cast<uint32_t>(request->getParam("duration_ms")->value().toInt());
-            if (requested > 0) {
-                durationMs = requested;
+        auto startFsProbeHandler = [sendJsonNoCache](AsyncWebServerRequest *request)
+        {
+            uint32_t durationMs = 10000;
+            if (request->hasParam("duration_ms"))
+            {
+                const uint32_t requested = static_cast<uint32_t>(request->getParam("duration_ms")->value().toInt());
+                if (requested > 0)
+                {
+                    durationMs = requested;
+                }
             }
-        }
 
-        String filePath;
-        if (!MetaSense::RunStorage::startFsLiveProbe(durationMs, filePath)) {
-            sendJsonNoCache(request, 409, "{\"ok\":false,\"msg\":\"probe already active or start failed\"}");
-            return;
-        }
+            String filePath;
+            if (!MetaSense::RunStorage::startFsLiveProbe(durationMs, filePath))
+            {
+                sendJsonNoCache(request, 409, "{\"ok\":false,\"msg\":\"probe already active or start failed\"}");
+                return;
+            }
 
-        sendJsonNoCache(request,
-                        200,
-                        "{\"ok\":true,\"msg\":\"probe started\",\"file\":\"" + filePath + "\",\"durationMs\":" + String(durationMs) + "}");
-    };
-    webServer.on("/api/fs/probe/start", HTTP_GET, startFsProbeHandler);
-    webServer.on("/api/fs/probe/start", HTTP_POST, startFsProbeHandler);
+            sendJsonNoCache(request,
+                            200,
+                            "{\"ok\":true,\"msg\":\"probe started\",\"file\":\"" + filePath + "\",\"durationMs\":" + String(durationMs) + "}");
+        };
+        webServer.on("/api/fs/probe/start", HTTP_GET, startFsProbeHandler);
+        webServer.on("/api/fs/probe/start", HTTP_POST, startFsProbeHandler);
 
-    webServer.on("/api/fs/probe/state", HTTP_GET, [sendJsonNoCache](AsyncWebServerRequest* request) {
-        sendJsonNoCache(request, 200, MetaSense::RunStorage::fsLiveProbeStateJson());
-    });
+        webServer.on("/api/fs/probe/state", HTTP_GET, [sendJsonNoCache](AsyncWebServerRequest *request)
+                     { sendJsonNoCache(request, 200, MetaSense::RunStorage::fsLiveProbeStateJson()); });
 
-    webServer.on("/api/fs/probe/read", HTTP_GET, [](AsyncWebServerRequest* request) {
+        webServer.on("/api/fs/probe/read", HTTP_GET, [](AsyncWebServerRequest *request)
+                     {
         const String text = MetaSense::RunStorage::fsLiveProbeReadText();
         if (text.isEmpty()) {
             request->send(404, "text/plain", "no probe file available");
@@ -395,103 +439,107 @@ bool setupWebServer()
         response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
         response->addHeader("Pragma", "no-cache");
         response->addHeader("Expires", "0");
-        request->send(response);
-    });
+        request->send(response); });
 
-    webServer.on("/api/fs/probe/verify", HTTP_GET, [sendJsonNoCache](AsyncWebServerRequest* request) {
-        sendJsonNoCache(request, 200, MetaSense::RunStorage::fsLiveProbeVerifyJson());
-    });
+        webServer.on("/api/fs/probe/verify", HTTP_GET, [sendJsonNoCache](AsyncWebServerRequest *request)
+                     { sendJsonNoCache(request, 200, MetaSense::RunStorage::fsLiveProbeVerifyJson()); });
 
-    webServer.serveStatic("/", LittleFS, "/");
-    MetaSense::WebSocketServer::begin(webServer);
-    webServer.begin();
-    logLine("[BOOT] Web server ready on port 80");
-    if (!LittleFS.exists("/index.html")) {
-        logLine("[BOOT] Web UI assets missing from LittleFS; upload filesystem image to restore UI pages");
-    }
-    return true;
-}
-
-void logWifiConfiguration()
-{
-    const bool credsSet = wifiCredentialsConfigured();
-    Serial.println("[BOOT] WiFi config:");
-    Serial0.println("[BOOT] WiFi config:");
-
-    Serial.println("[BOOT]  - Mode: STA");
-    Serial0.println("[BOOT]  - Mode: STA");
-
-    if (credsSet) {
-        Serial.printf("[BOOT]  - SSID: %s\n", ssid);
-        Serial0.printf("[BOOT]  - SSID: %s\n", ssid);
-    } else {
-        logLine("[BOOT]  - SSID: <not configured>");
+        webServer.serveStatic("/", LittleFS, "/");
+        MetaSense::WebSocketServer::begin(webServer);
+        webServer.begin();
+        logLine("[BOOT] Web server ready on port 80");
+        if (!LittleFS.exists("/index.html"))
+        {
+            logLine("[BOOT] Web UI assets missing from LittleFS; upload filesystem image to restore UI pages");
+        }
+        return true;
     }
 
-    Serial.printf("[BOOT]  - OTA hostname: %s\n", kOtaHostname);
-    Serial0.printf("[BOOT]  - OTA hostname: %s\n", kOtaHostname);
+    void logWifiConfiguration()
+    {
+        const bool credsSet = wifiCredentialsConfigured();
+        Serial.println("[BOOT] WiFi config:");
+        Serial0.println("[BOOT] WiFi config:");
 
-    const bool otaAuthConfigured = strlen(kOtaPassword) > 0;
-    Serial.printf("[BOOT]  - OTA auth: %s\n", otaAuthConfigured ? "enabled" : "disabled");
-    Serial0.printf("[BOOT]  - OTA auth: %s\n", otaAuthConfigured ? "enabled" : "disabled");
-}
+        Serial.println("[BOOT]  - Mode: STA");
+        Serial0.println("[BOOT]  - Mode: STA");
 
-void logBuildProfile()
-{
-    Serial.printf("[BOOT] Build profile: vcu_sim=%d\n",
-                  METASENSE_VCU_SIM_MODE != 0 ? 1 : 0);
-    Serial0.printf("[BOOT] Build profile: vcu_sim=%d\n",
-                   METASENSE_VCU_SIM_MODE != 0 ? 1 : 0);
+        if (credsSet)
+        {
+            Serial.printf("[BOOT]  - SSID: %s\n", ssid);
+            Serial0.printf("[BOOT]  - SSID: %s\n", ssid);
+        }
+        else
+        {
+            logLine("[BOOT]  - SSID: <not configured>");
+        }
 
-    Serial.printf("[BOOT] Build profile: leaf_can_rx=%d, leaf_can_tx=%d, can_listen_only=%d, can_bitrate_kbps=%d, can_tx_pin=%d, can_rx_pin=%d, leaf_sim_feedback=%d\n",
-                  METASENSE_LEAF_CAN_RX_ENABLED != 0 ? 1 : 0,
-                  METASENSE_LEAF_CAN_TX_ENABLED != 0 ? 1 : 0,
-                  METASENSE_LEAF_CAN_LISTEN_ONLY != 0 ? 1 : 0,
-                  METASENSE_LEAF_CAN_BITRATE_KBPS,
-                  METASENSE_LEAF_CAN_TX_PIN,
-                  METASENSE_LEAF_CAN_RX_PIN,
-                  METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS != 0 ? 1 : 0);
-    Serial0.printf("[BOOT] Build profile: leaf_can_rx=%d, leaf_can_tx=%d, can_listen_only=%d, can_bitrate_kbps=%d, can_tx_pin=%d, can_rx_pin=%d, leaf_sim_feedback=%d\n",
-                   METASENSE_LEAF_CAN_RX_ENABLED != 0 ? 1 : 0,
-                   METASENSE_LEAF_CAN_TX_ENABLED != 0 ? 1 : 0,
-                   METASENSE_LEAF_CAN_LISTEN_ONLY != 0 ? 1 : 0,
-                   METASENSE_LEAF_CAN_BITRATE_KBPS,
-                   METASENSE_LEAF_CAN_TX_PIN,
-                   METASENSE_LEAF_CAN_RX_PIN,
-                   METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS != 0 ? 1 : 0);
-    Serial.printf("[FW-ID] hb_ms=%lu\n", static_cast<unsigned long>(kHeartbeatPeriodMs));
-    Serial0.printf("[FW-ID] hb_ms=%lu\n", static_cast<unsigned long>(kHeartbeatPeriodMs));
-}
+        Serial.printf("[BOOT]  - OTA hostname: %s\n", kOtaHostname);
+        Serial0.printf("[BOOT]  - OTA hostname: %s\n", kOtaHostname);
 
-bool wifiCredentialsConfigured()
-{
-    return strlen(ssid) > 0 && strcmp(ssid, "YOUR_SSID") != 0;
-}
-
-void setupWifi()
-{
-    if (!wifiCredentialsConfigured()) {
-        logLine("[BOOT] WiFi credentials not configured, OTA disabled");
-        return;
+        const bool otaAuthConfigured = strlen(kOtaPassword) > 0;
+        Serial.printf("[BOOT]  - OTA auth: %s\n", otaAuthConfigured ? "enabled" : "disabled");
+        Serial0.printf("[BOOT]  - OTA auth: %s\n", otaAuthConfigured ? "enabled" : "disabled");
     }
 
-    WiFi.mode(WIFI_STA);
+    void logBuildProfile()
+    {
+        Serial.printf("[BOOT] Build profile: vcu_sim=%d\n",
+                      METASENSE_VCU_SIM_MODE != 0 ? 1 : 0);
+        Serial0.printf("[BOOT] Build profile: vcu_sim=%d\n",
+                       METASENSE_VCU_SIM_MODE != 0 ? 1 : 0);
 
-    // Disable power-save: prevents the radio from sleeping between DTIM beacons,
-    // which is the most common cause of random disconnects on ESP32.
-    WiFi.setSleep(false);
+        Serial.printf("[BOOT] Build profile: leaf_can_rx=%d, leaf_can_tx=%d, can_listen_only=%d, can_bitrate_kbps=%d, can_tx_pin=%d, can_rx_pin=%d, leaf_sim_feedback=%d\n",
+                      METASENSE_LEAF_CAN_RX_ENABLED != 0 ? 1 : 0,
+                      METASENSE_LEAF_CAN_TX_ENABLED != 0 ? 1 : 0,
+                      METASENSE_LEAF_CAN_LISTEN_ONLY != 0 ? 1 : 0,
+                      METASENSE_LEAF_CAN_BITRATE_KBPS,
+                      METASENSE_LEAF_CAN_TX_PIN,
+                      METASENSE_LEAF_CAN_RX_PIN,
+                      METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS != 0 ? 1 : 0);
+        Serial0.printf("[BOOT] Build profile: leaf_can_rx=%d, leaf_can_tx=%d, can_listen_only=%d, can_bitrate_kbps=%d, can_tx_pin=%d, can_rx_pin=%d, leaf_sim_feedback=%d\n",
+                       METASENSE_LEAF_CAN_RX_ENABLED != 0 ? 1 : 0,
+                       METASENSE_LEAF_CAN_TX_ENABLED != 0 ? 1 : 0,
+                       METASENSE_LEAF_CAN_LISTEN_ONLY != 0 ? 1 : 0,
+                       METASENSE_LEAF_CAN_BITRATE_KBPS,
+                       METASENSE_LEAF_CAN_TX_PIN,
+                       METASENSE_LEAF_CAN_RX_PIN,
+                       METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS != 0 ? 1 : 0);
+        Serial.printf("[FW-ID] hb_ms=%lu\n", static_cast<unsigned long>(kHeartbeatPeriodMs));
+        Serial0.printf("[FW-ID] hb_ms=%lu\n", static_cast<unsigned long>(kHeartbeatPeriodMs));
+    }
 
-    // Maximum TX power for best range / stable association.
-    WiFi.setTxPower(WIFI_POWER_19_5dBm);
+    bool wifiCredentialsConfigured()
+    {
+        return strlen(ssid) > 0 && strcmp(ssid, "YOUR_SSID") != 0;
+    }
 
-    // Auto-reconnect on disconnect without rebooting.
-    WiFi.setAutoReconnect(true);
-    WiFi.persistent(false); // don't hammer NVS on every reconnect
-    Serial.println("[WiFi] DHCP mode");
-    Serial0.println("[WiFi] DHCP mode");
+    void setupWifi()
+    {
+        if (!wifiCredentialsConfigured())
+        {
+            logLine("[BOOT] WiFi credentials not configured, OTA disabled");
+            return;
+        }
 
-    // Register disconnect/reconnect event for serial diagnostics.
-    WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
+        WiFi.mode(WIFI_STA);
+
+        // Disable power-save: prevents the radio from sleeping between DTIM beacons,
+        // which is the most common cause of random disconnects on ESP32.
+        WiFi.setSleep(false);
+
+        // Maximum TX power for best range / stable association.
+        WiFi.setTxPower(WIFI_POWER_19_5dBm);
+
+        // Auto-reconnect on disconnect without rebooting.
+        WiFi.setAutoReconnect(true);
+        WiFi.persistent(false); // don't hammer NVS on every reconnect
+        Serial.println("[WiFi] DHCP mode");
+        Serial0.println("[WiFi] DHCP mode");
+
+        // Register disconnect/reconnect event for serial diagnostics.
+        WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info)
+                     {
         switch (event) {
         case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
             Serial.printf("[WiFi] Disconnected, reason: %d — reconnecting...\n",
@@ -515,342 +563,352 @@ void setupWifi()
             break;
         default:
             break;
-        }
-    });
+        } });
 
-    logLine("[BOOT] WiFi config ready; connection will be attempted by network task");
-}
-
-void setupOtaOnceConnected()
-{
-    static uint32_t lastWebServerAttemptMs = 0U;
-
-    if (WiFi.status() != WL_CONNECTED) {
-        return;
+        logLine("[BOOT] WiFi config ready; connection will be attempted by network task");
     }
 
-    // Initialize web server first (before OTA startup)
-    if (!webServerStarted) {
-        const uint32_t nowMs = millis();
-        if (lastWebServerAttemptMs == 0U || (nowMs - lastWebServerAttemptMs) >= 5000U) {
-            lastWebServerAttemptMs = nowMs;
-            webServerStarted = setupWebServer();
-            if (webServerStarted) {
-                logLine("[BOOT] Web server started successfully");
+    void setupOtaOnceConnected()
+    {
+        static uint32_t lastWebServerAttemptMs = 0U;
+
+        if (WiFi.status() != WL_CONNECTED)
+        {
+            return;
+        }
+
+        // Initialize web server first (before OTA startup)
+        if (!webServerStarted)
+        {
+            const uint32_t nowMs = millis();
+            if (lastWebServerAttemptMs == 0U || (nowMs - lastWebServerAttemptMs) >= 5000U)
+            {
+                lastWebServerAttemptMs = nowMs;
+                webServerStarted = setupWebServer();
+                if (webServerStarted)
+                {
+                    logLine("[BOOT] Web server started successfully");
+                }
             }
         }
-    }
 
-    // Start OTA after web server is initialized
-    if (otaStarted) {
-        return;
-    }
+        // Start OTA after web server is initialized
+        if (otaStarted)
+        {
+            return;
+        }
 
-    ArduinoOTA.setHostname(kOtaHostname);
-    ArduinoOTA.setPassword(kOtaPassword);
+        ArduinoOTA.setHostname(kOtaHostname);
+        ArduinoOTA.setPassword(kOtaPassword);
 
-    ArduinoOTA.onStart([]() {
-        logLine("[OTA] Start");
-    });
+        ArduinoOTA.onStart([]()
+                           { logLine("[OTA] Start"); });
 
-    ArduinoOTA.onEnd([]() {
-        logLine("[OTA] End");
-    });
+        ArduinoOTA.onEnd([]()
+                         { logLine("[OTA] End"); });
 
-    ArduinoOTA.onError([](ota_error_t error) {
+        ArduinoOTA.onError([](ota_error_t error)
+                           {
         Serial.printf("[OTA] Error: %u\n", static_cast<unsigned>(error));
-        Serial0.printf("[OTA] Error: %u\n", static_cast<unsigned>(error));
-    });
+        Serial0.printf("[OTA] Error: %u\n", static_cast<unsigned>(error)); });
 
-    ArduinoOTA.begin();
-    otaStarted = true;
-    logWifiConnected();
-    logLine("[BOOT] OTA ready");
+        ArduinoOTA.begin();
+        otaStarted = true;
+        logWifiConnected();
+        logLine("[BOOT] OTA ready");
 
-    // Attempt NTP time sync (non-blocking; sync happens in background)
-    configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-    logLine("[BOOT] NTP sync requested");
-}
-
-void controlTaskEntry(void* /*parameter*/)
-{
-    TickType_t lastWake = xTaskGetTickCount();
-
-    for (;;) {
-        const uint32_t startedUs = micros();
-        MetaSense::ControlTask::loop();
-        const uint32_t nowMs = millis();
-        bool inverter12vInput = MetaSense::Input::isVcuReady();
-        float hvVoltageInput = 0.0f;
-
-    #if METASENSE_VCU_SIM_MODE
-        updateBenchVcuSimInputs(nowMs,
-                    dynoVcu.getPrecharge(),
-                    dynoVcu.getRbPlus(),
-                    inverter12vInput,
-                    hvVoltageInput);
-    #endif
-
-        dynoVcu.update(nowMs,
-                   MetaSense::Settings::getRpmTarget(),
-                   MetaSense::Input::rpm(),
-                   hvVoltageInput,
-                   inverter12vInput);
-
-        MetaSense::Input::updateVcuDebug(METASENSE_VCU_SIM_MODE != 0,
-                         inverter12vInput,
-                         hvVoltageInput,
-                         dynoVcu.getTorqueDemand(),
-                         dynoVcu.getRbPlus(),
-                         dynoVcu.getPrecharge(),
-                         dynoVcu.getSSR(),
-                         dynoVcu.getRMinus());
-
-    // The hardware output state machine is the sole, highest-priority
-    // authority over relay outputs (see HardwareOutputStateMachine.cpp);
-    // the VCU relay override mechanism previously used here has been
-    // retired as an unintended bench-testing artifact.
-#if ENABLE_RUNTIME_INSTRUMENTATION
-        recordTaskRuntime(controlTaskStats,
-                          micros() - startedUs,
-                          kControlPeriodMs * 1000U);
-#endif
-        vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(kControlPeriodMs));
+        // Attempt NTP time sync (non-blocking; sync happens in background)
+        configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+        logLine("[BOOT] NTP sync requested");
     }
-}
 
-void modbusTaskEntry(void* /*parameter*/)
-{
-    TickType_t lastWake = xTaskGetTickCount();
+    void controlTaskEntry(void * /*parameter*/)
+    {
+        TickType_t lastWake = xTaskGetTickCount();
 
-    for (;;) {
-        const uint32_t startedUs = micros();
-        modbusPublisher.update();
-#if ENABLE_RUNTIME_INSTRUMENTATION
-        recordTaskRuntime(modbusTaskStats,
-                          micros() - startedUs,
-                          kModbusPeriodMs * 1000U);
+        for (;;)
+        {
+            const uint32_t startedUs = micros();
+            MetaSense::ControlTask::loop();
+            const uint32_t nowMs = millis();
+            bool inverter12vInput = MetaSense::Input::isVcuReady();
+            float hvVoltageInput = 0.0f;
+
+#if METASENSE_VCU_SIM_MODE
+            updateBenchVcuSimInputs(nowMs,
+                                    dynoVcu.getPrecharge(),
+                                    dynoVcu.getRbPlus(),
+                                    inverter12vInput,
+                                    hvVoltageInput);
 #endif
-        vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(kModbusPeriodMs));
+
+            dynoVcu.update(nowMs,
+                           MetaSense::Settings::getRpmTarget(),
+                           MetaSense::Input::rpm(),
+                           hvVoltageInput,
+                           inverter12vInput);
+
+            MetaSense::Input::updateVcuDebug(METASENSE_VCU_SIM_MODE != 0,
+                                             inverter12vInput,
+                                             hvVoltageInput,
+                                             dynoVcu.getTorqueDemand(),
+                                             dynoVcu.getRbPlus(),
+                                             dynoVcu.getPrecharge(),
+                                             dynoVcu.getSSR(),
+                                             dynoVcu.getRMinus());
+
+            // The hardware output state machine is the sole, highest-priority
+            // authority over relay outputs (see HardwareOutputStateMachine.cpp);
+            // the VCU relay override mechanism previously used here has been
+            // retired as an unintended bench-testing artifact.
+#if ENABLE_RUNTIME_INSTRUMENTATION
+            recordTaskRuntime(controlTaskStats,
+                              micros() - startedUs,
+                              kControlPeriodMs * 1000U);
+#endif
+            vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(kControlPeriodMs));
+        }
     }
-}
 
-void networkTaskEntry(void* /*parameter*/)
-{
-    uint32_t lastStatusMs = 0;
-    bool bootStatusLogged = false;
-    uint32_t lastWifiRetryMs = 0;
-    wl_status_t lastWifiStatus = WL_IDLE_STATUS;
-    String serialCommandBuffer;
+    void modbusTaskEntry(void * /*parameter*/)
+    {
+        TickType_t lastWake = xTaskGetTickCount();
 
-    for (;;) {
-        (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(25));
-        const uint32_t startedUs = micros();
-
-        processSerialMonitorCommand(Serial, serialCommandBuffer);
-
-        setupOtaOnceConnected();
-
-        if (otaStarted) {
-            ArduinoOTA.handle();
+        for (;;)
+        {
+            const uint32_t startedUs = micros();
+            modbusPublisher.update();
+#if ENABLE_RUNTIME_INSTRUMENTATION
+            recordTaskRuntime(modbusTaskStats,
+                              micros() - startedUs,
+                              kModbusPeriodMs * 1000U);
+#endif
+            vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(kModbusPeriodMs));
         }
+    }
 
-        MetaSense::WebSocketServer::loop();
-        MetaSense::Input::publish();
+    void networkTaskEntry(void * /*parameter*/)
+    {
+        uint32_t lastStatusMs = 0;
+        bool bootStatusLogged = false;
+        uint32_t lastWifiRetryMs = 0;
+        wl_status_t lastWifiStatus = WL_IDLE_STATUS;
+        String serialCommandBuffer;
+
+        for (;;)
+        {
+            (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(25));
+            const uint32_t startedUs = micros();
+
+            processSerialMonitorCommand(Serial, serialCommandBuffer);
+
+            setupOtaOnceConnected();
+
+            if (otaStarted)
+            {
+                ArduinoOTA.handle();
+            }
+
+            MetaSense::WebSocketServer::loop();
+            MetaSense::Input::publish();
 
 #if ENABLE_RUNTIME_INSTRUMENTATION
-        recordTaskRuntime(networkTaskStats,
-                          micros() - startedUs,
-                          25000U);
+            recordTaskRuntime(networkTaskStats,
+                              micros() - startedUs,
+                              25000U);
 #endif
 
-        const uint32_t now = millis();
-        const wl_status_t wifiStatusNow = WiFi.status();
+            const uint32_t now = millis();
+            const wl_status_t wifiStatusNow = WiFi.status();
 
-        if (wifiStatusNow != lastWifiStatus) {
-            Serial.printf("[WiFi] Status transition: %d (%s) -> %d (%s)\n",
-                          static_cast<int>(lastWifiStatus),
-                          wifiStatusToString(lastWifiStatus),
-                          static_cast<int>(wifiStatusNow),
-                          wifiStatusToString(wifiStatusNow));
-            Serial0.printf("[WiFi] Status transition: %d (%s) -> %d (%s)\n",
-                           static_cast<int>(lastWifiStatus),
-                           wifiStatusToString(lastWifiStatus),
-                           static_cast<int>(wifiStatusNow),
-                           wifiStatusToString(wifiStatusNow));
-            lastWifiStatus = wifiStatusNow;
-        }
+            if (wifiStatusNow != lastWifiStatus)
+            {
+                Serial.printf("[WiFi] Status transition: %d (%s) -> %d (%s)\n",
+                              static_cast<int>(lastWifiStatus),
+                              wifiStatusToString(lastWifiStatus),
+                              static_cast<int>(wifiStatusNow),
+                              wifiStatusToString(wifiStatusNow));
+                Serial0.printf("[WiFi] Status transition: %d (%s) -> %d (%s)\n",
+                               static_cast<int>(lastWifiStatus),
+                               wifiStatusToString(lastWifiStatus),
+                               static_cast<int>(wifiStatusNow),
+                               wifiStatusToString(wifiStatusNow));
+                lastWifiStatus = wifiStatusNow;
+            }
 
-        if (wifiCredentialsConfigured() &&
-            wifiStatusNow != WL_CONNECTED &&
-            (lastWifiRetryMs == 0U || (now - lastWifiRetryMs) >= 10000U)) {
-            lastWifiRetryMs = now;
-            Serial.printf("[WiFi] Retry connect (status=%d %s)\n",
-                          static_cast<int>(wifiStatusNow),
-                          wifiStatusToString(wifiStatusNow));
-            Serial0.printf("[WiFi] Retry connect (status=%d %s)\n",
-                           static_cast<int>(wifiStatusNow),
-                           wifiStatusToString(wifiStatusNow));
-            // Set static IP before connecting
-            IPAddress ip(192, 168, 0, 211);
-            IPAddress gateway(192, 168, 0, 1);
-            IPAddress subnet(255, 255, 255, 0);
-            IPAddress dns(8, 8, 8, 8);
-            WiFi.config(ip, gateway, subnet, dns);
-            WiFi.begin(ssid, password);
-        }
+            if (wifiCredentialsConfigured() &&
+                wifiStatusNow != WL_CONNECTED &&
+                (lastWifiRetryMs == 0U || (now - lastWifiRetryMs) >= 10000U))
+            {
+                lastWifiRetryMs = now;
+                Serial.printf("[WiFi] Retry connect (status=%d %s)\n",
+                              static_cast<int>(wifiStatusNow),
+                              wifiStatusToString(wifiStatusNow));
+                Serial0.printf("[WiFi] Retry connect (status=%d %s)\n",
+                               static_cast<int>(wifiStatusNow),
+                               wifiStatusToString(wifiStatusNow));
+                // Set static IP before connecting
+                IPAddress ip(192, 168, 0, 211);
+                IPAddress gateway(192, 168, 0, 1);
+                IPAddress subnet(255, 255, 255, 0);
+                IPAddress dns(8, 8, 8, 8);
+                WiFi.config(ip, gateway, subnet, dns);
+                WiFi.begin(ssid, password);
+            }
 
-        if (!bootStatusLogged && now >= 3000U) {
-            bootStatusLogged = true;
-            const bool vcuReady = MetaSense::Input::isVcuReady();
-            bool nauLdoConfigured = false;
-            bool nauInternalCalOk = false;
-            uint8_t nauInternalCalAttempts = 0;
-            MetaSense::Input::getLoadCellInitStatus(nauLdoConfigured,
-                                                    nauInternalCalOk,
-                                                    nauInternalCalAttempts);
-            const int rbPlusLevel = digitalRead(MetaSense::Globals::kRbPlusInputPin);
-            const bool ssrActive = MetaSense::HardwareOutputStateMachine::isSsrActive();
-            Serial.printf("[BOOTSTATUS] vcu_mode=%s, vcu_ready=%d, rb_plus=%d, ssr=%d, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u\n",
-                          "can_inverter_status",
-                          vcuReady ? 1 : 0,
-                          rbPlusLevel,
-                          ssrActive ? 1 : 0,
-                          nauLdoConfigured ? 1 : 0,
-                          nauInternalCalOk ? 1 : 0,
-                          static_cast<unsigned>(nauInternalCalAttempts));
-            Serial0.printf("[BOOTSTATUS] vcu_mode=%s, vcu_ready=%d, rb_plus=%d, ssr=%d, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u\n",
-                           "can_inverter_status",
-                           vcuReady ? 1 : 0,
-                           rbPlusLevel,
-                           ssrActive ? 1 : 0,
-                           nauLdoConfigured ? 1 : 0,
-                           nauInternalCalOk ? 1 : 0,
-                           static_cast<unsigned>(nauInternalCalAttempts));
-        }
+            if (!bootStatusLogged && now >= 3000U)
+            {
+                bootStatusLogged = true;
+                const bool vcuReady = MetaSense::Input::isVcuReady();
+                bool nauLdoConfigured = false;
+                bool nauInternalCalOk = false;
+                uint8_t nauInternalCalAttempts = 0;
+                MetaSense::Input::getLoadCellInitStatus(nauLdoConfigured,
+                                                        nauInternalCalOk,
+                                                        nauInternalCalAttempts);
+                const int rbPlusLevel = digitalRead(MetaSense::Globals::kRbPlusInputPin);
+                const bool ssrActive = MetaSense::HardwareOutputStateMachine::isSsrActive();
+                Serial.printf("[BOOTSTATUS] vcu_mode=%s, vcu_ready=%d, rb_plus=%d, ssr=%d, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u\n",
+                              "can_inverter_status",
+                              vcuReady ? 1 : 0,
+                              rbPlusLevel,
+                              ssrActive ? 1 : 0,
+                              nauLdoConfigured ? 1 : 0,
+                              nauInternalCalOk ? 1 : 0,
+                              static_cast<unsigned>(nauInternalCalAttempts));
+                Serial0.printf("[BOOTSTATUS] vcu_mode=%s, vcu_ready=%d, rb_plus=%d, ssr=%d, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u\n",
+                               "can_inverter_status",
+                               vcuReady ? 1 : 0,
+                               rbPlusLevel,
+                               ssrActive ? 1 : 0,
+                               nauLdoConfigured ? 1 : 0,
+                               nauInternalCalOk ? 1 : 0,
+                               static_cast<unsigned>(nauInternalCalAttempts));
+            }
 
-        if (now - lastStatusMs > kHeartbeatPeriodMs) {
-            lastStatusMs = now;
-            const wl_status_t status = WiFi.status();
-            const String ip = WiFi.localIP().toString();
-            const uint32_t ts = heartbeatTimestamp();
-            const LeafInvFeedback& leafFbDiag = MetaSense::CANBus::feedback();
-            const MetaSense::CANBus::Stats& canStatsDiag = MetaSense::CANBus::stats();
-            const bool vcuReady = MetaSense::Input::isVcuReady();
-            const char* vcuReadySource = MetaSense::Input::vcuReadySource();
-            const bool hwPrestartWarn = MetaSense::HardwareOutputStateMachine::isFaultState();
-            const float torqueNm = MetaSense::Input::torqueNm();
-            const float egtHotC = MetaSense::Input::egtHotC();
-            float ambientC = 0.0f;
-            float pressureHpa = 0.0f;
-            float humidityPct = 0.0f;
-            float airDensity = 0.0f;
-            float climateCf = 0.0f;
-            MetaSense::Input::getEnvironment(ambientC,
-                                             pressureHpa,
-                                             humidityPct,
-                                             airDensity,
-                                             climateCf);
-            bool nauLdoConfigured = false;
-            bool nauInternalCalOk = false;
-            uint8_t nauInternalCalAttempts = 0;
-            MetaSense::Input::getLoadCellInitStatus(nauLdoConfigured,
-                                                    nauInternalCalOk,
-                                                    nauInternalCalAttempts);
-            const int rbPlusLevel = digitalRead(MetaSense::Globals::kRbPlusInputPin);
-            const bool ssrActive = MetaSense::HardwareOutputStateMachine::isSsrActive();
-            Serial.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s, vcu_mode=%s, vcu_ready=%d, vcu_ready_src=%s, prestart_warn=%d, rb_plus=%d, ssr=%d, torque=%.2f, egt_hot=%.1f, amb=%.1f, press=%.1f, rh=%.1f, rho=%.3f, cf=%.4f, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u, can_cfg_rx=%d, can_rx_total=%lu, rpm_raw01_le=%u, rpm_raw01_be=%u, rpm_raw23_le=%u, rpm_raw23_be=%u, tq_raw01_le=%d, tq_raw01_be=%d, tq_raw23_le=%d, tq_raw23_be=%d\n",
-                          static_cast<unsigned long>(ts),
-                          wifiCredentialsConfigured() ? ssid : "<not-configured>",
-                          static_cast<int>(status),
-                          wifiStatusToString(status),
-                          ip.c_str(),
-                          otaStarted ? "ready" : "not-ready",
-                          "can_inverter_status",
-                          vcuReady ? 1 : 0,
-                          vcuReadySource,
-                          hwPrestartWarn ? 1 : 0,
-                          rbPlusLevel,
-                          ssrActive ? 1 : 0,
-                          torqueNm,
-                          egtHotC,
-                          ambientC,
-                          pressureHpa,
-                          humidityPct,
-                          airDensity,
-                          climateCf,
-                          nauLdoConfigured ? 1 : 0,
-                          nauInternalCalOk ? 1 : 0,
-                          static_cast<unsigned>(nauInternalCalAttempts),
-                          METASENSE_LEAF_CAN_RX_ENABLED != 0 ? 1 : 0,
-                          static_cast<unsigned long>(canStatsDiag.rxFrames),
-                          static_cast<unsigned>(leafFbDiag.rpm_raw01_le),
-                          static_cast<unsigned>(leafFbDiag.rpm_raw01_be),
-                          static_cast<unsigned>(leafFbDiag.rpm_raw23_le),
-                          static_cast<unsigned>(leafFbDiag.rpm_raw23_be),
-                          static_cast<int>(leafFbDiag.torque_raw01_le),
-                          static_cast<int>(leafFbDiag.torque_raw01_be),
-                          static_cast<int>(leafFbDiag.torque_raw23_le),
-                          static_cast<int>(leafFbDiag.torque_raw23_be));
-            Serial0.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s, vcu_mode=%s, vcu_ready=%d, vcu_ready_src=%s, prestart_warn=%d, rb_plus=%d, ssr=%d, torque=%.2f, egt_hot=%.1f, amb=%.1f, press=%.1f, rh=%.1f, rho=%.3f, cf=%.4f, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u, can_cfg_rx=%d, can_rx_total=%lu, rpm_raw01_le=%u, rpm_raw01_be=%u, rpm_raw23_le=%u, rpm_raw23_be=%u, tq_raw01_le=%d, tq_raw01_be=%d, tq_raw23_le=%d, tq_raw23_be=%d\n",
-                           static_cast<unsigned long>(ts),
-                           wifiCredentialsConfigured() ? ssid : "<not-configured>",
-                           static_cast<int>(status),
-                           wifiStatusToString(status),
-                           ip.c_str(),
-                           otaStarted ? "ready" : "not-ready",
-                           "can_inverter_status",
-                           vcuReady ? 1 : 0,
-                           vcuReadySource,
-                           hwPrestartWarn ? 1 : 0,
-                           rbPlusLevel,
-                           ssrActive ? 1 : 0,
-                           torqueNm,
-                           egtHotC,
-                           ambientC,
-                           pressureHpa,
-                           humidityPct,
-                           airDensity,
-                           climateCf,
-                           nauLdoConfigured ? 1 : 0,
-                           nauInternalCalOk ? 1 : 0,
-                           static_cast<unsigned>(nauInternalCalAttempts),
-                           METASENSE_LEAF_CAN_RX_ENABLED != 0 ? 1 : 0,
-                           static_cast<unsigned long>(canStatsDiag.rxFrames),
-                           static_cast<unsigned>(leafFbDiag.rpm_raw01_le),
-                           static_cast<unsigned>(leafFbDiag.rpm_raw01_be),
-                           static_cast<unsigned>(leafFbDiag.rpm_raw23_le),
-                           static_cast<unsigned>(leafFbDiag.rpm_raw23_be),
-                           static_cast<int>(leafFbDiag.torque_raw01_le),
-                           static_cast<int>(leafFbDiag.torque_raw01_be),
-                           static_cast<int>(leafFbDiag.torque_raw23_le),
-                           static_cast<int>(leafFbDiag.torque_raw23_be));
+            if (now - lastStatusMs > kHeartbeatPeriodMs)
+            {
+                lastStatusMs = now;
+                const wl_status_t status = WiFi.status();
+                const String ip = WiFi.localIP().toString();
+                const uint32_t ts = heartbeatTimestamp();
+                const LeafInvFeedback &leafFbDiag = MetaSense::CANBus::feedback();
+                const MetaSense::CANBus::Stats &canStatsDiag = MetaSense::CANBus::stats();
+                const bool vcuReady = MetaSense::Input::isVcuReady();
+                const char *vcuReadySource = MetaSense::Input::vcuReadySource();
+                const bool hwPrestartWarn = MetaSense::HardwareOutputStateMachine::isFaultState();
+                const float torqueNm = MetaSense::Input::torqueNm();
+                const float egtHotC = MetaSense::Input::egtHotC();
+                float ambientC = 0.0f;
+                float pressureHpa = 0.0f;
+                float humidityPct = 0.0f;
+                float airDensity = 0.0f;
+                float climateCf = 0.0f;
+                MetaSense::Input::getEnvironment(ambientC,
+                                                 pressureHpa,
+                                                 humidityPct,
+                                                 airDensity,
+                                                 climateCf);
+                bool nauLdoConfigured = false;
+                bool nauInternalCalOk = false;
+                uint8_t nauInternalCalAttempts = 0;
+                MetaSense::Input::getLoadCellInitStatus(nauLdoConfigured,
+                                                        nauInternalCalOk,
+                                                        nauInternalCalAttempts);
+                const int rbPlusLevel = digitalRead(MetaSense::Globals::kRbPlusInputPin);
+                const bool ssrActive = MetaSense::HardwareOutputStateMachine::isSsrActive();
+                Serial.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s, vcu_mode=%s, vcu_ready=%d, vcu_ready_src=%s, prestart_warn=%d, rb_plus=%d, ssr=%d, torque=%.2f, egt_hot=%.1f, amb=%.1f, press=%.1f, rh=%.1f, rho=%.3f, cf=%.4f, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u, can_cfg_rx=%d, can_rx_total=%lu, rpm_raw01_le=%u, rpm_raw01_be=%u, rpm_raw23_le=%u, rpm_raw23_be=%u, tq_raw01_le=%d, tq_raw01_be=%d, tq_raw23_le=%d, tq_raw23_be=%d\n",
+                              static_cast<unsigned long>(ts),
+                              wifiCredentialsConfigured() ? ssid : "<not-configured>",
+                              static_cast<int>(status),
+                              wifiStatusToString(status),
+                              ip.c_str(),
+                              otaStarted ? "ready" : "not-ready",
+                              "can_inverter_status",
+                              vcuReady ? 1 : 0,
+                              vcuReadySource,
+                              hwPrestartWarn ? 1 : 0,
+                              rbPlusLevel,
+                              ssrActive ? 1 : 0,
+                              torqueNm,
+                              egtHotC,
+                              ambientC,
+                              pressureHpa,
+                              humidityPct,
+                              airDensity,
+                              climateCf,
+                              nauLdoConfigured ? 1 : 0,
+                              nauInternalCalOk ? 1 : 0,
+                              static_cast<unsigned>(nauInternalCalAttempts),
+                              METASENSE_LEAF_CAN_RX_ENABLED != 0 ? 1 : 0,
+                              static_cast<unsigned long>(canStatsDiag.rxFrames),
+                              static_cast<unsigned>(leafFbDiag.rpm_raw01_le),
+                              static_cast<unsigned>(leafFbDiag.rpm_raw01_be),
+                              static_cast<unsigned>(leafFbDiag.rpm_raw23_le),
+                              static_cast<unsigned>(leafFbDiag.rpm_raw23_be),
+                              static_cast<int>(leafFbDiag.torque_raw01_le),
+                              static_cast<int>(leafFbDiag.torque_raw01_be),
+                              static_cast<int>(leafFbDiag.torque_raw23_le),
+                              static_cast<int>(leafFbDiag.torque_raw23_be));
+                Serial0.printf("[HEARTBEAT] ts=%lu, ssid=%s, wifi=%d (%s), ip=%s, ota=%s, vcu_mode=%s, vcu_ready=%d, vcu_ready_src=%s, prestart_warn=%d, rb_plus=%d, ssr=%d, torque=%.2f, egt_hot=%.1f, amb=%.1f, press=%.1f, rh=%.1f, rho=%.3f, cf=%.4f, nau_ldo=%d, nau_cal=%d, nau_cal_attempts=%u, can_cfg_rx=%d, can_rx_total=%lu, rpm_raw01_le=%u, rpm_raw01_be=%u, rpm_raw23_le=%u, rpm_raw23_be=%u, tq_raw01_le=%d, tq_raw01_be=%d, tq_raw23_le=%d, tq_raw23_be=%d\n",
+                               static_cast<unsigned long>(ts),
+                               wifiCredentialsConfigured() ? ssid : "<not-configured>",
+                               static_cast<int>(status),
+                               wifiStatusToString(status),
+                               ip.c_str(),
+                               otaStarted ? "ready" : "not-ready",
+                               "can_inverter_status",
+                               vcuReady ? 1 : 0,
+                               vcuReadySource,
+                               hwPrestartWarn ? 1 : 0,
+                               rbPlusLevel,
+                               ssrActive ? 1 : 0,
+                               torqueNm,
+                               egtHotC,
+                               ambientC,
+                               pressureHpa,
+                               humidityPct,
+                               airDensity,
+                               climateCf,
+                               nauLdoConfigured ? 1 : 0,
+                               nauInternalCalOk ? 1 : 0,
+                               static_cast<unsigned>(nauInternalCalAttempts),
+                               METASENSE_LEAF_CAN_RX_ENABLED != 0 ? 1 : 0,
+                               static_cast<unsigned long>(canStatsDiag.rxFrames),
+                               static_cast<unsigned>(leafFbDiag.rpm_raw01_le),
+                               static_cast<unsigned>(leafFbDiag.rpm_raw01_be),
+                               static_cast<unsigned>(leafFbDiag.rpm_raw23_le),
+                               static_cast<unsigned>(leafFbDiag.rpm_raw23_be),
+                               static_cast<int>(leafFbDiag.torque_raw01_le),
+                               static_cast<int>(leafFbDiag.torque_raw01_be),
+                               static_cast<int>(leafFbDiag.torque_raw23_le),
+                               static_cast<int>(leafFbDiag.torque_raw23_be));
 
-            uint32_t samplerLastUs = 0;
-            uint32_t samplerMaxUs = 0;
-            uint32_t samplerEmaUs = 0;
-            uint32_t samplerLoops = 0;
-            MetaSense::Input::getLoadCellSamplerRuntime(
-                samplerLastUs,
-                samplerMaxUs,
-                samplerEmaUs,
-                samplerLoops);
+                uint32_t samplerLastUs = 0;
+                uint32_t samplerMaxUs = 0;
+                uint32_t samplerEmaUs = 0;
+                uint32_t samplerLoops = 0;
+                MetaSense::Input::getLoadCellSamplerRuntime(
+                    samplerLastUs,
+                    samplerMaxUs,
+                    samplerEmaUs,
+                    samplerLoops);
 
 #if ENABLE_RUNTIME_INSTRUMENTATION
-            Serial.printf("[RUNTIME] ctrl(us):last=%lu ema=%lu max=%lu ov=%lu loops=%lu | "
-                          "net(us):last=%lu ema=%lu max=%lu ov=%lu loops=%lu | "
-                          "modbus(us):last=%lu ema=%lu max=%lu ov=%lu loops=%lu | "
-                          "sampler(us):last=%lu ema=%lu max=%lu loops=%lu\n",
-                          static_cast<unsigned long>(controlTaskStats.lastUs),
-                          static_cast<unsigned long>(controlTaskStats.emaUs),
-                          static_cast<unsigned long>(controlTaskStats.maxUs),
-                          static_cast<unsigned long>(controlTaskStats.overruns),
-                          static_cast<unsigned long>(controlTaskStats.loops),
-                          static_cast<unsigned long>(networkTaskStats.lastUs),
-                          static_cast<unsigned long>(networkTaskStats.emaUs),
-                          static_cast<unsigned long>(networkTaskStats.maxUs),
-                          static_cast<unsigned long>(networkTaskStats.overruns),
-                          static_cast<unsigned long>(networkTaskStats.loops),
+                Serial.printf("[RUNTIME] ctrl(us):last=%lu ema=%lu max=%lu ov=%lu loops=%lu | "
+                              "net(us):last=%lu ema=%lu max=%lu ov=%lu loops=%lu | "
+                              "modbus(us):last=%lu ema=%lu max=%lu ov=%lu loops=%lu | "
+                              "sampler(us):last=%lu ema=%lu max=%lu loops=%lu\n",
+                              static_cast<unsigned long>(controlTaskStats.lastUs),
+                              static_cast<unsigned long>(controlTaskStats.emaUs),
+                              static_cast<unsigned long>(controlTaskStats.maxUs),
+                              static_cast<unsigned long>(controlTaskStats.overruns),
+                              static_cast<unsigned long>(controlTaskStats.loops),
+                              static_cast<unsigned long>(networkTaskStats.lastUs),
+                              static_cast<unsigned long>(networkTaskStats.emaUs),
+                              static_cast<unsigned long>(networkTaskStats.maxUs),
+                              static_cast<unsigned long>(networkTaskStats.overruns),
+                              static_cast<unsigned long>(networkTaskStats.loops),
                               static_cast<unsigned long>(modbusTaskStats.lastUs),
                               static_cast<unsigned long>(modbusTaskStats.emaUs),
                               static_cast<unsigned long>(modbusTaskStats.maxUs),
@@ -885,10 +943,9 @@ void networkTaskEntry(void* /*parameter*/)
                                static_cast<unsigned long>(samplerLoops));
                 resetMaxStats();
 #endif
+            }
         }
-
     }
-}
 
 } // anonymous namespace
 
@@ -896,7 +953,7 @@ void setup()
 {
     Serial.begin(115200);
     Serial0.begin(115200);
-    delay(100);  // Let Serial stabilize
+    delay(100); // Let Serial stabilize
     // Force flush and test immediate output
     Serial.write("[TEST] Serial online\n");
     Serial.flush();
@@ -927,20 +984,27 @@ void setup()
 
     MetaSense::ControlTask::begin();
     dynoVcu.begin(millis());
-    if (MetaSense::CommandRouter::loadFactoryProfileOnBoot()) {
+    if (MetaSense::CommandRouter::loadFactoryProfileOnBoot())
+    {
         logLine("[BOOT] Factory profile loaded from FS");
-    } else {
+    }
+    else
+    {
         logLine("[BOOT] No factory profile found in FS");
     }
     setupWifi();
-    if (!modbusPublisher.begin()) {
+    if (!modbusPublisher.begin())
+    {
         logLine("[BOOT] ModbusPublisher begin failed");
     }
 
     // Initialize telnet serial bridge for remote monitoring
-    if (MetaSense::TelnetSerialBridge::telnetSerialBridge.begin(23)) {
+    if (MetaSense::TelnetSerialBridge::telnetSerialBridge.begin(23))
+    {
         logLine("[BOOT] Telnet Serial Bridge started on port 23");
-    } else {
+    }
+    else
+    {
         logLine("[BOOT] Telnet Serial Bridge failed to start");
     }
 
@@ -971,15 +1035,18 @@ void setup()
         &modbusTaskHandle,
         0);
 
-    if (controlCreated != pdPASS) {
+    if (controlCreated != pdPASS)
+    {
         logLine("[BOOT] Failed to start control task");
     }
 
-    if (networkCreated != pdPASS) {
+    if (networkCreated != pdPASS)
+    {
         logLine("[BOOT] Failed to start network task");
     }
 
-    if (modbusCreated != pdPASS) {
+    if (modbusCreated != pdPASS)
+    {
         logLine("[BOOT] Failed to start modbus task");
     }
 

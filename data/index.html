@@ -1372,7 +1372,7 @@
     // Chart handle.
     let modalDynoChart = null;
     // Keep UI updates bounded so stale websocket frames do not create visible lag.
-    const kUiMinDataFrameMs = 50;  // Increased from 16ms for better stability
+    const kUiMinDataFrameMs = 25;  // Device publish rate (25ms = 40 Hz)
     const kUiSlowPanelMinFrameMs = 200;
     const kRunChartMinUpdateMs = 120;
     let lastUiDataFrameMs = 0;
