@@ -620,8 +620,8 @@ void update(float engineThrottlePercent,
         break;
 
     case OutputState::FAULT:
-        // Latched: recovery requires returning to INIT and re-running the
-        // full precharge sequence. No automatic exit from FAULT.
+        // Latched: no automatic exit. Operator reset (resetFromFault) moves to
+        // INIT, which re-runs the full precharge sequence.
         break;
     }
 
@@ -652,6 +652,19 @@ void stop()
         state = OutputState::IDLE;
     }
     applyOutputs(state, 0.0f, 0.0f, 0.0f);
+}
+
+bool resetFromFault(bool inverterReady, bool canFeedbackFresh)
+{
+    if (state != OutputState::FAULT || !inverterReady || !canFeedbackFresh) {
+        return false;
+    }
+    // INIT re-runs the full precharge sequence once the setpoint is low.
+    state = OutputState::INIT;
+    prechargeStartMs = 0;
+    prechargeAttempt = 0;
+    setStateLed(state);
+    return true;
 }
 
 const char* stateName()

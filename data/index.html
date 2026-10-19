@@ -1186,6 +1186,7 @@
         <div class="reading" style="color: #ffddaa;">Inverter Fault (6b): <span id="inverterFaultValue" style="font-weight: bold; color: #ff6644;">---</span></div>
         <div class="reading" style="color: #ffddaa;">Inverter Ready: <span id="inverterStatusValue" style="font-weight: bold; color: #88ff88;">---</span></div>
         <div class="reading" style="color: #ffddaa;">DYNO State: <span id="dynoStateValue" style="font-weight: bold; color: #88ffff;">---</span></div>
+        <button id="faultResetBtn" type="button" onclick="if (ws) ws.send('FAULT_RESET');" style="display: none; margin-top: 4px; padding: 4px 10px; background: #aa3322; color: #fff; border: 1px solid #ff6644; border-radius: 4px; cursor: pointer;">Reset fault</button>
         <hr style="border: none; border-top: 1px solid #666; margin: 8px 0;"/>
         <div class="reading" style="color: #ffddaa;">Inverter HV: <span id="inverterHVValue" style="font-weight: bold; color: #88ccff;">---</span> V</div>
         <div class="reading" style="color: #ffddaa;">Inv. Temp: <span id="inverterTempValue" style="font-weight: bold; color: #ffaa88;">---</span> °C</div>
@@ -3006,9 +3007,14 @@
                   case "DYNO":
                     dynoStateEl.style.color = "#ff88ff";  // Magenta: dyno active
                     break;
+                  case "FAULT":
+                    dynoStateEl.style.color = "#ff6644";  // Red: latched fault
+                    break;
                   default:
                     dynoStateEl.style.color = "#aaaaaa";  // Gray: unknown
                 }
+                const faultResetBtn = document.getElementById("faultResetBtn");
+                if (faultResetBtn) faultResetBtn.style.display = (state === "FAULT") ? "inline-block" : "none";
               }
             }
 

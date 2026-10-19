@@ -594,6 +594,15 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
         MetaSense::DynoStateMachine::abortAutoRun();
         MetaSense::WebSocketServer::sendStatus("Auto run cancelled");
     }
+    else if (cmdUpper == "FAULT_RESET") {
+        if (!MetaSense::HardwareOutputStateMachine::isFaultState()) {
+            MetaSense::WebSocketServer::sendInfo("Fault reset ignored: not in FAULT");
+        } else if (MetaSense::Input::requestFaultReset()) {
+            MetaSense::WebSocketServer::sendStatus("Fault reset: returning to INIT");
+        } else {
+            MetaSense::WebSocketServer::sendInfo("Fault reset refused: inverter not ready or CAN feedback stale");
+        }
+    }
     else if (cmdUpper.startsWith("SET_CUSTOMER:") || cmdUpper.startsWith("SET CUSTOMER:")) {
         const int sep = cmd.indexOf(':');
         if (sep < 0) {
