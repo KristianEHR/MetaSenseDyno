@@ -31,12 +31,13 @@
 // Relay table (RB+, RB-, SSR, Precharge) decided by the VCU layer. Precharge
 // is always slaved to SSR (enforced by applyRelayCommand -- Precharge always
 // follows SSR ON, regardless of what the VCU layer requests):
-//   INIT:    OFF, OFF, OFF, OFF
-//   START:   OFF, OFF, ON,  ON  (2.5s precharge dwell)
-//   IDLE:    ON,  ON,  OFF, OFF   (HV keep-alive can flip SSR+Precharge on / RB- off)
-//   MOTOR:   ON,  OFF, ON,  ON  (Precharge active but inert here -- RB+ carries the real power path)
-//   DYNO:    ON,  ON,  OFF, OFF
-//   FAULT:   OFF, OFF, OFF, OFF
+//   INIT:             OFF, OFF, OFF, OFF
+//   START:            OFF, OFF, ON,  ON   (precharge dwell, HV >= 300 V gate)
+//   IDLE, RB- OFF:    ON,  OFF, ON,  ON   (RB+ and precharge held ON)
+//   IDLE, RB- latched:ON,  ON,  OFF, OFF  (RB- engaged for regen dissipation)
+//   MOTOR:            ON,  OFF, ON,  ON   (RB+ carries the power path)
+//   DYNO:             ON,  ON,  OFF, OFF
+//   FAULT:            held, OFF, held, OFF (RB+/RB- frozen, SSR and precharge OFF)
 // ─────────────────────────────────────────────────────────────────────────
 
 namespace {
@@ -130,12 +131,8 @@ void writeThrottleDutyPwm(float percent)
 }
 
 // precharge(): the single named function that switches the SSR+Precharge
-// pair. Scope: this is invoked for exactly two purposes -- the initial 2.5s
-// precharge dwell in START, and the current-limited recharge ("keep-alive")
-// supply to the inverter while IDLE. (It also incidentally fires for
-// MOTOR/DYNO entry since those states pin SSR to a fixed value too, but
-// Precharge's state is inert there -- MOTOR: don't care, DYNO: already
-// lands on precharge(false) since DYNO runs SSR=OFF.)
+// pair. Used for the 2.5s precharge dwell in START and for the current-limited
+// recharge supply while IDLE with RB- OFF.
 //   precharge(true):  PRECHARGE relay = ON, then SSR = ON.
 //   precharge(false): SSR = OFF, then PRECHARGE relay = OFF.
 void precharge(bool on)
@@ -346,43 +343,43 @@ constexpr float kPrechargeHvReadyV = 300.0f;     // HV must reach this to succee
 constexpr float kStartRpmSetpointMaxRpm = 150.0f; // INIT->START gate: setpoint must be below this.
 constexpr float kIdleDynoHystCenterRpm = 500.0f;
 constexpr float kIdleDynoHystBandRpm = 150.0f;    // Single hysteresis band: 500 +/- 150.
-constexpr float kDynoEnterRpm = kIdleDynoHystCenterRpm + kIdleDynoHystBandRpm; // 650
+constexpr float kDynoEnterRpm = 1000.0f;          // MOTOR->DYNO threshold (was 650, now 1000)
 constexpr float kIdleEnterRpm = kIdleDynoHystCenterRpm - kIdleDynoHystBandRpm; // 350
 constexpr float kMotorSetpointMinRpm = 150.0f;    // MOTOR entry requires setpoint above this.
+// MOTOR is anchored to the RPM setpoint. Below the setpoint MOTOR always
+// drives the engine up, so there is no lower exit edge. MOTOR releases only
+// once RPM reaches setpoint + kMotorExitOffsetRpm. Re-entry from IDLE/DYNO
+// uses a lower edge (kMotorExitOffsetRpm - kMotorEnterMarginRpm) so that RPM
+// hovering at the edge cannot toggle the state.
+constexpr float kMotorExitOffsetRpm = 200.0f;
+constexpr float kMotorEnterMarginRpm = 50.0f;
+inline bool motorEnterAllowed(float engineRpm, float rpmSetpoint)
+{
+    return (rpmSetpoint > kMotorSetpointMinRpm) &&
+           (engineRpm < rpmSetpoint + kMotorExitOffsetRpm - kMotorEnterMarginRpm);
+}
+inline bool motorStayAllowed(float engineRpm, float rpmSetpoint)
+{
+    return (rpmSetpoint > kMotorSetpointMinRpm) && (engineRpm < rpmSetpoint + kMotorExitOffsetRpm);
+}
 // RB- (load-dump resistor connection) must stay OFF right after entering
 // IDLE (a freshly-precharged bus discharging into the dump resistor is a
 // hazard) and only engage once RPM climbs high enough that the engine is
 // genuinely generating regen power that needs dissipating. Hysteresis:
-// engage at RPM>=550, release at RPM<450 (holds latched state in between
+// engage at RPM>=1000, release at RPM<900 (holds latched state in between
 // to avoid relay chatter at the edge).
-constexpr float kIdleRbMinusHystCenterRpm = 500.0f;
+constexpr float kIdleRbMinusHystCenterRpm = 950.0f;
 constexpr float kIdleRbMinusHystBandRpm = 50.0f;
-constexpr float kIdleRbMinusEngageRpm = kIdleRbMinusHystCenterRpm + kIdleRbMinusHystBandRpm; // 550
-constexpr float kIdleRbMinusReleaseRpm = kIdleRbMinusHystCenterRpm - kIdleRbMinusHystBandRpm; // 450
-constexpr float kHvKeepAliveMaxRpm = 500.0f;      // IDLE-only HV keep-alive: RPM must be <= this.
-constexpr float kHvKeepAliveEngageV = 10.0f;      // Engage precharge-channel recharge below this HV.
-constexpr float kHvKeepAliveReleaseV = 300.0f;    // Release recharge above this HV (latched, avoids chatter).
-// Reactivated: safe under the RB- load-dump rule above, since keep-alive's
-// RPM ceiling (<=500) always sits below the RB- engage threshold (>=550),
-// so the two latches can never be active at the same time.
-constexpr bool kHvKeepAliveEnabled = true;
-
+constexpr float kIdleRbMinusEngageRpm = kIdleRbMinusHystCenterRpm + kIdleRbMinusHystBandRpm; // 1000
+constexpr float kIdleRbMinusReleaseRpm = kIdleRbMinusHystCenterRpm - kIdleRbMinusHystBandRpm; // 900
 // --- Precharge sequencing state ---
 uint32_t prechargeStartMs = 0;
 uint8_t prechargeAttempt = 0;
 
-// --- IDLE-state HV keep-alive latch (persists across calls so the 200V/
-// 300V engage/release hysteresis can't chatter at either edge). ---
-bool idleHvKeepAliveLatched = false;
-
 // --- IDLE-state RB- (load-dump) engage latch (persists across calls so
-// the 550/450 RPM engage/release hysteresis can't chatter at the edge). ---
+// the 1000/900 RPM engage/release hysteresis can't chatter at the edge). ---
 bool idleRbMinusLatched = false;
 
-
-// --- Motor-start override (operator request, e.g. START-request button) ---
-bool motorStartRequestPending = false;
-float motorStartRequestedRpm = 0.0f;
 
 // Decides the desired brake/dyno-throttle PWM split for the current state
 // and hands it to the HW layer. Only this function knows which channel
@@ -449,9 +446,7 @@ void setStateLed(OutputState hwState)
 void applyOutputs(OutputState hwState,
                   float engineThrottlePercent,
                   float primaryBrakePercent,
-                  float hvVoltageFromCan,
-                  float engineRpm,
-                  float rpmSetpoint)
+                  float engineRpm)
 {
     hw::writeThrottleDutyPwm(engineThrottlePercent);
 
@@ -459,7 +454,9 @@ void applyOutputs(OutputState hwState,
 
     switch (hwState) {
     case OutputState::INIT:
-        cmd = hw::makeRelayCommand(false, false, false, false);
+        // Recharge the HV capacitor while RB- is OFF: SSR + Precharge ON,
+        // RB+/RB- OFF. Same pattern as START, so INIT->START changes no relays.
+        cmd = hw::makeRelayCommand(false, true, false, true);
         break;
 
     case OutputState::START:
@@ -472,45 +469,23 @@ void applyOutputs(OutputState hwState,
         // entering IDLE -- discharging a freshly-precharged bus into the
         // dump resistor is a hazard -- and only engage once RPM indicates
         // genuine regen power needing dissipation. Latched hysteresis:
-        // engage at RPM>=550, release at RPM<450.
+        // engage at RPM>=1000, release at RPM<900.
         if (engineRpm - kIdleRbMinusHystBandRpm >= kIdleRbMinusHystCenterRpm) {
             idleRbMinusLatched = true;
         } else if (engineRpm + kIdleRbMinusHystBandRpm < kIdleRbMinusHystCenterRpm) {
             idleRbMinusLatched = false;
         }
 
-        // HV keep-alive: recharges the DC bus through the current-limited
-        // precharge channel (SSR+PRECHARGE together -- same relay pattern
-        // as the initial START precharge) whenever HV sags, but only while
-        // genuinely idling: RPM <= 500 AND RPM > the operator's rpm
-        // setpoint. Engage at HV<200V, release at HV>300V (latched, so HV
-        // sitting near either edge cannot cause relay chatter). This RPM
-        // ceiling (<=500) always sits below the RB- engage threshold
-        // (>=550) above, so keep-alive can never be active while RB- would
-        // want to engage -- the two latches cannot conflict.
-        const bool keepAliveEligible = kHvKeepAliveEnabled &&
-                                        (engineRpm <= kHvKeepAliveMaxRpm) &&
-                                        (engineRpm > rpmSetpoint);
-        if (!keepAliveEligible) {
-            idleHvKeepAliveLatched = false;
-        } else if (!idleHvKeepAliveLatched && hvVoltageFromCan < kHvKeepAliveEngageV) {
-            idleHvKeepAliveLatched = true;
-        } else if (idleHvKeepAliveLatched && hvVoltageFromCan > kHvKeepAliveReleaseV) {
-            idleHvKeepAliveLatched = false;
-        }
-
-        if (idleHvKeepAliveLatched) {
-            // RB+=OFF (opened so the current-limited precharge() path, not
-            // the direct path, carries the recharge current), RB-=OFF,
-            // SSR=ON, PRECHARGE=ON. applyRelayCommand()'s RB+<->SSR/Precharge
-            // crossover handling staggers this: RB+ opens before SSR/
-            // Precharge energize, and closes again only after they
-            // de-energize when this latch releases.
-            cmd = hw::makeRelayCommand(false, true, false, true);
+        if (idleRbMinusLatched) {
+            // RB- ON: RB+ ON, SSR/Precharge OFF. Entering from the
+            // precharge pattern below goes through the SSR<->RB- crossover
+            // in applyRelayCommand().
+            cmd = hw::makeRelayCommand(true, false, true, false);
         } else {
-            // RB+=ON always; RB- follows the load-dump latch above;
-            // SSR/Precharge OFF.
-            cmd = hw::makeRelayCommand(idleRbMinusLatched, false, true, false);
+            // RB- OFF: RB+ and precharge held ON (SSR follows precharge).
+            // Same pattern as MOTOR, so MOTOR<->IDLE and DYNO<->IDLE
+            // transitions never drop RB+ once precharge has succeeded.
+            cmd = hw::makeRelayCommand(false, true, true, true);
         }
         break;
     }
@@ -552,8 +527,6 @@ void begin()
     state = OutputState::INIT;
     prechargeStartMs = 0;
     prechargeAttempt = 0;
-    motorStartRequestPending = false;
-    motorStartRequestedRpm = 0.0f;
     setStateLed(state);
 }
 
@@ -576,23 +549,16 @@ void update(float engineThrottlePercent,
             float rpmSetpoint,
             float primaryBrakePercent,
             float engineRpm,
-            float hvVoltageFromCan,
-            bool inverterFaultFromCan,
+            float hvVoltage,
+            bool inverterReady,
             bool canFeedbackFresh)
 {
     const uint32_t now = millis();
 
-    bool motorStartByRequest = false;
-    if (motorStartRequestPending) {
-        motorStartRequestPending = false;
-        motorStartByRequest = true;
-    }
-
-    // FAULT is reachable from IDLE/MOTOR/DYNO on inverter fault or loss of
-    // live 0x1DA feedback. It is NOT reachable this way from START -- during
-    // precharge, only the HV-not-reached-in-time condition matters (an
-    // inverterFault flag alone must not abort precharge early).
-    const bool faultConditionActive = inverterFaultFromCan || !canFeedbackFresh;
+    // FAULT is reachable from IDLE/MOTOR/DYNO when the inverter is not ready
+    // or live 0x1DA feedback is lost. It is NOT reachable this way from START
+    // -- during precharge, only the HV-not-reached-in-time condition matters.
+    const bool faultConditionActive = !inverterReady || !canFeedbackFresh;
     if (faultConditionActive &&
         (state == OutputState::IDLE || state == OutputState::MOTOR || state == OutputState::DYNO)) {
         state = OutputState::FAULT;
@@ -610,36 +576,46 @@ void update(float engineThrottlePercent,
         break;
 
     case OutputState::START: {
+        // Precharge contract: HV >= kPrechargeHvReadyV AND dwell elapsed.
+        // No auto-completion on timeout -- if HV is still low after the
+        // dwell, re-dwell (precharge stays ON) up to kPrechargeMaxAttempts,
+        // then latch FAULT.
         const uint32_t elapsedMs = now - prechargeStartMs;
         if (elapsedMs >= kPrechargeDurationMs) {
-            state = OutputState::IDLE;
+            if (hvVoltage >= kPrechargeHvReadyV) {
+                state = OutputState::IDLE;
+            } else if (prechargeAttempt < kPrechargeMaxAttempts) {
+                ++prechargeAttempt;
+                prechargeStartMs = now;
+            } else {
+                state = OutputState::FAULT;
+            }
         }
         break;
     }
 
     case OutputState::IDLE:
-        if (motorStartByRequest) {
+        if (motorEnterAllowed(engineRpm, rpmSetpoint)) {
             state = OutputState::MOTOR;
         } else if (engineRpm > kDynoEnterRpm) {
             state = OutputState::DYNO;
-        } else if ((engineRpm < rpmSetpoint) && (rpmSetpoint > kMotorSetpointMinRpm)) {
-            state = OutputState::MOTOR;
         }
         break;
 
     case OutputState::MOTOR:
-        if (!((engineRpm < rpmSetpoint) && (rpmSetpoint > kMotorSetpointMinRpm))) {
+        // Release MOTOR once RPM reaches setpoint + band, or when the setpoint
+        // is no longer valid. Above 1000 RPM the engine is over-speeding, so
+        // hand over to DYNO; otherwise coast in IDLE.
+        if (!motorStayAllowed(engineRpm, rpmSetpoint)) {
             state = (engineRpm > kDynoEnterRpm) ? OutputState::DYNO : OutputState::IDLE;
         }
         break;
 
     case OutputState::DYNO:
-        if (motorStartByRequest) {
+        if (motorEnterAllowed(engineRpm, rpmSetpoint)) {
             state = OutputState::MOTOR;
         } else if (engineRpm < kIdleEnterRpm) {
             state = OutputState::IDLE;
-        } else if ((engineRpm < rpmSetpoint) && (rpmSetpoint > kMotorSetpointMinRpm)) {
-            state = OutputState::MOTOR;
         }
         break;
 
@@ -649,13 +625,7 @@ void update(float engineThrottlePercent,
         break;
     }
 
-    applyOutputs(state, engineThrottlePercent, primaryBrakePercent, hvVoltageFromCan, engineRpm, rpmSetpoint);
-}
-
-void requestMotorStartOverride(float rpmSetpoint)
-{
-    motorStartRequestPending = true;
-    motorStartRequestedRpm = rpmSetpoint;
+    applyOutputs(state, engineThrottlePercent, primaryBrakePercent, engineRpm);
 }
 
 bool isMotorState()
@@ -676,8 +646,12 @@ bool isFaultState()
 void stop()
 {
     writeThrottle(0.0f);
-    state = OutputState::IDLE;
-    applyOutputs(state, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+    // A latched FAULT must survive a recording stop; otherwise the IDLE
+    // pattern would re-energise SSR/precharge on the dyno.
+    if (state != OutputState::FAULT) {
+        state = OutputState::IDLE;
+    }
+    applyOutputs(state, 0.0f, 0.0f, 0.0f);
 }
 
 const char* stateName()

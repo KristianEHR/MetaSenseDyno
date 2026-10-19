@@ -9,8 +9,10 @@ namespace MetaSense::HardwareOutputStateMachine {
 // transition. See HardwareOutputStateMachine.cpp for the full state table.
 //
 // States: INIT -> START (precharge cycle) -> IDLE <-> MOTOR / DYNO, with
-// FAULT reachable from IDLE/MOTOR/DYNO on inverter fault or loss of live
-// 0x1DA feedback.
+// FAULT reachable from IDLE/MOTOR/DYNO when the inverter reports not-ready
+// or live 0x1DA feedback is lost. START leaves for IDLE only when HV >= 300 V and the 2500 ms
+// dwell has elapsed; otherwise it re-dwells up to kPrechargeMaxAttempts, then
+// Precharge is held ON whenever RB- is OFF (INIT/START/IDLE).
 //
 // All HV/fault inputs to this state machine come exclusively from the
 // decoded 0x1DA inverter feedback frame (MetaSense::CANBus::feedback()),
@@ -30,11 +32,9 @@ void update(float engineThrottlePercent,
             float rpmSetpoint,
             float primaryBrakePercent,
             float engineRpm,
-            float hvVoltageFromCan,
-            bool inverterFaultFromCan,
+            float hvVoltage,
+            bool inverterReady,
             bool canFeedbackFresh);
-
-void requestMotorStartOverride(float rpmSetpoint);
 
 bool isMotorState();
 bool isIdleState();

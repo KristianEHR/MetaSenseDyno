@@ -44,7 +44,7 @@ extern float drumMassKg;        // total mass of drum/flywheel, kg
 extern float drumRadiusM;       // outer radius of drum, metres
 extern float drumWallM;         // wall thickness for hollow cylinder, metres (0 = solid)
 extern float drumInertiaKgM2;   // effective moment of inertia J, kg·m²  (recomputed on change)
-extern float virtGearRatio;     // drum RPM × ratio = engine RPM (1.0 = direct)
+extern float virtGearRatio;     // drum RPM × ratio = engine RPM (default 30/11 (Leaf drum to engine))
 
 void setDrumParams(float massKg, float radiusM, float wallM);
 void setDrumInertiaCustom(float J);

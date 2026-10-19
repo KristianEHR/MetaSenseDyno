@@ -209,83 +209,92 @@ Source of truth: `src/HardwareOutputStateMachine.cpp`.
 
 Primary states:
 
-- `INIT`
-- `IDLE`
-- `MOTOR`
-- `DYNO`
+- `INIT`: precharge ON (SSR + Precharge), RB+/RB- off. Recharges the HV capacitor while waiting for live 0x1DA feedback and a setpoint below `150 RPM`.
+- `START`: precharge sequence (see below).
+- `IDLE`: HV bus up, precharge held on, RB+ and RB- off unless the RB- latch is engaged.
+- `MOTOR`: motor-mode control (PI loop, RPM capped at `motorModeMaxRpm`).
+- `DYNO`: dyno-mode control (uncapped setpoint).
+- `FAULT`: latched. Reached from `IDLE`, `MOTOR`, or `DYNO` when the inverter reports not-ready or when there is no fresh 0x1DA feedback. Exit only by returning to `INIT`.
 
-Transition evaluation order (every control update):
+Transitions are evaluated on every control update. There is no time-based debounce; the RPM hysteresis bands below are what prevent chatter.
 
-1. `INIT` if inverter status is not initialized.
-2. `INIT` if precharge has failed (`prestart warning` latched).
-3. `INIT` if precharge is not yet completed.
-4. `INIT` if inverter is not ready.
-5. `IDLE` if setpoint is at or below `500 RPM` and RPM satisfies idle hysteresis.
-6. `DYNO` if setpoint is above `500 RPM` and RPM satisfies dyno hysteresis.
-7. `MOTOR` otherwise.
-
-State transition debounce:
-
-- Candidate state must be stable for `50 ms` before commit.
+- `INIT` -> `START`: live CAN feedback is fresh and the setpoint is below `150 RPM`.
+- `START` -> `IDLE`: the `2500 ms` dwell has elapsed and HV is at least `300 V`.
+- `START` -> `START` (retry): the dwell elapsed with HV still below `300 V`. The dwell restarts with precharge still on. This repeats up to `kPrechargeMaxAttempts` (3) dwells in total.
+- `START` -> `FAULT`: HV has not reached `300 V` after the last allowed dwell.
+- `IDLE` -> `DYNO`: RPM above `1000 RPM`.
+- `IDLE` -> `MOTOR`: setpoint above `150 RPM` and RPM below `setpoint + 150` (enter edge).
+- `IDLE` -> `DYNO`: RPM above `1000 RPM` and not entering `MOTOR`.
+- `MOTOR` -> `DYNO`: setpoint above `150 RPM` is no longer valid or RPM at or above `setpoint + 200`, and RPM is above `1000 RPM`.
+- `MOTOR` -> `IDLE`: RPM at or above `setpoint + 200` (or setpoint at or below `150 RPM`) and RPM is not above `1000 RPM`.
+- `DYNO` -> `MOTOR`: setpoint above `150 RPM` and RPM below `setpoint + 150` (enter edge).
+- `DYNO` -> `IDLE`: RPM below `350 RPM` and not entering `MOTOR`.
+- `IDLE`, `MOTOR`, `DYNO` -> `FAULT`: inverter not ready (`leaf_invReady` false), or no fresh 0x1DA feedback within `250 ms`. Inverter status/error bits (`mg_error_codes`) are logged but do not latch FAULT.
 
 RPM hysteresis currently applied:
 
-- Idle hysteresis around `500 RPM`:
-	- Enter `IDLE` at `RPM <= 400`
-	- Stay `IDLE` until `RPM > 600`
-- Dyno hysteresis around setpoint (only when `setpoint > 500 RPM`):
-	- Enter `DYNO` at `RPM >= setpoint + 100`
-	- Stay `DYNO` while `RPM >= setpoint - 100`
+- Idle/dyno split: `IDLE` -> `DYNO` above `1000 RPM`, `DYNO` -> `IDLE` below `350 RPM`.
+- Motor band anchored to the setpoint `S` (applied only when `S > 150 RPM`; this is a validity gate, not a band edge):
+	- `MOTOR` is held while `RPM < S + 200` (`kMotorExitOffsetRpm`). Below `S` there is no lower exit edge, so MOTOR keeps driving the engine up to the setpoint.
+	- Re-enter `MOTOR` from `IDLE`/`DYNO` only while `RPM < S + 150` (`kMotorExitOffsetRpm` - `kMotorEnterMarginRpm` = 200 - 50).
+	- The 50 RPM gap between the enter and exit edges is the hysteresis that prevents chatter.
+	- `MOTOR` is never entered from `IDLE`/`DYNO` when `RPM` is above `S + 150`, so an engine coasting above setpoint stays in `IDLE`/`DYNO`.
 
-Precharge sub-flow (inside `INIT`):
+Setpoint sources:
 
-- Minimum precharge dwell: `2500 ms`
-- HV-ready threshold: `300 V`
-- Current success criterion in code:
-	- `HV >= 300 V`, or
-	- `(elapsed >= 2500 ms) and inverterReady`
-- Timeout handling at `2500 ms` if still not successful:
-	- Test mode (`METASENSE_PRECHARGE_TEST_ACCEPT_TIMEOUT=1`): accept completion.
-	- Normal mode (`METASENSE_PRECHARGE_TEST_ACCEPT_TIMEOUT=0`): latch prestart warning/failure and hold in `INIT` with relays off.
+- The engine-side setpoint is used for all state decisions and PI feedback. It comes from the pot (manual mode) or the stored autorun target.
+- In `MOTOR`, the PI setpoint is capped at `motorModeMaxRpm` (default `1500 RPM`). The cap does not affect state transitions, so it cannot cause flapping.
+- In `DYNO`, the setpoint is never capped.
+- The dyno-side values (CAN `Leaf_RPM`, 0x1D4 torque) are the motor/generator side and differ from engine RPM by the sprocket ratio (11/30 on the current rig).
 
-Relay intent by state (firmware output mapping):
+Precharge sub-flow (`START`):
 
-- `INIT`: SSR on, RB- off, precharge active during sequence, RB+ after precharge success.
-- `IDLE`: RB- on, SSR off, RB+ held (post-precharge).
-- `MOTOR`: SSR on, RB- off, RB+ held.
-- `DYNO`: RB- on, SSR off, RB+ held.
-- Any fault or precharge-failed latch: all relays forced off.
+- Dwell: `2500 ms` per attempt, with precharge relay and SSR on.
+- Success: HV at or above `300 V` at the end of a dwell, then `IDLE`.
+- Retry: if HV is still below `300 V`, the dwell restarts. Precharge stays on and RB+/RB- stay off. Up to `kPrechargeMaxAttempts` (3) dwells.
+- Failure: after the last dwell with HV still below `300 V`, latch `FAULT`.
+- There is no auto-completion on timeout or relay dropout.
+
+Continuous precharge in `IDLE`:
+
+- While RB- is off, precharge and SSR are held on in `IDLE`. This keeps the inverter bus charged through a current-limited path. It replaces the former HV keep-alive.
+- Rationale: if RB- is on while HV is low, the inverter capacitor can discharge into the load-dump resistor, which drops HV and can trip the inverter (status `0x18`).
+- The RB- latch engages at `1000 RPM` or above and releases below `900 RPM` (engine-side RPM).
+- RB+ is held on together with precharge once precharge has succeeded, so `IDLE`, `MOTOR` and `DYNO` transitions do not drop RB+.
+
+Relay intent by state (firmware output mapping, in RB+ / RB- / SSR / Precharge order):
+
+- `INIT`: SSR + Precharge ON, RB+/RB- off (same pattern as `START`).
+- `START`: RB+ off, RB- off, SSR on, precharge on.
+- `IDLE`, RB- off: RB+ on, RB- off, SSR on, precharge on.
+- `IDLE`, RB- latched: RB+ on, RB- on, SSR off, precharge off.
+- `MOTOR`: RB+ on, RB- off, SSR on, precharge on (forced on by SSR).
+- `DYNO`: RB+ on, RB- on, SSR off, precharge off.
+- `FAULT`: SSR and precharge off, RB+/RB- frozen. A recording stop (`stop()`) does not clear a latched FAULT.
 
 Mermaid overview:
 
 ```mermaid
 stateDiagram-v2
 		[*] --> INIT
-		INIT --> INIT: !statusInitialized
-		INIT --> INIT: prechargeFailed
-		INIT --> INIT: !prechargeCompleted
-		INIT --> INIT: !inverterReady
-		INIT --> IDLE: setpoint<=500 && idleHys
-		INIT --> DYNO: setpoint>500 && dynoHys
-		INIT --> MOTOR: else
+		INIT --> START: feedbackFresh && setpoint<150
+		START --> START: HV<300V && attempt<3 (re-dwell)
+		START --> IDLE: dwell elapsed && HV>=300V
+		START --> FAULT: dwell elapsed && HV<300V && attempt=3
 
-		IDLE --> INIT: any INIT gate true
-		MOTOR --> INIT: any INIT gate true
-		DYNO --> INIT: any INIT gate true
+		IDLE --> DYNO: rpm>1000
+		IDLE --> MOTOR: setpoint>150 && rpm<sp-100
+		DYNO --> IDLE: rpm<350
+		DYNO --> MOTOR: setpoint>150 && rpm<sp-100
+		MOTOR --> IDLE: rpm>=sp+100 or sp<=150
+		MOTOR --> DYNO: rpm>=1000 && rpm>=sp
 
-		IDLE --> DYNO: setpoint>500 && dynoHys
-		IDLE --> MOTOR: else
+		IDLE --> FAULT: !inverterReady or !feedbackFresh
+		MOTOR --> FAULT: !inverterReady or !feedbackFresh
+		DYNO --> FAULT: !inverterReady or !feedbackFresh
 
-		MOTOR --> IDLE: setpoint<=500 && idleHys
-		MOTOR --> DYNO: setpoint>500 && dynoHys
-
-		DYNO --> IDLE: setpoint<=500 && idleHys
-		DYNO --> MOTOR: !dynoHys
-
-		note right of INIT
-			idleHys: enter <=400, hold <=600
-			dynoHys: enter >=sp+100, hold >=sp-100
-			transitions debounced 50ms
+		note right of FAULT
+			Latched. Exit only via INIT.
 		end note
 ```
 

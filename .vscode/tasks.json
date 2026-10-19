@@ -124,6 +124,60 @@
 				"clear": true,
 				"group": "build"
 			}
+		},
+		{
+			"label": "Monitor (esp32s3-USB)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"device",
+				"monitor",
+				"-e",
+				"esp32s3-USB"
+			],
+			"isBackground": true,
+			"problemMatcher": {
+				"pattern": {
+					"regexp": "^(.*)$",
+					"file": 1
+				},
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": "^--- Miniterm on .* ---$",
+					"endsPattern": "^--- exit ---$"
+				}
+			},
+			"presentation": {
+				"panel": "dedicated",
+				"clear": false
+			}
+		},
+		{
+			"label": "Monitor (esp32s3-ota)",
+			"type": "shell",
+			"command": "C:\\Users\\krist\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"device",
+				"monitor",
+				"-e",
+				"esp32s3-ota"
+			],
+			"isBackground": true,
+			"problemMatcher": {
+				"pattern": {
+					"regexp": "^(.*)$",
+					"file": 1
+				},
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": "^--- Miniterm on .* ---$",
+					"endsPattern": "^--- exit ---$"
+				}
+			},
+			"presentation": {
+				"panel": "dedicated",
+				"clear": false
+			}
 		}
 	]
 }

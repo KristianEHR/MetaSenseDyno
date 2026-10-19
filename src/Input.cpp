@@ -1,4 +1,4 @@
-﻿#include "Input.h"
+#include "Input.h"
 
 #include <Arduino.h>
 #include <ESPAsyncWebServer.h>
@@ -183,13 +183,13 @@ namespace
     static const uint32_t CAN_RX_MISSING_LOG_PERIOD_MS = 5000;
     static const uint32_t CAN_1DA_CRC_BAD_STREAK_LIMIT = 10;
 
-    // ─────────────────────────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------------------
     // Voltage-based brake torque controller (overvoltage protection)
-    // ─────────────────────────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------------------
     // Active only in IDLE state, and only when engineRpm > rpmSetpoint (i.e. the
     // engine is overrunning the operator's target -- the regen/overvoltage risk
     // scenario). When inverter voltage > 450V, increase brake torque proportionally to:
-    // - Dissipate more power (brake_power = V × I)
+    // - Dissipate more power (brake_power = V � I)
     // - Keep inverter voltage under control during high inertia braking
     // - Limit voltage overshoot and prevent inverter faults
     static bool s_brakeTorqueControlActive = false; // Tracks if protection is engaged (hysteresis)
@@ -200,7 +200,7 @@ namespace
     static constexpr float kInvVoltageDeactivateThresholdV = 440.0f; // Release at 440V (avoid hunting)
     static constexpr float kInvVoltageSafeMaxV = 550.0f;             // Scale ramp based on this max
 
-    // Computes brake torque as a linear ramp: 4Nm @ 450V → 30Nm @ 550V, gated on
+    // Computes brake torque as a linear ramp: 4Nm @ 450V ? 30Nm @ 550V, gated on
     // engineRpm > rpmSetpoint (caller restricts invocation to IDLE state).
     float computeVoltageBrakeTorque(float invVoltageV, float idleTorqueNm, float maxBrakeTorqueNm,
                                     float engineRpm, float rpmSetpoint)
@@ -361,8 +361,8 @@ namespace
     constexpr float EGT_MAX_LIMIT_C = 950.0f;
 
     // PI controller
-    constexpr float TORQUE_MIN = -200.0f;
-    constexpr float TORQUE_MAX = 200.0f;
+    constexpr float TORQUE_MIN = -50.0f;
+    constexpr float TORQUE_MAX = 50.0f;
     constexpr float RPM_SETPOINT_MAX = RPM_MAX_LIMIT;
     constexpr uint32_t kWebSocketPublishPeriodMs = METASENSE_WS_FAST_PERIOD_MS;
 #define METASENSE_TELEMETRY_PROFILE_DEFAULT_TREND 0
@@ -387,6 +387,7 @@ namespace
     constexpr float kRuntimeKpMin = 0.005f;
     constexpr float kRuntimeKpMax = 0.200f;
     constexpr float kRuntimeKpAlpha = 0.12f;
+    constexpr float kRpmPotAlpha = 0.15f;
     constexpr float kRuntimeKpApplyDelta = 0.001f;
 #define METASENSE_AMBIENT_SAMPLE_PERIOD_MS 100
     constexpr uint32_t kAmbientSamplePeriodMs = METASENSE_AMBIENT_SAMPLE_PERIOD_MS;
@@ -1461,12 +1462,6 @@ namespace
     static bool prevSwState = false;
     static uint32_t swDebounceMs = 0;
     constexpr uint32_t kSwDebounceThresholdMs = 30;
-    static bool prevStartRequestState = false;
-    static uint32_t startRequestDebounceMs = 0;
-    constexpr uint32_t kStartRequestDebounceThresholdMs = 40;
-    constexpr float kStartSwitchMotorRpm = 800.0f;
-    static bool s_startSwitchOverridePending = false;
-    static float s_startSwitchOverrideRpm = kStartSwitchMotorRpm;
 
     static bool isStartControlWindow()
     {
@@ -2112,7 +2107,7 @@ namespace
         const float Pv = (humidityPct / 100.0f) * Psat; // partial vapour pressure, hPa
         const float Pd = pressureHpa - Pv;              // dry-air partial pressure, hPa
         const float T_K = tempC + 273.15f;
-        // Ideal gas: ρ = Pd/(Rd*T) + Pv/(Rv*T)
+        // Ideal gas: ? = Pd/(Rd*T) + Pv/(Rv*T)
         const float Pd_Pa = Pd * 100.0f;
         const float Pv_Pa = Pv * 100.0f;
         const float rho = (Pd_Pa / (287.058f * T_K)) + (Pv_Pa / (461.495f * T_K));
@@ -2182,10 +2177,34 @@ namespace
         lastAppliedKp = kpFromPot;
     }
 
+    // Median-of-3 rejects single-sample ADC spikes, then an EMA smooths
+    // jitter so the MOTOR/DYNO thresholds in HWSM are not crossed by noise.
     float readRpmSetpointPot()
     {
+        static float rpmPotHist[3] = {0.0f, 0.0f, 0.0f};
+        static float rpmPotFiltered = -1.0f;
+        static uint8_t rpmPotIdx = 0;
+
         const float adc = readAdcSafe(kRpmSetpointPin);
-        float rpmSetpoint = (adc / 4095.0f) * RPM_SETPOINT_MAX;
+        rpmPotHist[rpmPotIdx] = adc;
+        rpmPotIdx = (rpmPotIdx + 1) % 3;
+
+        float a = rpmPotHist[0], b = rpmPotHist[1], c = rpmPotHist[2];
+        if (a > b) { const float t = a; a = b; b = t; }
+        if (b > c) { const float t = b; b = c; c = t; }
+        if (a > b) { const float t = a; a = b; b = t; }
+        const float median = b;
+
+        if (rpmPotFiltered < 0.0f)
+        {
+            rpmPotFiltered = median;
+        }
+        else
+        {
+            rpmPotFiltered = lpFilter(rpmPotFiltered, median, kRpmPotAlpha);
+        }
+
+        float rpmSetpoint = (rpmPotFiltered / 4095.0f) * RPM_SETPOINT_MAX;
         if (rpmSetpoint < 0.0f)
             rpmSetpoint = 0.0f;
         if (rpmSetpoint > RPM_SETPOINT_MAX)
@@ -2329,9 +2348,10 @@ namespace
         {
             s_leafSimFeedbackActive = false;
             // Keep Leaf CAN RPM available for monitor display, independent of control source.
-            // [PRODUCTION DIAGNOSTIC] Commented to test if CAN monitor updates were blocking WiFi
-            // leafCanRpmMonitor = leafFb.rpm;
-            // lastCanRpmMonitorUpdate = leafFb.rpm_update_ms;
+            // This feeds the control RPM (emotorRpmRaw) whenever the 0x1DA frame is trustworthy,
+            // so it must not be left unassigned.
+            leafCanRpmMonitor = leafFb.rpm;
+            lastCanRpmMonitorUpdate = leafFb.rpm_update_ms;
             lastCanRpmFrameMs = leafFb.rpm_update_ms;
             MetaSense::Input::updateCanRpm(leafFb.rpm);
             lastCanLeafAnyUpdate = leafFb.rpm_update_ms;
@@ -2500,7 +2520,7 @@ namespace
                                     ? MetaSense::Settings::virtGearRatio
                                     : 1.0f;
 
-            // Angular acceleration α = dω/dt, lightly filtered
+            // Angular acceleration a = d?/dt, lightly filtered
             float alpha = 0.0f;
             if (dtSec > 0.001f)
             {
@@ -2553,14 +2573,14 @@ namespace
             t.brakeTorqueNm = rawBrakeTorqueNm;
 
             // --- Climate correction: normalise torque/power to standard conditions ---
-            // Reference: 1013.25 hPa, 20 °C, 0 % RH  (ρ_ref ≈ 1.2041 kg/m³)
+            // Reference: 1013.25 hPa, 20 �C, 0 % RH  (?_ref � 1.2041 kg/m�)
             const float rhoActual = computeAirDensityKgM3(ambientTempC, ambientPressureHpa, ambientHumidityPct);
             const float rhoRef = computeAirDensityKgM3(20.0f, 1013.25f, 0.0f);
             t.climateCF = (rhoActual > 0.3f) ? (rhoRef / rhoActual) : 1.0f;
             t.torqueNm *= t.climateCF;
             t.brakeTorqueNm *= t.climateCF;
 
-            // P(W) = T(Nm) * ω(rad/s) = T * rpm * 2π / 60
+            // P(W) = T(Nm) * ?(rad/s) = T * rpm * 2p / 60
             // Correct for drivetrain losses to get crank power.
             const float eff = MetaSense::Settings::drivetrainEff / 100.0f;
             const float omegaEngine = t.rpm * (2.0f * 3.14159265f / 60.0f);
@@ -3048,6 +3068,11 @@ namespace MetaSense::Input
     void setLeafUiTorqueDemandNm(float torqueNm)
     {
         setLeafUiTorqueDemandNmInternal(torqueNm);
+        // Auto-enable manual mode when non-zero torque is set
+        if (fabsf(torqueNm) > 0.001f)
+        {
+            s_leafManualTorqueMode = true;
+        }
     }
 
     float getLeafUiTorqueDemandNm()
@@ -3314,6 +3339,8 @@ namespace MetaSense::Input
     void updateCanRpm(float rpm)
     {
         const uint32_t now = millis();
+        
+        // Rate limit check
         if (now - lastCanRpmUpdate < CAN_RPM_MIN_UPDATE_MS)
         {
             return;
@@ -3322,9 +3349,11 @@ namespace MetaSense::Input
         // Allow first sample and stale-source reacquisition before applying jump filter.
         const bool hasRecentCanSample = (lastCanRpmUpdate != 0U) &&
                                         ((now - lastCanRpmUpdate) < CAN_RPM_TIMEOUT_MS);
-        if (hasRecentCanSample && fabs(rpm - lastCanRpm) > CAN_MAX_JUMP)
+        if (hasRecentCanSample && fabs(rpm - lastCanRpm) > CAN_MAX_JUMP) {
             return;
+        }
 
+        // Plausibility check: must be in valid range [0, 20000) RPM
         if (rpm >= 0 && rpm < 20000)
         {
             canRpm = rpm;
@@ -3640,6 +3669,27 @@ namespace MetaSense::Input
         (void)brakeBit;
         (void)gearDriveBit;
         (void)txSent;
+
+        // Real-time logging of every 0x1D4 frame sent to the inverter
+        #if METASENSE_LEAF_1D4_TX_LOG_EVERY_FRAME
+        if (txSent) {
+            const uint8_t* data = s_leaf1d4PayloadCachedFrameData;
+            const uint8_t hcmClock = (data[4] >> 6) & 0x03U;
+            const float torqueNm = s_leaf1d4PayloadTorqueNm;
+            const int16_t torqueRaw = s_leaf1d4PayloadTorqueRaw;
+            const uint8_t crc = data[7];
+            const bool hvOk = s_leaf1d4PayloadHvStatus;
+            const bool rbPlus = s_leaf1d4PayloadRelayPlus;
+            
+            Serial.printf("[0x1D4-TX] Tq=%7.2f Nm Raw=0x%03X C=%u HV=%u RB+=%u CRC=0x%02X Bytes: ",
+                          torqueNm, (unsigned)(torqueRaw & 0xFFF), (unsigned)hcmClock, 
+                          (unsigned)(hvOk ? 1 : 0), (unsigned)(rbPlus ? 1 : 0), (unsigned)crc);
+            for (int i = 0; i < 8; i++) {
+                Serial.printf("%02X ", (unsigned)data[i]);
+            }
+            Serial.println();
+        }
+        #endif
     }
 
     void updateVcuDebug(bool simMode,
@@ -3665,20 +3715,24 @@ namespace MetaSense::Input
     // 0x1D4 Payload State Machine (100ms update cadence, independent of TX rate)
     // ============================================================================
     // Generates 0x1D4 frame payload from template + selected torque source
-    // This runs every 100ms and caches the complete frame for 10ms TX loop to send
+    // MUST run every 10ms (every TX cycle) to ensure torque demand changes are sent immediately
     static void updateLeaf1d4PayloadStateMachine(uint32_t nowMs)
     {
-        // Update only every 100ms
+        // CRITICAL: Update every 10ms (CAN_TX_PERIOD_MS), not 100ms.
+        // Timing gate ensures we don't rebuild frame twice per control loop.
         if ((nowMs - s_leaf1d4PayloadStateLastUpdateMs) < LEAF_1D4_TORQUE_PAYLOAD_UPDATE_PERIOD_MS)
         {
             return; // Not time yet
         }
         s_leaf1d4PayloadStateLastUpdateMs = nowMs;
 
-        // Select torque source: automatic (PI control) or manual (user command)
-        const float selectedTorqueNm = s_leaf1d4TorqueSourceAutomatic
-                                           ? s_leafTxPacerTorqueNm              // Automatic: from PI control
-                                           : getLeafUiTorqueDemandNmInternal(); // Manual: from UI/user input
+        // CRITICAL: Always use s_leafTxPacerTorqueNm. The control loop has just committed
+        // the selected torque (manual or PI) to this variable before calling the pacer.
+        // Reading getLeafUiTorqueDemandNmInternal() directly would create a race condition
+        // where stale or user-changed values get sent instead of the intended command.
+        // By using s_leafTxPacerTorqueNm, we ensure the frame reflects what the control
+        // loop actually decided to send, not what the user is currently twiddling.
+        const float selectedTorqueNm = s_leafTxPacerTorqueNm;
 
         const float torqueClamped = constrain(selectedTorqueNm, -512.0f, 511.75f);
 
@@ -3744,96 +3798,114 @@ namespace MetaSense::Input
 
     void leafTxPacerTask(void * /*param*/)
     {
+        delay(100);  // Let serial init fully
+        Serial.println("[PACER] Task started on core 1");
+        
         constexpr uint32_t kLeafTxPacerTickMs = CAN_TX_PERIOD_MS; // 10ms
         TickType_t lastWake = xTaskGetTickCount();
-        bool firstRun = true; // Force state machine to run immediately on first TX
+        static uint32_t pacerLogCountdown = 0;
+        static uint32_t loopIterations = 0;
 
         for (;;)
         {
             vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(kLeafTxPacerTickMs));
+            ++loopIterations;
 
             const uint32_t nowMs = millis();
-            const bool leafTxChecklistActive = MetaSense::CANBus::isReady() &&
-                                               (kLeafCanTxActive ||
-                                                (kLeafCanHandshakeOnFirst1da && s_leafHandshakeSent));
 
-            if (!s_leafTxPacerEnabled)
+            // SIMPLE: Every 10ms, regardless of any gate, build 0x1D4 frame from current payload values
+            // (torque comes from main loop's async updates to s_leafTxPacerTorqueNm)
+            
+            // 1. Read current torque value (may have changed since last iteration, or stayed same)
+            const float selectedTorqueNm = s_leafTxPacerTorqueNm;
+            
+            // Diagnostic: log every 100 iterations (1 second) - SIMPLE VERSION
+            if (pacerLogCountdown-- == 0)
             {
-                if (leafTxChecklistActive)
-                {
-                    (void)sendLeafKeepAlive11a(nowMs);
-                }
-                continue;
+                pacerLogCountdown = 100;
+                Serial.print("[PACER-DIAG] iter=");
+                Serial.print(loopIterations);
+                Serial.print(" torque=");
+                Serial.print(selectedTorqueNm, 2);
+                Serial.println("Nm");
             }
-
-            // Force state machine to run on very first iteration to ensure proper frame initialization
-            if (firstRun)
-            {
-                firstRun = false;
-                s_leaf1d4PayloadStateLastUpdateMs = 0; // Force immediate execution
-            }
-
-            // Update 0x1D4 payload state machine (runs every 100ms internally, check is cheap)
-            // This generates and caches the complete frame every 100ms
-            updateLeaf1d4PayloadStateMachine(nowMs);
-
-            // Advance rolling counter BEFORE updating frame (0-3 cycle, changes every 10ms transmission)
+            const float torqueClamped = constrain(selectedTorqueNm, -512.0f, 511.75f);
+            
+            // 2. Advance rolling counter EVERY 10ms (0-3 cycle)
             s_leaf1d4RollingCounter = static_cast<uint8_t>((s_leaf1d4RollingCounter + 1U) & 0x03U);
-
-            // Update byte 4 with rolling counter - lookup table based on DBC HCM_CLOCK signal
-            // Counter values 0,1,2,3 → upper nibbles 8,C,0,4 → byte values 0x87, 0xC7, 0x07, 0x47
             const uint8_t hcmClock = static_cast<uint8_t>(s_leaf1d4RollingCounter & 0x03U);
+            
+            // 3. Start with template frame
+            uint8_t data[8] = {
+                METASENSE_LEAF_1D4_TEMPLATE_B0,
+                METASENSE_LEAF_1D4_TEMPLATE_B1,
+                METASENSE_LEAF_1D4_TEMPLATE_B2,
+                METASENSE_LEAF_1D4_TEMPLATE_B3,
+                METASENSE_LEAF_1D4_TEMPLATE_B4,
+                METASENSE_LEAF_1D4_TEMPLATE_B5,
+                METASENSE_LEAF_1D4_TEMPLATE_B6,
+                METASENSE_LEAF_1D4_TEMPLATE_B7};
+            
+            // 4. Encode current torque value into frame (bytes 2-3)
+            const int16_t torqueRaw = encodeLeaf1d4TorqueRaw(torqueClamped);
+            patchLeaf1d4TorqueFieldMotorola23_12(data, torqueRaw);
+            
+            // 5. Update rolling counter (byte 4, upper nibble)
             static const uint8_t COUNTER_NIBBLE_MAP[] = {0x8U, 0xCU, 0x0U, 0x4U};
-            s_leaf1d4PayloadCachedFrameData[4] = static_cast<uint8_t>((COUNTER_NIBBLE_MAP[hcmClock] << 4) | 0x7U);
-
-            // Clear CRC field before recalculating (CRC always calculated with checksum = 0)
-            s_leaf1d4PayloadCachedFrameData[7] = 0U;
-
-            // Recalculate CRC after updating counter (fresh CRC every 10ms transmission)
-            s_leaf1d4PayloadCachedFrameData[7] = computeLeaf1d4CrcConformant(s_leaf1d4PayloadCachedFrameData);
-
-            // VERIFICATION: Validate our generated 0x1D4 frame using wire CRC algorithm
-            // If this passes, it means the CRC algorithm is correct for inverter validation
-            const uint8_t wireCrcRx = s_leaf1d4PayloadCachedFrameData[7];
-            const uint8_t wireCrcCalc = MetaSense::LeafCRC::computeExact1d4LikeCrc(0xD4U, s_leaf1d4PayloadCachedFrameData);
-            const bool frame1d4WireCrcOk = (wireCrcRx == wireCrcCalc);
-
-            // Store verification result for monitoring (optional logging)
-            s_leaf1d4PayloadCrcOk = frame1d4WireCrcOk ? 1 : 0;
-
-            // Increment global counter for HEARTBEAT Serial output
+            data[4] = static_cast<uint8_t>((COUNTER_NIBBLE_MAP[hcmClock] << 4) | 0x7U);
+            
+            // 6. Update HV status bit (bit 34, byte 4 lower bits or byte 5 depending on layout)
+            setIntelUnsigned(data, 8U, 34U, 1U, s_leafTxPacerHvOkBit ? 1U : 0U);
+            
+            // 7. Update RB+ relay bit (bit 46)
+            const bool rbPlusActive = vcuDebugRPlus || MetaSense::HardwareOutputStateMachine::isRbPlusCommandedActive();
+            setIntelUnsigned(data, 8U, 46U, 1U, rbPlusActive ? 1U : 0U);
+            
+            // 8. Calculate CRC (byte 7) - ALWAYS fresh
+            data[7] = 0U; // Clear before calculation
+            data[7] = computeLeaf1d4CrcConformant(data);
+            
+            // 9. Update cached frame for logging/telemetry
+            memcpy(s_leaf1d4PayloadCachedFrameData, data, sizeof(s_leaf1d4PayloadCachedFrameData));
+            s_leaf1d4PayloadTorqueNm = torqueClamped;
+            s_leaf1d4PayloadTorqueRaw = torqueRaw;
+            s_leaf1d4PayloadCrc = data[7];
+            s_leaf1d4PayloadCrcOk = 1; // Assume valid (always calculated fresh)
+            
+            // 10. Increment TX counter
             s_leaf1d4TxFrameCount++;
-
-            // Send 0x1D4 frame with fresh CRC and clock every 10ms (maintains CAN bus presence)
-            const bool sent1d4 = MetaSense::CANBus::send(0x1D4U,
-                                                         s_leaf1d4PayloadCachedFrameData,
-                                                         sizeof(s_leaf1d4PayloadCachedFrameData));
-
-            // Update TX tracking
+            
+            // 11. SEND 0x1D4 frame
+            const bool sent1d4 = MetaSense::CANBus::send(0x1D4U, data, sizeof(data));
             if (sent1d4)
             {
                 s_leafLast1d4TxMs = nowMs;
-                s_leafLastSentTorqueNm = s_leaf1d4PayloadTorqueNm;
+                s_leafLastSentTorqueNm = torqueClamped;
                 s_leafLastSentTorqueMs = nowMs;
+                
+                // Real-time logging of every 0x1D4 transmission
+                #if METASENSE_LEAF_1D4_TX_LOG_EVERY_FRAME
+                {
+                    const bool hvOk = s_leafTxPacerHvOkBit;
+                    Serial.print("[0x1D4-TX] ");
+                    Serial.print(torqueClamped, 2);
+                    Serial.print("Nm C=");
+                    Serial.print(hcmClock);
+                    Serial.print(" CRC=");
+                    Serial.print(data[7], HEX);
+                    Serial.print(" [");
+                    for (int i = 0; i < 8; i++) {
+                        if (data[i] < 0x10) Serial.print("0");
+                        Serial.print(data[i], HEX);
+                        Serial.print(" ");
+                    }
+                    Serial.println("]");
+                }
+                #endif
             }
-
-            // Send 0x11A keep-alive frame every 10ms
-            const bool sent11a = sendLeafKeepAlive11a(nowMs, true, hcmClock);
-
-            // Log only when payload state machine updates (every 100ms)
-            // Check if this is a logging frame by comparing update time with a logged time
-            static uint32_t s_leafTxPacerLastLoggedMs = 0;
-            if ((nowMs - s_leafTxPacerLastLoggedMs) >= LEAF_1D4_TORQUE_PAYLOAD_UPDATE_PERIOD_MS)
-            {
-                s_leafTxPacerLastLoggedMs = nowMs;
-                logLeaf1d4ShadowFrame(nowMs,
-                                      s_leaf1d4PayloadTorqueNm,
-                                      s_leafTxPacerReadyBit,
-                                      s_leafTxPacerHvOkBit,
-                                      s_leafTxPacerBrakeBit,
-                                      s_leafTxPacerGearDriveBit,
-                                      sent1d4);
-            }
+            
+            // 12. SEND 0x11A keep-alive
+            (void)sendLeafKeepAlive11a(nowMs, true, hcmClock);
         }
     }
 
@@ -3967,11 +4039,9 @@ namespace MetaSense::Input
         }
 
         // Digital inputs
-        pinMode(MetaSense::Globals::kRampSwitchPin, INPUT_PULLDOWN);   // SW switch – active HIGH
-        pinMode(MetaSense::Globals::kStartRequestPin, INPUT_PULLDOWN); // Start-request switch – active HIGH
-        pinMode(MetaSense::Globals::kRbPlusInputPin, INPUT_PULLDOWN);  // VCU ready – active HIGH
+        pinMode(MetaSense::Globals::kRampSwitchPin, INPUT_PULLDOWN);   // SW switch � active HIGH
+        pinMode(MetaSense::Globals::kRbPlusInputPin, INPUT_PULLDOWN);  // VCU ready � active HIGH
         prevSwState = (digitalRead(MetaSense::Globals::kRampSwitchPin) == HIGH);
-        prevStartRequestState = (digitalRead(MetaSense::Globals::kStartRequestPin) == HIGH);
         const int vcuRbPlusLevel = digitalRead(MetaSense::Globals::kRbPlusInputPin);
         Serial.printf("[Input] VCU ready source: CAN_INVERTER_STATUS (RB+=%d)\n",
                       vcuRbPlusLevel);
@@ -4260,31 +4330,6 @@ namespace MetaSense::Input
             }
         }
 
-        // --- START request switch (active HIGH, debounced) ---
-        {
-            const bool startReqNow = (digitalRead(MetaSense::Globals::kStartRequestPin) == HIGH);
-            if (startReqNow != prevStartRequestState)
-            {
-                if ((now - startRequestDebounceMs) >= kStartRequestDebounceThresholdMs)
-                {
-                    startRequestDebounceMs = now;
-                    prevStartRequestState = startReqNow;
-                    if (startReqNow)
-                    {
-                        s_startSwitchOverridePending = true;
-                        s_startSwitchOverrideRpm = kStartSwitchMotorRpm;
-                        MetaSense::HardwareOutputStateMachine::requestMotorStartOverride(s_startSwitchOverrideRpm);
-                        Serial.println("[START-BTN] motor-start override latched");
-                        Serial0.println("[START-BTN] motor-start override latched");
-                    }
-                }
-            }
-            else
-            {
-                startRequestDebounceMs = now;
-            }
-        }
-
         float alpha = MetaSense::Settings::filterAlpha;
         if (!isfinite(alpha))
         {
@@ -4307,7 +4352,7 @@ namespace MetaSense::Input
         const float emotorRpmRaw = canRpmFrameTrustworthy ? leafCanRpmMonitor : canRpm;
         const float rpmRatio = (MetaSense::Settings::virtGearRatio > 0.01f)
                                    ? MetaSense::Settings::virtGearRatio
-                                   : 1.45f;
+                                   : (30.0f / 11.0f);
         const float engineRpm = emotorRpmRaw * rpmRatio;
         if (canValid)
         {
@@ -4467,32 +4512,24 @@ namespace MetaSense::Input
                         ? MetaSense::DynoMode::Inertia
                         : MetaSense::DynoMode::Brake;
 
-        if (s_startSwitchOverridePending)
-        {
-            tele.rpmTarget = s_startSwitchOverrideRpm;
-            MetaSense::DynoStateMachine::setManualRpmTarget(s_startSwitchOverrideRpm);
-            MetaSense::Settings::setRpmTarget(s_startSwitchOverrideRpm);
-            s_startSwitchOverridePending = false;
-        }
-        else if (MetaSense::DynoStateMachine::isAutoRunActive())
-        {
-            // In autorun, preserve target provided by state machine path.
-            tele.rpmTarget = MetaSense::Settings::getRpmTarget();
-        }
-        else
-        {
-            // In manual mode, pot is the active RPM target source.
-            tele.rpmTarget = manualRpmTarget;
-        }
+        // Operator/autorun setpoint, uncapped. Drives HWSM state decisions and is
+        // what the stored setpoint keeps; the MOTOR cap must not leak into it.
+        const float requestedRpm = MetaSense::DynoStateMachine::isAutoRunActive()
+                                       ? MetaSense::Settings::getRpmTarget()
+                                       : manualRpmTarget;
+        MetaSense::Settings::setRpmTarget(requestedRpm);
 
+        // MOTOR-state RPM cap limits only the PI tracking setpoint. Feeding the
+        // capped value into the state machine made MOTOR (cap 1500) and DYNO
+        // (requested 2000) flip back and forth every tick.
         const float motorModeCapRpm = (MetaSense::Settings::motorModeMaxRpm > 0.0f)
                                           ? MetaSense::Settings::motorModeMaxRpm
                                           : RPM_SETPOINT_MAX;
+        tele.rpmTarget = requestedRpm;
         if (MetaSense::HardwareOutputStateMachine::isMotorState() && tele.rpmTarget > motorModeCapRpm)
         {
             tele.rpmTarget = motorModeCapRpm;
         }
-        MetaSense::Settings::setRpmTarget(tele.rpmTarget);
 
         updateDyno(tele, dtSec);
 
@@ -4503,17 +4540,22 @@ namespace MetaSense::Input
             tele.brakeTorqueNm = 0.0f;
         }
 
-        float torqueCmd = MetaSense::ControlTask::computeTorqueCommand(
-            tele.rpmTarget,
-            tele.rpm,
-            dtSec);
-        if (!safe)
-            torqueCmd = 0.0f;
-
         const bool torqueArmed = tele.rpmTarget > 400.0f;
-        if (!torqueArmed)
+        const bool piGated = !safe || !torqueArmed || !canStatusClearForTorque;
+
+        // While gated the PI output is discarded, so reset it instead of integrating
+        // against a zero/stale RPM. It then restarts from zero when torque is re-armed.
+        float torqueCmd = 0.0f;
+        if (piGated)
         {
-            torqueCmd = 0.0f;
+            MetaSense::ControlTask::resetPI();
+        }
+        else
+        {
+            torqueCmd = MetaSense::ControlTask::computeTorqueCommand(
+                tele.rpmTarget,
+                tele.rpm,
+                dtSec);
         }
 
         if (!leafCmdFresh)
@@ -4545,7 +4587,8 @@ namespace MetaSense::Input
         const bool torqueLimitExceeded = fabsf(tele.torqueNm) > maxAllowedTorque;
         const bool throttleSafetyCut = rpmLimitExceeded || torqueLimitExceeded;
 
-        const float primaryBrakeSignedPercent = (torqueCmd / TORQUE_MAX) * 100.0f;
+        // Brake percent keeps its original 200 Nm full scale; the PI clamp is now 50 Nm.
+        const float primaryBrakeSignedPercent = (torqueCmd / 200.0f) * 100.0f;
         // POT2 on AD1 (GPIO2, 0-3.3V) is the engine throttle setpoint source.
         // Map directly to GPIO47 PWM duty as 0-100% (0-3.3V equivalent after filtering).
         const float engineThrottlePercent = throttleSafetyCut ? 0.0f : readThrottlePotPercent();
@@ -4558,15 +4601,13 @@ namespace MetaSense::Input
         const LeafInvFeedback &leafFb = MetaSense::CANBus::feedback();
         const bool canFeedbackFreshForHwsm = (leafFb.rpm_update_ms != 0U) &&
                                              (elapsedMsSafe(now, leafFb.rpm_update_ms) <= CAN_RX_TARGET_MAX_AGE_MS);
-        const bool inverterFaultFromCan = canFeedbackFreshForHwsm && (leafFb.mg_error_codes != 0U);
-
         MetaSense::HardwareOutputStateMachine::update(
             engineThrottlePercent,
-            tele.rpmTarget,
+            requestedRpm,
             primaryBrakeSignedPercent,
             tele.rpm,
             leafFb.input_voltage,
-            inverterFaultFromCan,
+            tele.leaf_invReady,
             canFeedbackFreshForHwsm);
 
         // Real-time relay/state change log (fires immediately on any transition,
@@ -4601,13 +4642,13 @@ namespace MetaSense::Input
                 s_prevPrecharge = curPrecharge;
                 s_prevHwState = curHwState;
 
-                Serial.printf("[RELAY] ms=%lu hw_state=%s RB+=%d RB-=%d SSR=%d PRECHARGE=%d\n",
+                Serial.printf("[RELAY] ms=%lu hw_state=%s RB+=%d RB-=%d SSR=%d PRECHARGE=%d sp=%.0f eng=%.0f\n",
                               now, curHwState, curRbPlus ? 1 : 0, curRbMinus ? 1 : 0,
-                              curSsr ? 1 : 0, curPrecharge ? 1 : 0);
+                              curSsr ? 1 : 0, curPrecharge ? 1 : 0, requestedRpm, tele.rpm);
                 MetaSense::TelnetSerialBridge::telnetBridgePrintf(
-                    "[RELAY] ms=%lu hw_state=%s RB+=%d RB-=%d SSR=%d PRECHARGE=%d\n",
+                    "[RELAY] ms=%lu hw_state=%s RB+=%d RB-=%d SSR=%d PRECHARGE=%d sp=%.0f eng=%.0f\n",
                     now, curHwState, curRbPlus ? 1 : 0, curRbMinus ? 1 : 0,
-                    curSsr ? 1 : 0, curPrecharge ? 1 : 0);
+                    curSsr ? 1 : 0, curPrecharge ? 1 : 0, requestedRpm, tele.rpm);
             }
         }
 
@@ -4652,9 +4693,76 @@ namespace MetaSense::Input
                                            (kLeafCanTxActive ||
                                             (kLeafCanHandshakeOnFirst1da && s_leafHandshakeSent));
 
+        // CRITICAL: Update pacer torque BEFORE timing gate so it's always current
+        // This runs every 10ms whether or not CAN is ready
+        if ((now - lastLeafTxMs) >= CAN_TX_PERIOD_MS)
+        {
+            const char *hwState = MetaSense::HardwareOutputStateMachine::stateName();
+            const bool isInitState = (hwState != nullptr) && (strcmp(hwState, "INIT") == 0);
+            const bool isIdleState = MetaSense::HardwareOutputStateMachine::isIdleState();
+            const float uiTorqueDemandNm = getLeafUiTorqueDemandNmInternal();
+            const bool inverterReadyToken = tele.leaf_invReady;
+            const bool inverterFaulted = tele.leaf_invFault || tele.leaf_invLimp;
+            
+            float pacer_torqueToSend = 0.0f;
+            
+            if (isInitState)
+            {
+                // INIT state: always 0
+                pacer_torqueToSend = 0.0f;
+            }
+            else if (isIdleState)
+            {
+                // IDLE state: manual or PI control when inverter ready, else voltage brake
+                if (inverterReadyToken)
+                {
+                    pacer_torqueToSend = s_leafManualTorqueMode ? uiTorqueDemandNm : torqueCmd;
+                }
+                else
+                {
+                    const float invVoltageV = MetaSense::CANBus::feedback().input_voltage;
+                    pacer_torqueToSend = computeVoltageBrakeTorque(
+                        invVoltageV,
+                        MetaSense::Settings::idleTorqueNm,
+                        MetaSense::Settings::brakeMaxTorqueNm,
+                        tele.rpm,
+                        tele.rpmTarget
+                    );
+                }
+            }
+            else
+            {
+                // MOTOR state: manual or PI control when inverter ready/healthy, else 0
+                const bool inverterReadyAndHealthy = inverterReadyToken && !inverterFaulted && !s_leafSimFeedbackActive;
+                if (inverterReadyAndHealthy)
+                {
+                    pacer_torqueToSend = s_leafManualTorqueMode ? uiTorqueDemandNm : torqueCmd;
+                }
+                else
+                {
+                    pacer_torqueToSend = 0.0f;
+                }
+            }
+            
+            // Reverse-rotation guard (unconditional safety override)
+            if (tele.rpm < 0.0f)
+            {
+                pacer_torqueToSend = 0.0f;
+            }
+            
+            // Update pacer with latest values EVERY 10ms
+            s_leafTxPacerTorqueNm = pacer_torqueToSend;
+            s_leafTxPacerReadyBit = inverterReadyToken;
+            s_leafTxPacerHvOkBit = tele.vcuReady;
+            s_leafTxPacerBrakeBit = (tele.mode == MetaSense::DynoMode::Brake);
+            s_leafTxPacerGearDriveBit = (tele.rpmTarget > 100.0f) || tele.recording;
+            s_leafTxPacerEnabled = true;  // ? CRITICAL: pacer task will encode and send every 10ms
+            lastLeafTxMs = now;  // ? Gate for next cycle
+        }
+
         if (!leafTxChecklistActive)
         {
-            s_leafTxPacerEnabled = false;
+            // DO NOT disable s_leafTxPacerEnabled here - pacer has valid torque values!
             if (!s_leafListenOnlyLogPrinted)
             {
                 Serial.println("[VCM] Passive RX mode active: periodic TX checklist/state machine disabled");
@@ -4763,8 +4871,6 @@ namespace MetaSense::Input
                 Serial0.println("[VCM] Handshake complete: promoting to continuous 0x120 control mode");
                 s_leafHandshakePromotedLogPrinted = true;
             }
-
-            const LeafVcmBringupState prevLeafVcmState = s_leafVcmState;
             if (lastLeafTxMs != 0U &&
                 (now - lastLeafTxMs) > CAN_TX_MAX_GAP_MS &&
                 s_leafCanPartnerSeen &&
@@ -4857,49 +4963,56 @@ namespace MetaSense::Input
             }
             else if (isIdleState)
             {
-                // IDLE state: Apply voltage-based brake torque controller for inverter overvoltage
-                // protection. Active only when engineRpm > rpmSetpoint (overrunning the target,
-                // the regen/overvoltage risk case) AND inverter voltage > 450V, ramping to 30Nm @ 550V.
-                const float invVoltageV = MetaSense::CANBus::feedback().input_voltage;
-                const float appliedBrakeTorque = computeVoltageBrakeTorque(
-                    invVoltageV,                           // Inverter voltage from CAN
-                    MetaSense::Settings::idleTorqueNm,     // Base idle torque (4Nm default)
-                    MetaSense::Settings::brakeMaxTorqueNm, // Max brake torque (30Nm default)
-                    tele.rpm,                              // Engine RPM
-                    tele.rpmTarget                         // Operator RPM setpoint
-                );
-                torqueToSend = appliedBrakeTorque;
+                // IDLE state: When inverter is ready, allow manual/PI control with NO gates.
+                // When inverter is NOT ready, fall back to voltage-based brake torque for protection.
+                
+                if (inverterReadyToken)
+                {
+                    // Inverter is ready: use manual or auto torque based on current mode
+                    torqueToSend = s_leafManualTorqueMode ? uiTorqueDemandNm : torqueCmd;
+                }
+                else
+                {
+                    // Inverter not ready: apply voltage-based brake torque controller for overvoltage protection
+                    // Active only when engineRpm > rpmSetpoint (overrunning the target, regen/overvoltage risk case)
+                    // AND inverter voltage > 450V, ramping to 30Nm @ 550V.
+                    const float invVoltageV = MetaSense::CANBus::feedback().input_voltage;
+                    const float appliedBrakeTorque = computeVoltageBrakeTorque(
+                        invVoltageV,                           // Inverter voltage from CAN
+                        MetaSense::Settings::idleTorqueNm,     // Base idle torque (4Nm default)
+                        MetaSense::Settings::brakeMaxTorqueNm, // Max brake torque (30Nm default)
+                        tele.rpm,                              // Engine RPM
+                        tele.rpmTarget                         // Operator RPM setpoint
+                    );
+                    torqueToSend = appliedBrakeTorque;
+                }
             }
             else
             {
-                // MOTOR state: apply manual/auto torque selection
-                const bool manualCommandActive = s_leafCanPartnerSeen && !s_leafSimFeedbackActive &&
-                                                 (fabsf(uiTorqueDemandNm) > 0.001f);
-                const bool torqueCommandUnlocked = safetyOk &&
-                                                   (s_leafVcmState == LeafVcmBringupState::Ready) &&
-                                                   id1daFreshForTorque &&
-                                                   id1daStatusClearForTorque &&
-                                                   s_leafCanPartnerSeen &&
-                                                   !s_leafSimFeedbackActive;
-                if (manualCommandActive || torqueCommandUnlocked)
+                // MOTOR state: Apply torque control (manual or auto) with NO gates when inverter is ready
+                // When inverter NOT ready or faulted, force 0 Nm for safety
+                
+                const bool inverterReadyAndHealthy = inverterReadyToken && !inverterFaulted && !s_leafSimFeedbackActive;
+                
+                if (inverterReadyAndHealthy)
                 {
-                    torqueToSend = uiTorqueDemandNm;
+                    // Inverter is ready: use manual or auto torque based on current mode
+                    torqueToSend = s_leafManualTorqueMode ? uiTorqueDemandNm : torqueCmd;
                 }
-                else if (fabsf(torqueToSend) > 0.0f)
+                else
                 {
+                    // Inverter not ready or faulted: force 0 Nm
                     torqueToSend = 0.0f;
                 }
             }
 
             // SAFETY: Reverse-rotation guard. Applies unconditionally, after all
             // state-specific torque selection above, regardless of which branch
-            // (INIT/IDLE/MOTOR) produced torqueToSend. Below 100 RPM, force the
-            // 0x1D4 torque demand payload to exactly 0 Nm (any sign) so the
-            // motor can never be driven into reverse rotation from near
-            // standstill -- this would not be tolerated in a real EV and must
-            // not be tolerated here either.
-            constexpr float kReverseGuardRpmThreshold = 100.0f;
-            if (tele.rpm < kReverseGuardRpmThreshold)
+            // (INIT/IDLE/MOTOR) produced torqueToSend. If motor RPM goes negative
+            // (reverse rotation), force the 0x1D4 torque demand to exactly 0 Nm
+            // to prevent reverse operation -- this would not be tolerated in a
+            // real EV and must not be tolerated here either.
+            if (tele.rpm < 0.0f)
             {
                 torqueToSend = 0.0f;
             }
@@ -4914,10 +5027,117 @@ namespace MetaSense::Input
                 s_leafTxPacerBrakeBit = brakeBit;
                 s_leafTxPacerGearDriveBit = gearDriveBit;
                 s_leafTxPacerEnabled = true;
+                lastLeafTxMs = now;  // Update timing gate for next 10ms cycle
             }
             else
             {
                 s_leafTxPacerEnabled = false;
+            }
+        }
+
+        // Passive RX mode: handle handshake and manual-only TX (after main pacer update)
+        const LeafVcmBringupState prevLeafVcmState = s_leafVcmState;
+        if (!leafTxChecklistActive)
+        {
+            s_leafTxPacerEnabled = false;
+            if (!s_leafListenOnlyLogPrinted)
+            {
+                Serial.println("[VCM] Passive RX mode active: periodic TX checklist/state machine disabled");
+                Serial0.println("[VCM] Passive RX mode active: periodic TX checklist/state machine disabled");
+                s_leafListenOnlyLogPrinted = true;
+            }
+
+#if (METASENSE_LEAF_120_TX_COMMIT_ENABLED == 0)
+            const bool hvOkPreview = tele.vcuReady;
+            const bool inverterReadyPreview = tele.leaf_invReady;
+            const bool brakePreview = (tele.mode == MetaSense::DynoMode::Brake);
+            const bool gearDrivePreview = (tele.rpmTarget > 100.0f) || tele.recording;
+            const float uiTorquePreview = getLeafUiTorqueDemandNmInternal();
+            const bool manualPreviewActive = fabsf(uiTorquePreview) > 0.001f;
+            const float previewTorqueNm = uiTorquePreview;
+
+            // In passive mode, the 1D4 send path remains manual-only and no obsolete trapezoid mode is used.
+            if (manualPreviewActive && ((now - lastLeafTxMs) >= CAN_TX_PERIOD_MS))
+            {
+                const bool sentManual = MetaSense::Input::sendLeafTorqueCommand1d4(previewTorqueNm,
+                                                                                   inverterReadyPreview,
+                                                                                   hvOkPreview,
+                                                                                   brakePreview,
+                                                                                   gearDrivePreview);
+                logLeaf1d4ShadowFrame(now,
+                                      previewTorqueNm,
+                                      inverterReadyPreview,
+                                      hvOkPreview,
+                                      brakePreview,
+                                      gearDrivePreview,
+                                      sentManual);
+                lastLeafTxMs = now;
+            }
+
+            // Generate a sampled 0x1D4 frame snapshot for monitor visibility at telemetry cadence.
+            if ((now - lastLeaf1d4MonitorSampleMs) >= LEAF_1D4_MONITOR_SAMPLE_PERIOD_MS)
+            {
+                const float torquePreview = ((safe && hvOkPreview && inverterReadyPreview) ? torqueCmd : 0.0f);
+                (void)MetaSense::Input::sendLeafTorqueCommand1d4(torquePreview,
+                                                                 inverterReadyPreview,
+                                                                 hvOkPreview,
+                                                                 brakePreview,
+                                                                 gearDrivePreview);
+                lastLeaf1d4MonitorSampleMs = now;
+            }
+#endif
+
+            if (kLeafCanHandshakeOnFirst1da && s_leafHandshakeArmed)
+            {
+                const bool decodedSecondaryFramesSeen = (lastCanTorqueFrameMs != 0U) ||
+                                                        (lastCanTempsFrameMs != 0U) ||
+                                                        (lastCanStatusFrameMs != 0U);
+                if (decodedSecondaryFramesSeen)
+                {
+#if defined(METASENSE_LEAF_VCM_DIAGNOSTICS) && (METASENSE_LEAF_VCM_DIAGNOSTICS != 0)
+                    Serial.printf("[VCM-HS] Handshake succeeded: decoded extra frame families (sent=%u attempts=%u)\n",
+                                  static_cast<unsigned>(s_leafHandshakeSentCount),
+                                  static_cast<unsigned>(s_leafHandshakeAttemptCount));
+                    Serial0.printf("[VCM-HS] Handshake succeeded: decoded extra frame families (sent=%u attempts=%u)\n",
+                                   static_cast<unsigned>(s_leafHandshakeSentCount),
+                                   static_cast<unsigned>(s_leafHandshakeAttemptCount));
+#endif
+                    s_leafHandshakeArmed = false;
+                    s_leafHandshakeSent = true;
+                }
+
+                const bool attemptDue = (s_leafHandshakeLastAttemptMs == 0U) ||
+                                        ((now - s_leafHandshakeLastAttemptMs) >= kLeafHandshakeAttemptPeriodMs);
+                const bool withinWindow = (s_leafHandshakeStartMs == 0U) ||
+                                          ((now - s_leafHandshakeStartMs) <= kLeafHandshakeWindowMs);
+                if (s_leafHandshakeArmed &&
+                    canBusReadyNow &&
+                    attemptDue &&
+                    withinWindow &&
+                    s_leafHandshakeAttemptCount < kLeafHandshakeMaxAttempts)
+                {
+                    s_leafHandshakeLastAttemptMs = now;
+                    ++s_leafHandshakeAttemptCount;
+                    const bool sent = MetaSense::Input::sendLeafTorqueCommand1d4(0.0f,
+                                                                                 false,
+                                                                                 false,
+                                                                                 false,
+                                                                                 true);
+                    logLeaf1d4ShadowFrame(now, 0.0f, false, false, false, true, sent);
+                    if (sent)
+                    {
+                        ++s_leafHandshakeSentCount;
+                    }
+                }
+
+                if (s_leafHandshakeArmed &&
+                    (s_leafHandshakeSentCount >= kLeafHandshakeTargetSends ||
+                     s_leafHandshakeAttemptCount >= kLeafHandshakeMaxAttempts ||
+                     !withinWindow))
+                {
+                    s_leafHandshakeArmed = false;
+                    s_leafHandshakeSent = (s_leafHandshakeSentCount > 0U);
+                }
             }
 
             if (s_leafVcmState != prevLeafVcmState)
@@ -5003,30 +5223,26 @@ namespace MetaSense::Input
                                                               tele.leaf_invTempC, tele.leaf_statorTempC, tele.leaf_coolantTempC,
                                                               ip[0], ip[1], ip[2], ip[3], rssi, nowMs);
 
-            // Print 1D4 frame debug info (read directly from cached frame - simple Serial.print approach)
-            static uint32_t lastPrintedTxCount = 0xFFFFFFFFUL;
-            // Print every 10 frames to avoid sync issues with core-1 counter updates
-            if ((s_leaf1d4TxFrameCount / 10U) != (lastPrintedTxCount / 10U))
+            // Print latest 0x1D4 frame to show CAN TX is working
+            #if METASENSE_LEAF_1D4_TX_LOG_EVERY_FRAME
             {
-                lastPrintedTxCount = s_leaf1d4TxFrameCount;
-                // Extract HCM_CLOCK from bits 38-39 (byte 4, bits 6-7)
                 const uint8_t hcmClock = (s_leaf1d4PayloadCachedFrameData[4] >> 6) & 0x03U;
-                Serial.print("[1D4-");
-                Serial.print(s_leaf1d4TxFrameCount);
-                Serial.print("] C=");
-                Serial.print(hcmClock);
-                Serial.print(" CRC=");
-                Serial.print(s_leaf1d4PayloadCachedFrameData[7], HEX);
-                Serial.print(" Data:");
-                for (int i = 0; i < 8; i++)
-                {
-                    Serial.print(" ");
-                    if (s_leaf1d4PayloadCachedFrameData[i] < 0x10)
-                        Serial.print("0");
-                    Serial.print(s_leaf1d4PayloadCachedFrameData[i], HEX);
-                }
-                Serial.println();
+                const float tqNm = s_leaf1d4PayloadTorqueNm;
+                const uint8_t crc = s_leaf1d4PayloadCachedFrameData[7];
+                
+                // Print latest 0x1D4 payload via telnet every heartbeat
+                MetaSense::TelnetSerialBridge::telnetBridgePrintf("[0x1D4-LATEST] TxCount=%lu Tq=%.2fNm C=%u CRC=%02X [%02X %02X %02X %02X %02X %02X %02X %02X]\n",
+                    s_leaf1d4TxFrameCount, tqNm, (unsigned)hcmClock, (unsigned)crc,
+                    (unsigned)s_leaf1d4PayloadCachedFrameData[0],
+                    (unsigned)s_leaf1d4PayloadCachedFrameData[1],
+                    (unsigned)s_leaf1d4PayloadCachedFrameData[2],
+                    (unsigned)s_leaf1d4PayloadCachedFrameData[3],
+                    (unsigned)s_leaf1d4PayloadCachedFrameData[4],
+                    (unsigned)s_leaf1d4PayloadCachedFrameData[5],
+                    (unsigned)s_leaf1d4PayloadCachedFrameData[6],
+                    (unsigned)s_leaf1d4PayloadCachedFrameData[7]);
             }
+            #endif
         }
     }
 

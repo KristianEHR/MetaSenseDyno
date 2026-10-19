@@ -891,6 +891,29 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
             const bool manualMode = (mode == "manual" || mode == "1");
             MetaSense::Input::setLeafManualTorqueMode(manualMode);
             persistSettings = false;  // Don't persist to NVS (runtime mode toggle)
+        } else if (key == "leaf1d4TorqueDemand") {
+            // Set manual torque demand (only used when manual mode is active)
+            const float torqueDemandNm = fval;
+            MetaSense::Input::setLeafUiTorqueDemandNm(torqueDemandNm);
+            // Automatically enable manual mode when user sets torque
+            MetaSense::Input::setLeafManualTorqueMode(true);
+            persistSettings = false;  // Don't persist to NVS (runtime command)
+        } else if (key == "leaf1d4TorqueInc") {
+            // Increment manual torque demand by 0.25 Nm (GUI button)
+            const float currentTorque = MetaSense::Input::getLeafUiTorqueDemandNm();
+            const float newTorque = currentTorque + 0.25f;
+            MetaSense::Input::setLeafUiTorqueDemandNm(newTorque);
+            // Automatically enable manual mode
+            MetaSense::Input::setLeafManualTorqueMode(true);
+            persistSettings = false;  // Don't persist to NVS (runtime command)
+        } else if (key == "leaf1d4TorqueDec") {
+            // Decrement manual torque demand by 0.25 Nm (GUI button)
+            const float currentTorque = MetaSense::Input::getLeafUiTorqueDemandNm();
+            const float newTorque = currentTorque - 0.25f;
+            MetaSense::Input::setLeafUiTorqueDemandNm(newTorque);
+            // Automatically enable manual mode
+            MetaSense::Input::setLeafManualTorqueMode(true);
+            persistSettings = false;  // Don't persist to NVS (runtime command)
         } else if (key == "pulsesPerRev") {
             MetaSense::Settings::pulsesPerRev = (fval > 0.0f) ? fval : MetaSense::Settings::pulsesPerRev;
         } else if (key == "pulsesPerRevDrum") {

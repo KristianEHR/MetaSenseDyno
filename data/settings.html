@@ -449,7 +449,7 @@
       <div id="gearRatioSection" class="hidden">
         <label>Drum/Engine RPM Ratio</label>
         <div class="param-row">
-          <input type="number" id="virtGearRatio" value="1.0" min="0.1" max="50" step="0.1">
+          <input type="number" id="virtGearRatio" value="2.727" min="0.1" max="50" step="0.1">
           <button onclick="saveSingle('virtGearRatio', event)">💾 SAVE</button>
         </div>
         <div class="info">
@@ -716,7 +716,7 @@
             setFieldValueIfNotFocused("forceVcuReadyForUiTest", msg.forceVcuReadyForUiTest ? "1" : "0");
             setFieldValueIfNotFocused("relayGuiTestEnabled", msg.relayGuiTestEnabled ? "1" : "0");
             setFieldValueIfNotFocused("dynoMode", msg.mode);
-            setFieldValueIfNotFocused("virtGearRatio", msg.virtGearRatio || 1.0);
+            setFieldValueIfNotFocused("virtGearRatio", msg.virtGearRatio || 2.727);
             setFieldValueIfNotFocused("drumMass", msg.drumMass);
             setFieldValueIfNotFocused("drumCm", msg.drumCm);
             setFieldValueIfNotFocused("pulsesPerRevDrum", msg.pulsesPerRevDrum || 1.0);
@@ -725,7 +725,7 @@
             setFieldValueIfNotFocused("drumInertiaCustom", msg.drumInertiaCustom);
             const ratioFromMsg = (msg.brakeToEngineRatio !== undefined)
               ? msg.brakeToEngineRatio
-              : (msg.virtGearRatio !== undefined ? msg.virtGearRatio : 1.0);
+              : (msg.virtGearRatio !== undefined ? msg.virtGearRatio : 2.727);
             setFieldValueIfNotFocused("brakeToEngineRatio", formatBrakeRatioTwoDigits(ratioFromMsg));
 			setFieldValueIfNotFocused("drivetrainEff", msg.drivetrainEff || 93.0);
             

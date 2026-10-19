@@ -16,7 +16,7 @@
 | Drum radius | 0.15 | m | Settings.cpp: `kDefaultDrumRadiusM` (30cm diameter) |
 | Drum wall thickness | 0.0 | m | Solid cylinder (hollow=0.0) |
 | **Drum moment of inertia J** | **0.1125** | kg⋅m² | $J = 0.5 \times 10 \times 0.15^2 = 0.1125$ |
-| Virtual gear ratio | 1.0 | — | Engine RPM ÷ Drum RPM |
+| Virtual gear ratio | 30/11 ≈ 2.727 | — | Engine RPM ÷ Drum RPM |
 
 **Inertia Calculation (Solid Cylinder):**
 $$J = \frac{1}{2} m R^2 = \frac{1}{2} \times 10.0 \times 0.15^2 = 0.1125 \text{ kg⋅m}^2$$

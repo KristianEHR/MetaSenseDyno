@@ -3599,7 +3599,7 @@ else if (msg.type === "info" || msg.type === "status") {
         if (ws && ws.readyState === WebSocket.OPEN) {
           // Instant UI feedback
           const current = Number(cachedTelemetry.leaf_torque_demand_manual || 0);
-          const updated = Number((current + 0.1).toFixed(2));
+          const updated = Number((current + 0.25).toFixed(2));
           const manualEl = document.getElementById("manualTorqueDisplay");
           if (manualEl) manualEl.textContent = updated.toFixed(2);
           

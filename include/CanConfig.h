@@ -12,6 +12,13 @@
 // CAN Bus Mode Configuration (required by code)
 #define METASENSE_LEAF_CAN_LISTEN_ONLY 0
 
+// Enable CAN Monitor Mode for full diagnostics
+#define METASENSE_CAN_MONITOR_MODE 1
+
+// DIAGNOSTIC: Log every 0x1D4 frame transmission with payload and CRC
+// Set to 1 to print [0x1D4-TX] line on serial for each sent frame (verbose, 100 lines/sec)
+#define METASENSE_LEAF_1D4_TX_LOG_EVERY_FRAME 1
+
 // CAN Bus Pin Configuration
 #define METASENSE_LEAF_CAN_TX_PIN 4
 #define METASENSE_LEAF_CAN_RX_PIN 5

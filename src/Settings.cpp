@@ -15,13 +15,14 @@ constexpr uint8_t kDefaultLoadFilterMode = 1;
 constexpr uint16_t kDefaultLoadCellGain = 128;
 constexpr uint16_t kDefaultLoadCellRateSps = 320;
 // PI gains: conservative baseline tuned for 10ms control loop + 20ms CAN RX latency
-// Calculated from inertia model: J=0.1125 kg⋅m² (10kg drum @ 0.15m radius)
+// Calculated from inertia model: J=0.1125 kg⋅m² (10kg drum @ 0.15m radius), 11/16 gearing
 // Pole placement method with delay compensation (ζ=0.7, ωn=4 rad/s)
 // See PI_TUNING_CALCULATION.md for derivation.
-// Conservative baseline: Kp=0.050, Ki=0.400 → settling ~2.5s, robust to latency variation
-// Aggressive alternative: Kp=0.073, Ki=0.524 → settling ~1.5s (test via Pot3 live tuning)
-constexpr float kDefaultKp = 0.050f;
-constexpr float kDefaultKi = 0.400f;
+// 11/30 gearing reflects drum inertia as J·(16/30)² ≈ 0.284·J, so gains are scaled by 0.284.
+// Scaled conservative baseline: Kp=0.014, Ki=0.114 (from Kp=0.050, Ki=0.400)
+// Pot3 live tuning range covers 0.005–0.200 for Kp.
+constexpr float kDefaultKp = 0.014f;
+constexpr float kDefaultKi = 0.114f;
 constexpr float kLegacyDefaultKp = 0.02f;    // Pre-2026 100ms control loop
 constexpr float kLegacyDefaultKi = 0.05f;    // Pre-2026 100ms control loop
 constexpr bool  kDefaultUsePot3Kp = false;
@@ -49,7 +50,7 @@ constexpr bool  kDefaultInertiaMode = false;
 constexpr float kDefaultDrumMassKg = 10.0f;
 constexpr float kDefaultDrumRadiusM = 0.15f;
 constexpr float kDefaultDrumWallM = 0.0f;
-constexpr float kDefaultVirtGearRatio = 1.0f;
+constexpr float kDefaultVirtGearRatio = 30.0f / 11.0f; // Leaf drum->engine 30/11
 constexpr const char* kSettingsNs = "settings";
 constexpr const char* kSettingsInitKey = "init";
 
