@@ -41,9 +41,6 @@ bool isIdleState();
 bool isFaultState();
 
 void stop();
-// Operator reset: FAULT -> INIT, only when the inverter is ready and CAN
-// feedback is fresh. Returns false (and changes nothing) otherwise.
-bool resetFromFault(bool inverterReady, bool canFeedbackFresh);
 const char* stateName();
 
 bool isRbPlusActive();

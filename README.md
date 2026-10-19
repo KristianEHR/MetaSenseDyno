@@ -214,7 +214,7 @@ Primary states:
 - `IDLE`: HV bus up, precharge held on, RB+ and RB- off unless the RB- latch is engaged.
 - `MOTOR`: motor-mode control (PI loop, RPM capped at `motorModeMaxRpm`).
 - `DYNO`: dyno-mode control (uncapped setpoint).
-- `FAULT`: latched. Reached from `IDLE`, `MOTOR`, or `DYNO` when the inverter reports not-ready or when there is no fresh 0x1DA feedback. Exit only by returning to `INIT`.
+- `FAULT`: latched. Reached from `IDLE`, `MOTOR`, or `DYNO` when the inverter reports not-ready or when there is no fresh 0x1DA feedback. Exit only by restarting the controller (`FAULT_RESET`, or a reboot).
 
 Transitions are evaluated on every control update. There is no time-based debounce; the RPM hysteresis bands below are what prevent chatter.
 
@@ -294,7 +294,7 @@ stateDiagram-v2
 		DYNO --> FAULT: !inverterReady or !feedbackFresh
 
 		note right of FAULT
-			Latched. Exit only via INIT.
+			Latched. Exit only via controller restart (FAULT_RESET).
 		end note
 ```
 

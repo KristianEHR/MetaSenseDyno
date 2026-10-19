@@ -3272,15 +3272,6 @@ namespace MetaSense::Input
         return tele.vcuReady;
     }
 
-    bool requestFaultReset()
-    {
-        const LeafInvFeedback &fb = MetaSense::CANBus::feedback();
-        const uint32_t now = millis();
-        const bool canFeedbackFresh = (fb.rpm_update_ms != 0U) &&
-                                      (elapsedMsSafe(now, fb.rpm_update_ms) <= CAN_RX_TARGET_MAX_AGE_MS);
-        return MetaSense::HardwareOutputStateMachine::resetFromFault(tele.leaf_invReady, canFeedbackFresh);
-    }
-
     const char *vcuReadySource()
     {
         if (!tele.vcuReady)

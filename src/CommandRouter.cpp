@@ -595,12 +595,14 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, const String& msg)
         MetaSense::WebSocketServer::sendStatus("Auto run cancelled");
     }
     else if (cmdUpper == "FAULT_RESET") {
+        // A restart is the reset: boot re-runs CAN bring-up, the inverter
+        // handshake and INIT, so the inverter sees a fresh start sequence.
         if (!MetaSense::HardwareOutputStateMachine::isFaultState()) {
             MetaSense::WebSocketServer::sendInfo("Fault reset ignored: not in FAULT");
-        } else if (MetaSense::Input::requestFaultReset()) {
-            MetaSense::WebSocketServer::sendStatus("Fault reset: returning to INIT");
         } else {
-            MetaSense::WebSocketServer::sendInfo("Fault reset refused: inverter not ready or CAN feedback stale");
+            MetaSense::WebSocketServer::sendStatus("Fault reset: restarting controller");
+            delay(250);
+            ESP.restart();
         }
     }
     else if (cmdUpper.startsWith("SET_CUSTOMER:") || cmdUpper.startsWith("SET CUSTOMER:")) {
