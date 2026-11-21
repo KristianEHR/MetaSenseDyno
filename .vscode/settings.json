@@ -1,0 +1,12 @@
+{
+    "platformio-ide.autoOpenPlatformIOIniFile": false,
+    "platformio-ide.showPlatformIOIniFileComments": false,
+    "platformio-ide.activateOnlyOnPlatformIOProject": true,
+    "platformio-ide.forceUploadAndMonitorOnSave": false,
+    "[platformio]": {
+        "editor.defaultFormatter": "platformio.platformio-ide"
+    },
+    "workbench.commandPalette.sortsSearchResultsByFuzzyMatch": true,
+    "workbench.commandPalette.preserveInput": false,
+    "chat.editing.autoAcceptDelay": 10
+}

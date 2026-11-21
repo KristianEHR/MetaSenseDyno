@@ -1,0 +1,64 @@
+#pragma once
+
+#include <cstdint>
+
+namespace MetaSense::Settings {
+
+extern float filterAlpha;
+extern float loadAvgN;
+extern float loadAvgN2;
+extern uint8_t loadFilterMode;
+extern uint16_t loadCellGain;
+extern uint16_t loadCellRateSps;
+extern float kp;
+extern float ki;
+extern float ambientRhOffsetPct;
+extern float motorModeMaxRpm;
+extern float idleThresholdRpm;
+extern float brakeMaxTorqueNm;
+extern bool forceVcuReadyForUiTest;
+extern bool leafSimFeedbackEnabled;
+// Bench/remote test only: when true, the relay telemetry fields sent to the
+// GUI (hw_precharge/hw_rb_plus/hw_rb_minus/hw_ssr) are replaced with an
+// auto-cycling test pattern instead of real GPIO readback. Does NOT touch
+// actual relay outputs -- display-layer only. Always resets to false on
+// boot/reload (never persisted).
+extern bool relayGuiTestEnabled;
+
+// Gauge display ranges (sent back in settings snapshot)
+extern float maxRPM;
+extern float maxHP;
+extern float maxTorque;
+extern float armCm;
+
+// Pulse inputs
+extern float pulsesPerRev;     // engine hall
+extern float pulsesPerRevDrum; // drum/roller hall
+
+// Drivetrain efficiency (0..100 %)
+extern float drivetrainEff;
+// Inertia dyno parameters
+extern bool  inertiaMode;       // true when dynoMode == "inertia"
+extern float drumMassKg;        // total mass of drum/flywheel, kg
+extern float drumRadiusM;       // outer radius of drum, metres
+extern float drumWallM;         // wall thickness for hollow cylinder, metres (0 = solid)
+extern float drumInertiaKgM2;   // effective moment of inertia J, kg·m²  (recomputed on change)
+extern float virtGearRatio;     // drum RPM × ratio = engine RPM (default 30/11 (Leaf drum to engine))
+
+void setDrumParams(float massKg, float radiusM, float wallM);
+void setDrumInertiaCustom(float J);
+void setInertiaMode(bool enabled);
+void resetToDefaults();
+void loadFromStorage();
+void saveToStorage();
+
+void setRpmTarget(float rpm);
+float getRpmTarget();
+
+void setRpmStart(float rpm);
+float rpmStart();
+
+void setRpmEnd(float rpm);
+float rpmEnd();
+
+} // namespace MetaSense::Settings

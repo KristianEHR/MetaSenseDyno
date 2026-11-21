@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Firmware Update - Karls DIY Dyno</title>
+  <link rel="icon" href="/favicon.png" type="image/x-icon">
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body { 
+      font-family: 'Courier New', monospace; 
+      background: #404040; 
+      color: #cccccc; 
+      padding: 40px; 
+      margin: 0; 
+      min-height: 100vh;
+    }
+    
+    h1 { 
+      color: #e0e0e0; 
+      text-align: center; 
+      text-shadow: 0 0 8px #444; 
+      margin-top: 20px;
+      font-size: 32px;
+      letter-spacing: 2px;
+    }
+    
+    .container { 
+      max-width: 600px; 
+      margin: 40px auto; 
+      background: #353535; 
+      padding: 40px; 
+      border-radius: 20px; 
+      border: 1px solid #666; 
+      box-shadow: 0 10px 30px rgba(0,0,0,0.8); 
+      text-align: center;
+    }
+    
+    .back-btn {
+      position: fixed;
+      top: 15px;
+      left: 15px;
+      z-index: 1000;
+      padding: 12px 20px;
+      font-size: 18px;
+      background: #505050;
+      color: #ffffff;
+      border: 1px solid #777;
+      border-radius: 8px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.7);
+      text-decoration: none;
+      transition: all 0.2s ease;
+      font-family: 'Courier New', monospace;
+    }
+
+    .back-btn:hover {
+      background: #606060;
+      transform: scale(1.02);
+    }
+    
+    .info-box {
+      background: #2a2a2a;
+      padding: 20px;
+      border-radius: 12px;
+      margin: 20px 0;
+      text-align: left;
+      border-left: 4px solid #88ff88;
+    }
+    
+    .info-box p {
+      margin: 8px 0;
+      font-size: 14px;
+      color: #aaa;
+      line-height: 1.5;
+    }
+    
+    .info-box strong {
+      color: #88ff88;
+    }
+    
+    .file-input-wrapper {
+      margin: 30px 0;
+      text-align: left;
+    }
+    
+    .file-input-wrapper label {
+      display: block;
+      margin-bottom: 12px;
+      font-size: 18px;
+      color: #aaa;
+      font-weight: bold;
+    }
+    
+    input[type="file"] {
+      width: 100%;
+      padding: 15px;
+      font-size: 16px;
+      background: #404040;
+      color: #ffffff;
+      border: 2px solid #888;
+      border-radius: 10px;
+      cursor: pointer;
+      font-family: 'Courier New', monospace;
+    }
+    
+    input[type="file"]::-webkit-file-upload-button {
+      background: #505050;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-family: 'Courier New', monospace;
+      margin-right: 15px;
+      transition: all 0.2s;
+    }
+    
+    input[type="file"]::-webkit-file-upload-button:hover {
+      background: #606060;
+      transform: scale(1.02);
+    }
+    
+    .upload-btn {
+      width: 100%;
+      padding: 18px;
+      font-size: 22px;
+      background: #006000;
+      color: #ffffff;
+      border: 3px solid #00ff00;
+      border-radius: 12px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: all 0.2s ease;
+      font-family: 'Courier New', monospace;
+      margin-top: 20px;
+    }
+    
+    .upload-btn:hover:not(:disabled) {
+      background: #008000;
+      transform: scale(1.02);
+    }
+    
+    .upload-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    
+    #progressContainer {
+      width: 100%;
+      background: #2a2a2a;
+      border-radius: 12px;
+      margin: 25px 0;
+      display: none;
+      overflow: hidden;
+    }
+    
+    #progressBar {
+      width: 0%;
+      height: 40px;
+      background: linear-gradient(90deg, #006000, #00ff00);
+      text-align: center;
+      line-height: 40px;
+      color: white;
+      font-weight: bold;
+      border-radius: 12px;
+      transition: width 0.3s ease;
+      font-size: 16px;
+    }
+    
+    #status {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 10px;
+      font-weight: bold;
+      font-size: 16px;
+      display: none;
+    }
+    
+    #status.success {
+      background: rgba(0, 100, 0, 0.3);
+      border: 1px solid #00ff00;
+      color: #88ff88;
+      display: block;
+    }
+    
+    #status.error {
+      background: rgba(100, 0, 0, 0.3);
+      border: 1px solid #ff4444;
+      color: #ff8888;
+      display: block;
+    }
+    
+    #status.info {
+      background: rgba(0, 0, 100, 0.3);
+      border: 1px solid #8888ff;
+      color: #aaaaff;
+      display: block;
+    }
+    
+    .warning {
+      color: #ffaa44;
+      font-size: 14px;
+      margin-top: 15px;
+      padding: 10px;
+      background: rgba(255, 170, 68, 0.1);
+      border-radius: 8px;
+      text-align: left;
+    }
+    
+    hr {
+      border-color: #666;
+      margin: 30px 0;
+    }
+    
+    @media (max-width: 600px) {
+      body { padding: 20px; }
+      .container { padding: 25px; margin: 20px auto; }
+      h1 { font-size: 24px; }
+      .back-btn { padding: 8px 16px; font-size: 14px; top: 10px; left: 10px; }
+    }
+  </style>
+</head>
+<body>
+
+  <a href="/" class="back-btn">← BACK TO DASHBOARD</a>
+
+  <h1>⚙️ FIRMWARE UPDATE</h1>
+  
+  <div class="container">
+    <div class="info-box">
+      <strong>📌 Instructions:</strong>
+      <p>1. Build your firmware in Arduino IDE or PlatformIO</p>
+      <p>2. Export the compiled binary (.bin file)</p>
+      <p>3. Select the .bin file below and click UPDATE</p>
+      <p>4. Wait for upload to complete (ESP32 will reboot automatically)</p>
+      <p><strong>⚠️ Do not power off during update!</strong></p>
+    </div>
+    
+    <div class="file-input-wrapper">
+      <label>📁 Select Firmware File (.bin):</label>
+      <input type="file" id="fileInput" accept=".bin" required>
+    </div>
+    
+    <button id="uploadBtn" class="upload-btn">🚀 START FIRMWARE UPDATE</button>
+    
+    <div id="progressContainer">
+      <div id="progressBar">0%</div>
+    </div>
+    <div id="status"></div>
+    
+    <div class="warning">
+      ⚠️ <strong>Warning:</strong> This will replace the current firmware. The ESP32 will reboot and may take 30-60 seconds to come back online. Do not close this page until update completes.
+    </div>
+    
+    <hr>
+    
+    <div class="info-box">
+      <strong>💡 Need to update web files?</strong>
+      <p>Use the <strong>HMI / Web Files Update</strong> page for updating HTML, CSS, and JavaScript files without changing firmware.</p>
+      <a href="/update_fs" style="color: #88ff88; text-decoration: none;">→ Go to Web Files Update</a>
+    </div>
+  </div>
+
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const progressContainer = document.getElementById('progressContainer');
+    const progressBar = document.getElementById('progressBar');
+    const statusDiv = document.getElementById('status');
+
+    function showStatus(message, type) {
+      statusDiv.textContent = message;
+      statusDiv.className = type;
+    }
+
+    function hideStatus() {
+      statusDiv.style.display = 'none';
+      statusDiv.className = '';
+    }
+
+    uploadBtn.addEventListener('click', function() {
+      const file = fileInput.files[0];
+      
+      if (!file) {
+        showStatus("❌ Please select a .bin file first!", "error");
+        return;
+      }
+      
+      if (!file.name.endsWith('.bin')) {
+        showStatus("❌ Please select a valid .bin firmware file!", "error");
+        return;
+      }
+      
+      const fileSizeMB = file.size / (1024 * 1024);
+      if (fileSizeMB > 2) {
+        showStatus("⚠️ File is " + fileSizeMB.toFixed(1) + "MB. Large files may take time. Continue?", "info");
+        if (!confirm("File size: " + fileSizeMB.toFixed(1) + "MB. Continue with upload?")) {
+          return;
+        }
+      }
+      
+      uploadBtn.disabled = true;
+      uploadBtn.textContent = "⏳ UPLOADING...";
+      showStatus("📤 Uploading firmware... Please wait", "info");
+      progressContainer.style.display = 'block';
+      progressBar.style.width = '0%';
+      progressBar.textContent = '0%';
+      
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/update', true);
+      
+      xhr.upload.onprogress = function(evt) {
+        if (evt.lengthComputable) {
+          const percent = Math.round((evt.loaded / evt.total) * 100);
+          progressBar.style.width = percent + '%';
+          progressBar.textContent = percent + '%';
+        }
+      };
+      
+      xhr.onload = function() {
+        if (xhr.status === 200) {
+          progressBar.style.width = '100%';
+          progressBar.textContent = '100%';
+          showStatus("✅ " + (xhr.responseText || "Update complete! ESP32 is rebooting..."), "success");
+          uploadBtn.textContent = "✓ UPDATE COMPLETE";
+          setTimeout(() => {
+            showStatus("🔄 Rebooting... Page will refresh in 30 seconds", "info");
+          }, 2000);
+        } else {
+          showStatus("❌ Upload failed: " + (xhr.responseText || xhr.statusText), "error");
+          uploadBtn.disabled = false;
+          uploadBtn.textContent = "🚀 START FIRMWARE UPDATE";
+        }
+      };
+      
+      xhr.onerror = function() {
+        showStatus("❌ Connection error! Please check your network and try again.", "error");
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = "🚀 START FIRMWARE UPDATE";
+        progressContainer.style.display = 'none';
+      };
+      
+      const formData = new FormData();
+      formData.append('update', file);
+      xhr.send(formData);
+    });
+    
+    fileInput.addEventListener('change', function() {
+      hideStatus();
+      if (this.files.length > 0) {
+        const file = this.files[0];
+        const sizeKB = (file.size / 1024).toFixed(1);
+        showStatus("📁 Selected: " + file.name + " (" + sizeKB + " KB)", "info");
+        setTimeout(() => hideStatus(), 3000);
+      }
+    });
+  </script>
+</body>
+</html>

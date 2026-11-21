@@ -1,0 +1,374 @@
+#include "Settings.h"
+#include <math.h>
+#include <Preferences.h>
+
+namespace {
+
+constexpr float kDefaultRpmTarget = 0.0f;
+constexpr float kDefaultRpmStart = 1500.0f;
+constexpr float kDefaultRpmEnd = 5500.0f;
+
+constexpr float kDefaultFilterAlpha = 0.2f;
+constexpr float kDefaultLoadAvgN = 5.0f;
+constexpr float kDefaultLoadAvgN2 = 5.0f;
+constexpr uint8_t kDefaultLoadFilterMode = 1;
+constexpr uint16_t kDefaultLoadCellGain = 128;
+constexpr uint16_t kDefaultLoadCellRateSps = 320;
+// PI gains: conservative baseline tuned for 10ms control loop + 20ms CAN RX latency
+// Calculated from inertia model: J=0.1125 kg⋅m² (10kg drum @ 0.15m radius), 11/16 gearing
+// Pole placement method with delay compensation (ζ=0.7, ωn=4 rad/s)
+// See PI_TUNING_CALCULATION.md for derivation.
+// 11/30 gearing reflects drum inertia as J·(16/30)² ≈ 0.284·J, so gains are scaled by 0.284.
+// Scaled conservative baseline: Kp=0.014, Ki=0.114 (from Kp=0.050, Ki=0.400)
+constexpr float kDefaultKp = 0.014f;
+constexpr float kDefaultKi = 0.114f;
+constexpr float kLegacyDefaultKp = 0.02f;    // Pre-2026 100ms control loop
+constexpr float kLegacyDefaultKi = 0.05f;    // Pre-2026 100ms control loop
+constexpr float kDefaultAmbientRhOffsetPct = 0.0f;
+constexpr float kDefaultMotorModeMaxRpm = 2000.0f;
+constexpr float kDefaultIdleThresholdRpm = 2000.0f;
+constexpr float kDefaultBrakeMaxTorqueNm = 30.0f;
+constexpr bool kDefaultForceVcuReadyForUiTest = false;
+constexpr bool kDefaultRelayGuiTestEnabled = false;
+#ifndef METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS
+#define METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS 0
+#endif
+constexpr bool kDefaultLeafSimFeedbackEnabled = (METASENSE_LEAF_SIM_FEEDBACK_WITHOUT_BUS != 0);
+
+constexpr float kDefaultMaxRPM = 18000.0f;
+constexpr float kDefaultMaxHP = 25.0f;
+constexpr float kDefaultMaxTorque = 200.0f;
+constexpr float kDefaultArmCm = 20.0f;
+
+constexpr float kDefaultPulsesPerRev = 1.0f;
+constexpr float kDefaultPulsesPerRevDrum = 1.0f;
+
+constexpr float kDefaultDrivetrainEff = 95.0f;
+constexpr bool  kDefaultInertiaMode = false;
+constexpr float kDefaultDrumMassKg = 10.0f;
+constexpr float kDefaultDrumRadiusM = 0.15f;
+constexpr float kDefaultDrumWallM = 0.0f;
+constexpr float kDefaultVirtGearRatio = 30.0f / 11.0f; // Leaf drum->engine 30/11
+constexpr const char* kSettingsNs = "settings";
+constexpr const char* kSettingsInitKey = "init";
+
+float rpmTargetLocal = kDefaultRpmTarget;
+float rpmStartLocal = kDefaultRpmStart;
+float rpmEndLocal = kDefaultRpmEnd;
+
+} // anonymous namespace
+
+
+namespace MetaSense::Settings {
+
+float filterAlpha = kDefaultFilterAlpha;
+float loadAvgN = kDefaultLoadAvgN;
+float loadAvgN2 = kDefaultLoadAvgN2;
+uint8_t loadFilterMode = kDefaultLoadFilterMode;
+uint16_t loadCellGain = kDefaultLoadCellGain;
+uint16_t loadCellRateSps = kDefaultLoadCellRateSps;
+// PI gains tuned for 10ms control loop cadence with 20ms CAN feedback latency.
+// See PI_TUNING_CALCULATION.md for inertia-based pole placement derivation.
+float kp = kDefaultKp;
+float ki = kDefaultKi;
+float ambientRhOffsetPct = kDefaultAmbientRhOffsetPct;
+float motorModeMaxRpm = kDefaultMotorModeMaxRpm;
+float idleThresholdRpm = kDefaultIdleThresholdRpm;
+float brakeMaxTorqueNm = kDefaultBrakeMaxTorqueNm;
+bool forceVcuReadyForUiTest = kDefaultForceVcuReadyForUiTest;
+bool leafSimFeedbackEnabled = kDefaultLeafSimFeedbackEnabled;
+bool relayGuiTestEnabled = kDefaultRelayGuiTestEnabled;
+
+// Gauge display ranges
+float maxRPM          = kDefaultMaxRPM;
+float maxHP           = kDefaultMaxHP;
+float maxTorque       = kDefaultMaxTorque;
+float armCm           = kDefaultArmCm;
+
+// Pulse inputs
+float pulsesPerRev     = kDefaultPulsesPerRev;
+float pulsesPerRevDrum = kDefaultPulsesPerRevDrum;
+
+// Drivetrain efficiency
+float drivetrainEff    = kDefaultDrivetrainEff;
+
+// Inertia dyno parameters (defaults)
+bool  inertiaMode     = kDefaultInertiaMode;
+float drumMassKg      = kDefaultDrumMassKg;   // kg
+float drumRadiusM     = kDefaultDrumRadiusM;  // 30 cm diameter → 0.15 m radius
+float drumWallM       = kDefaultDrumWallM;    // 0 = solid cylinder
+float drumInertiaKgM2 = 0.1125f;              // recomputed by resetToDefaults
+float virtGearRatio   = kDefaultVirtGearRatio; // drum→engine ratio
+
+// Recomputes J from mass, outer radius and wall thickness.
+// Solid cylinder:  J = 0.5 * m * R²
+// Hollow cylinder: J = 0.5 * m * (R_outer² + R_inner²)
+static void recomputeInertia()
+{
+    const float Ro = drumRadiusM;
+    const float Ri = (drumWallM > 0.0f) ? (Ro - drumWallM) : 0.0f;
+    if (Ri <= 0.0f) {
+        drumInertiaKgM2 = 0.5f * drumMassKg * Ro * Ro;          // solid
+    } else {
+        drumInertiaKgM2 = 0.5f * drumMassKg * (Ro * Ro + Ri * Ri); // hollow
+    }
+}
+
+void setDrumParams(float massKg, float radiusM, float wallM)
+{
+    drumMassKg  = massKg;
+    drumRadiusM = radiusM;
+    drumWallM   = wallM;
+    recomputeInertia();
+}
+
+void setDrumInertiaCustom(float J)
+{
+    drumInertiaKgM2 = J;
+}
+
+void setInertiaMode(bool enabled)
+{
+    inertiaMode = enabled;
+}
+
+void resetToDefaults()
+{
+    filterAlpha = kDefaultFilterAlpha;
+    loadAvgN = kDefaultLoadAvgN;
+    loadAvgN2 = kDefaultLoadAvgN2;
+    loadFilterMode = kDefaultLoadFilterMode;
+    loadCellGain = kDefaultLoadCellGain;
+    loadCellRateSps = kDefaultLoadCellRateSps;
+    kp = kDefaultKp;
+    ki = kDefaultKi;
+    ambientRhOffsetPct = kDefaultAmbientRhOffsetPct;
+    motorModeMaxRpm = kDefaultMotorModeMaxRpm;
+    idleThresholdRpm = kDefaultIdleThresholdRpm;
+    brakeMaxTorqueNm = kDefaultBrakeMaxTorqueNm;
+    forceVcuReadyForUiTest = kDefaultForceVcuReadyForUiTest;
+    leafSimFeedbackEnabled = kDefaultLeafSimFeedbackEnabled;
+    relayGuiTestEnabled = kDefaultRelayGuiTestEnabled;
+
+    maxRPM = kDefaultMaxRPM;
+    maxHP = kDefaultMaxHP;
+    maxTorque = kDefaultMaxTorque;
+    armCm = kDefaultArmCm;
+
+    pulsesPerRev = kDefaultPulsesPerRev;
+    pulsesPerRevDrum = kDefaultPulsesPerRevDrum;
+
+    drivetrainEff = kDefaultDrivetrainEff;
+
+    inertiaMode = kDefaultInertiaMode;
+    drumMassKg = kDefaultDrumMassKg;
+    drumRadiusM = kDefaultDrumRadiusM;
+    drumWallM = kDefaultDrumWallM;
+    virtGearRatio = kDefaultVirtGearRatio;
+    recomputeInertia();
+
+    rpmTargetLocal = kDefaultRpmTarget;
+    rpmStartLocal = kDefaultRpmStart;
+    rpmEndLocal = kDefaultRpmEnd;
+}
+
+void loadFromStorage()
+{
+    Preferences prefs;
+    if (!prefs.begin(kSettingsNs, true)) {
+        return;
+    }
+
+    const bool hasData = prefs.getBool(kSettingsInitKey, false);
+    if (!hasData) {
+        prefs.end();
+        return;
+    }
+
+    filterAlpha = prefs.getFloat("filterAlpha", filterAlpha);
+    loadAvgN = prefs.getFloat("loadAvgN", loadAvgN);
+    loadAvgN2 = prefs.getFloat("loadAvgN2", loadAvgN2);
+    loadFilterMode = prefs.getUChar("lcFMode", loadFilterMode);
+    loadCellGain = static_cast<uint16_t>(prefs.getUShort("lcGain", loadCellGain));
+    loadCellRateSps = static_cast<uint16_t>(prefs.getUShort("lcRate", loadCellRateSps));
+    kp = prefs.getFloat("kp", kp);
+    ki = prefs.getFloat("ki", ki);
+    ambientRhOffsetPct = prefs.getFloat("rhOffPct", ambientRhOffsetPct);
+    motorModeMaxRpm = prefs.getFloat("motorMaxRpm", motorModeMaxRpm);
+    idleThresholdRpm = prefs.getFloat("idleRpm", idleThresholdRpm);
+    brakeMaxTorqueNm = prefs.getFloat("brakeMaxTq", brakeMaxTorqueNm);
+    forceVcuReadyForUiTest = kDefaultForceVcuReadyForUiTest;
+    relayGuiTestEnabled = kDefaultRelayGuiTestEnabled;
+    leafSimFeedbackEnabled = prefs.getBool("leafSimFb", leafSimFeedbackEnabled);
+    if (kDefaultLeafSimFeedbackEnabled) {
+        leafSimFeedbackEnabled = true;
+    } else {
+        leafSimFeedbackEnabled = false;
+    }
+
+    // One-time migration: only bump unchanged legacy defaults to the
+    // physics-based RPM-domain PI gains. Preserve user-tuned values.
+    if (fabsf(kp - kLegacyDefaultKp) < 0.0005f &&
+        fabsf(ki - kLegacyDefaultKi) < 0.0005f) {
+        kp = kDefaultKp;
+        ki = kDefaultKi;
+    }
+
+    maxRPM = prefs.getFloat("maxRPM", maxRPM);
+    maxHP = prefs.getFloat("maxHP", maxHP);
+    maxTorque = prefs.getFloat("maxTorque", maxTorque);
+    armCm = prefs.getFloat("armCm", armCm);
+
+    pulsesPerRev = prefs.getFloat("pprEng", pulsesPerRev);
+    pulsesPerRevDrum = prefs.getFloat("pprDrum", pulsesPerRevDrum);
+    drivetrainEff = prefs.getFloat("driveEff", drivetrainEff);
+
+    inertiaMode = prefs.getBool("inertia", inertiaMode);
+    drumMassKg = prefs.getFloat("drumMass", drumMassKg);
+    drumRadiusM = prefs.getFloat("drumRad", drumRadiusM);
+    drumWallM = prefs.getFloat("drumWall", drumWallM);
+    virtGearRatio = prefs.getFloat("gearRatio", virtGearRatio);
+
+    rpmTargetLocal = prefs.getFloat("rpmTarget", rpmTargetLocal);
+    rpmStartLocal = prefs.getFloat("rpmStart", rpmStartLocal);
+    rpmEndLocal = prefs.getFloat("rpmEnd", rpmEndLocal);
+
+    prefs.end();
+
+    if (drumRadiusM <= 0.0f) {
+        drumRadiusM = kDefaultDrumRadiusM;
+    }
+    if (drumMassKg <= 0.0f) {
+        drumMassKg = kDefaultDrumMassKg;
+    }
+    if (pulsesPerRev <= 0.0f) {
+        pulsesPerRev = kDefaultPulsesPerRev;
+    }
+    if (pulsesPerRevDrum <= 0.0f) {
+        pulsesPerRevDrum = kDefaultPulsesPerRevDrum;
+    }
+    if (virtGearRatio <= 0.0f) {
+        virtGearRatio = kDefaultVirtGearRatio;
+    }
+    // Backward-compatibility: some older builds stored lever arm in meters.
+    // The current setting/UI is centimeters, so migrate small meter-like values.
+    if (armCm > 0.0f && armCm <= 2.0f) {
+        armCm *= 100.0f;
+    }
+    if (armCm <= 0.0f) {
+        armCm = kDefaultArmCm;
+    } else if (armCm > 200.0f) {
+        armCm = 200.0f;
+    }
+    if (loadAvgN < 1.0f) {
+        loadAvgN = 1.0f;
+    } else if (loadAvgN > 255.0f) {
+        loadAvgN = 255.0f;
+    }
+    if (loadAvgN2 < 1.0f) {
+        loadAvgN2 = 1.0f;
+    } else if (loadAvgN2 > 255.0f) {
+        loadAvgN2 = 255.0f;
+    }
+    if (loadFilterMode > 1) {
+        loadFilterMode = kDefaultLoadFilterMode;
+    }
+    if (!(loadCellGain == 1 || loadCellGain == 2 || loadCellGain == 4 || loadCellGain == 8 ||
+          loadCellGain == 16 || loadCellGain == 32 || loadCellGain == 64 || loadCellGain == 128)) {
+        loadCellGain = kDefaultLoadCellGain;
+    }
+    if (!(loadCellRateSps == 10 || loadCellRateSps == 20 || loadCellRateSps == 40 ||
+          loadCellRateSps == 80 || loadCellRateSps == 320)) {
+        loadCellRateSps = kDefaultLoadCellRateSps;
+    }
+    if (idleThresholdRpm < 500.0f) {
+        idleThresholdRpm = 500.0f;
+    } else if (idleThresholdRpm > 3000.0f) {
+        idleThresholdRpm = 3000.0f;
+    }
+    if (brakeMaxTorqueNm < 0.0f) {
+        brakeMaxTorqueNm = 0.0f;
+    } else if (brakeMaxTorqueNm > 200.0f) {
+        brakeMaxTorqueNm = 200.0f;
+    }
+
+    recomputeInertia();
+}
+
+void saveToStorage()
+{
+    Preferences prefs;
+    if (!prefs.begin(kSettingsNs, false)) {
+        return;
+    }
+
+    prefs.putBool(kSettingsInitKey, true);
+
+    prefs.putFloat("filterAlpha", filterAlpha);
+    prefs.putFloat("loadAvgN", loadAvgN);
+    prefs.putFloat("loadAvgN2", loadAvgN2);
+    prefs.putUChar("lcFMode", loadFilterMode);
+    prefs.putUShort("lcGain", loadCellGain);
+    prefs.putUShort("lcRate", loadCellRateSps);
+    prefs.putFloat("kp", kp);
+    prefs.putFloat("ki", ki);
+    prefs.putFloat("rhOffPct", ambientRhOffsetPct);
+    prefs.putFloat("motorMaxRpm", motorModeMaxRpm);
+    prefs.putFloat("idleRpm", idleThresholdRpm);
+    prefs.putFloat("brakeMaxTq", brakeMaxTorqueNm);
+    prefs.putBool("leafSimFb", leafSimFeedbackEnabled);
+
+    prefs.putFloat("maxRPM", maxRPM);
+    prefs.putFloat("maxHP", maxHP);
+    prefs.putFloat("maxTorque", maxTorque);
+    prefs.putFloat("armCm", armCm);
+
+    prefs.putFloat("pprEng", pulsesPerRev);
+    prefs.putFloat("pprDrum", pulsesPerRevDrum);
+    prefs.putFloat("driveEff", drivetrainEff);
+
+    prefs.putBool("inertia", inertiaMode);
+    prefs.putBool("canRpm", true);
+    prefs.putFloat("drumMass", drumMassKg);
+    prefs.putFloat("drumRad", drumRadiusM);
+    prefs.putFloat("drumWall", drumWallM);
+    prefs.putFloat("gearRatio", virtGearRatio);
+
+    prefs.putFloat("rpmTarget", rpmTargetLocal);
+    prefs.putFloat("rpmStart", rpmStartLocal);
+    prefs.putFloat("rpmEnd", rpmEndLocal);
+
+    prefs.end();
+}
+
+void setRpmTarget(float rpm)
+{
+    rpmTargetLocal = rpm;
+}
+
+float getRpmTarget()
+{
+    return rpmTargetLocal;
+}
+
+void setRpmStart(float rpm)
+{
+    rpmStartLocal = rpm;
+}
+
+float rpmStart()
+{
+    return rpmStartLocal;
+}
+
+void setRpmEnd(float rpm)
+{
+    rpmEndLocal = rpm;
+}
+
+float rpmEnd()
+{
+    return rpmEndLocal;
+}
+
+} // namespace MetaSense::Settings
